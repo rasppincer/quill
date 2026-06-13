@@ -1,0 +1,77 @@
+# Default Writing Workflow
+
+name: default
+description: Multi-stage writing pipeline for long-form content
+
+stages:
+  - key: brief
+    name: Brief
+    description: Define what you're writing
+    required_fields:
+      - title
+      - genre
+      - type
+      - audience
+      - tone
+      - language
+      - target_length
+    next: outline
+
+  - key: outline
+    name: Outline
+    description: Structure before prose
+    required_artifacts:
+      - section_list
+      - pacing_notes
+    next: draft
+    can_reject_to: brief
+
+  - key: draft
+    name: Draft
+    description: Write in chunks
+    rules:
+      - write_chunk_then_verify
+      - no_truncation_artifacts
+    next: review
+    can_reject_to: outline
+
+  - key: review
+    name: Review
+    description: Structural and quality review
+    checklist: templates/review.md
+    next: humanize
+    can_reject_to: draft
+
+  - key: humanize
+    name: Humanize
+    description: Strip AI-isms, inject personality
+    rules:
+      - check_29_patterns
+      - anti_ai_audit_pass
+      - voice_calibration
+    next: validate
+    can_reject_to: review
+
+  - key: validate
+    name: Validate
+    description: Domain-specific fact checking
+    rules:
+      - domain_accuracy
+      - consistency_check
+      - language_quality
+    next: polish
+    can_reject_to: humanize
+    can_reject_to: draft
+
+  - key: polish
+    name: Polish
+    description: Final line-level edits
+    rules:
+      - title_and_opening
+      - final_word_count
+      - formatting
+    next: done
+
+  - key: done
+    name: Done
+    description: Piece is complete

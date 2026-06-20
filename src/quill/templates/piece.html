@@ -59,6 +59,9 @@
     <select id="agent-select" style="margin-left:8px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
         <option value="">Loading agents...</option>
     </select>
+    <button class="btn" id="export-gdocs-btn" onclick="exportGDocs()" style="margin-left:12px" title="Export to Google Docs">
+        📄 Export to GDocs
+    </button>
 </div>
 
 <div id="agent-result" style="display:none" class="section">
@@ -201,6 +204,33 @@ async function runAgent() {
 
     btn.disabled = false;
     btn.textContent = '▶ Run Agent';
+}
+
+async function exportGDocs() {
+    const btn = document.getElementById('export-gdocs-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Exporting...';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/export/google-docs`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ stage: CURRENT_STAGE })
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            toast(`Export failed: ${data.error}`, 'error');
+        } else {
+            toast('Exported to Google Docs!', 'success');
+            window.open(data.url, '_blank');
+        }
+    } catch (e) {
+        toast(`Export error: ${e.message}`, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '📄 Export to GDocs';
 }
 </script>
 {% endblock %}

@@ -498,6 +498,55 @@ def pieces_run(piece_id: str):
 
 
 
+# ---------------------------------------------------------------------------
+# Google Docs export
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pieces/<piece_id>/export/google-docs", methods=["POST"])
+def pieces_export_google_docs(piece_id: str):
+    """Export a piece to Google Docs.
+
+    JSON body:
+        stage: Which stage to export (default: current stage).
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage", piece.current_stage)
+
+    # Load the stage content
+    stage_file = piece.stage_dir() / f"{stage}.md"
+    if not stage_file.exists():
+        return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
+
+    text = stage_file.read_text(encoding="utf-8")
+    m = _FRONTMATTER_RE.match(text)
+    body = text[m.end():] if m else text
+
+    if not body.strip():
+        return jsonify({"error": f"Stage '{stage}' has no content to export"}), 400
+
+    try:
+        from .gdocs import create_doc
+        title = f"{piece.title} ({stage})"
+        result = create_doc(title, body)
+        return jsonify({
+            "piece_id": piece_id,
+            "stage": stage,
+            "document_id": result["documentId"],
+            "url": result["url"],
+            "title": result["title"],
+        })
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:
+        logger.exception("Google Docs export failed")
+        return jsonify({"error": f"Export failed: {e}"}), 500
+
+
 def main():
     """Run the server."""
     app.run(host="0.0.0.0", port=8325, debug=False)

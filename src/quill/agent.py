@@ -148,6 +148,8 @@ def _strip_json_block(response: str) -> str:
     cleaned = re.sub(r'```json\s*.*?\s*```', '', response, flags=re.DOTALL)
     # Strip bare JSON objects that look like decision blocks
     cleaned = re.sub(r'\{[^{}]*"decision"\s*:\s*"[^"]*"[^{}]*\}', '', cleaned)
+    # Strip example markers the agent may have copied from prompts
+    cleaned = re.sub(r'\(?\w+ text (?:starts|ends) here\)?\s*', '', cleaned)
     return cleaned.strip()
 
 

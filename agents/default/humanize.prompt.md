@@ -18,15 +18,20 @@ Scan for these AI patterns and remove them:
 
 {{CONTENT}}
 
-After rewriting, score the text:
-- **AI-ness score**: 0-100 (0 = fully human, 100 = obvious AI)
-- List remaining tells (if any)
+## Output Format
 
-Respond with a JSON block:
+Write the COMPLETE humanized text first (the full story/article, rewritten). Then, at the very end, add a JSON decision block with your AI-ness score.
+
+Example:
+
+(humanized text starts here)
+[... your complete rewritten text ...]
+(humanized text ends here)
+
 ```json
 {
-    "decision": "advance" or "loop_back",
-    "critique": "AI-ness score: X/100. Remaining tells: ..."
+    "decision": "advance",
+    "critique": "AI-ness score: 8/100. Remaining tells: ..."
 }
 ```
 

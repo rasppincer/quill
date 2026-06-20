@@ -38,6 +38,14 @@ _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 class Piece:
     """A writing piece with metadata and stage tracking."""
 
+    # Stage classification
+    CONTENT_STAGES = {"draft", "revise", "humanize", "polish", "done"}
+    STAGE_PREFIXES = {
+        "brief": "01", "outline": "02", "draft": "03",
+        "revise": "04", "humanize": "05", "polish": "06", "done": "07",
+    }
+    # review and validate are feedback stages — no prefix
+
     # Identity
     id: str = ""
     title: str = ""
@@ -55,6 +63,9 @@ class Piece:
     current_stage: str = "brief"
     created: str = ""
     updated: str = ""
+
+    # Agent configuration
+    agent_set: str = ""  # empty = auto-detect
 
     # Content (everything after the frontmatter of the CURRENT stage file)
     body: str = ""
@@ -78,6 +89,7 @@ class Piece:
             "current_stage": self.current_stage,
             "created": self.created,
             "updated": self.updated,
+            "agent_set": self.agent_set,
         }
 
     def to_markdown(self) -> str:
@@ -127,6 +139,23 @@ class Piece:
                 pass
         return stages
 
+    def display_stages(self) -> list[dict]:
+        """List stages with prefixed display names for content stages.
+
+        Content stages get a numeric prefix like ``04_revise.md``.
+        Feedback stages (review, validate) keep their plain names.
+        The actual filenames on disk are unchanged.
+        """
+        stages = self.list_stages()
+        for entry in stages:
+            stage = entry["stage"]
+            prefix = self.STAGE_PREFIXES.get(stage)
+            if prefix:
+                entry["display_name"] = f"{prefix}_{stage}.md"
+            else:
+                entry["display_name"] = f"{stage}.md"
+        return stages
+
     def save(self, output_dir: Path | None = None) -> Path:
         """Save piece to disk. Returns the file path.
 
@@ -172,6 +201,7 @@ class Piece:
         d["is_legacy"] = self._is_legacy
         if not self._is_legacy:
             d["stages"] = self.list_stages()
+            d["display_stages"] = self.display_stages()
         return d
 
 
@@ -197,6 +227,7 @@ def _load_from_text(text: str, path: Path) -> Piece:
         current_stage=meta.get("current_stage", "brief"),
         created=meta.get("created", ""),
         updated=meta.get("updated", ""),
+        agent_set=meta.get("agent_set", ""),
         body=body,
         _path=path,
     )
@@ -243,6 +274,7 @@ def load_piece(path: Path) -> Piece:
             current_stage=current_stage,
             created=meta.get("created", ""),
             updated=meta.get("updated", ""),
+            agent_set=meta.get("agent_set", ""),
             body=body,
             _path=path,
             _is_legacy=False,

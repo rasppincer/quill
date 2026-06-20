@@ -56,6 +56,9 @@
     <button class="btn" id="run-agent-btn" onclick="runAgent()" style="margin-left:auto">
         ▶ Run Agent
     </button>
+    <select id="agent-select" style="margin-left:8px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+        <option value="">Loading agents...</option>
+    </select>
 </div>
 
 <div id="agent-result" style="display:none" class="section">
@@ -98,6 +101,35 @@
 {% block scripts %}
 <script>
 const PIECE_ID = {{ piece.id|tojson }};
+const CURRENT_STAGE = {{ piece.current_stage|tojson }};
+const PIECE_AGENT_SET = {{ (piece.agent_set or '')|tojson }};
+
+// Load available agents for current stage
+document.addEventListener('DOMContentLoaded', async function() {
+    const select = document.getElementById('agent-select');
+    if (!select) return;
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/agents/for-stage/${CURRENT_STAGE}`);
+        const data = await resp.json();
+        const sets = data.agent_sets || [];
+        select.innerHTML = '';
+        if (sets.length === 0) {
+            select.innerHTML = '<option value="">No agents available</option>';
+            return;
+        }
+        sets.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = `${s.name} — ${s.model}`;
+            if (s.name === PIECE_AGENT_SET || (!PIECE_AGENT_SET && s.name === 'default')) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        select.innerHTML = '<option value="default">default</option>';
+    }
+});
 
 async function advance() {
     const result = await api(`/api/pieces/${PIECE_ID}/advance`, { method: 'POST' });
@@ -134,10 +166,11 @@ async function runAgent() {
     document.getElementById('agent-critique').textContent = 'Waiting for response...';
 
     try {
+        const agentSet = document.getElementById('agent-select').value;
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({})
+            body: JSON.stringify({ agent_set: agentSet })
         });
         const data = await resp.json();
 

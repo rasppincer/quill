@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import yaml
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, render_template, redirect, url_for
@@ -38,7 +39,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 @app.context_processor
 def inject_base():
     """Inject base URL prefix for static files behind a reverse proxy."""
-    prefix = request.headers.get("X-Forwarded-Prefix", "/quill")
+    prefix = request.headers.get("X-Forwarded-Prefix", "")
     return {"base": prefix}
 
 pipeline = load_pipeline("default")
@@ -312,17 +313,46 @@ def dashboard_agents():
 
 @app.route("/api/agents")
 def agents_list():
-    """List available agent sets."""
+    """List available agent sets with prompts ordered by pipeline sequence."""
     from .agent import list_agent_sets, list_agent_prompts
     sets = list_agent_sets()
+    stage_order = pipeline.stage_order
     for s in sets:
-        s["prompts"] = list_agent_prompts(s["name"])
-    return jsonify({"sets": sets})
+        prompts = list_agent_prompts(s["name"])
+        # Sort prompts by pipeline stage order
+        def prompt_sort_key(p):
+            try:
+                return stage_order.index(p["stage"])
+            except ValueError:
+                return len(stage_order)
+        prompts.sort(key=prompt_sort_key)
+        s["prompts"] = prompts
+    return jsonify({"sets": sets, "stage_order": stage_order})
+
+
+@app.route("/api/agents/for-stage/<stage>")
+def agents_for_stage(stage: str):
+    """List agent sets that have a prompt for the given stage."""
+    from .agent import list_agent_sets
+    from pathlib import Path
+    agents_dir = Path(__file__).resolve().parents[2] / "agents"
+    result = []
+    for d in sorted(agents_dir.iterdir()):
+        if d.is_dir() and (d / "config.yaml").exists():
+            prompt_file = d / f"{stage}.prompt.md"
+            if prompt_file.exists():
+                cfg = yaml.safe_load((d / "config.yaml").read_text()) or {}
+                result.append({
+                    "name": d.name,
+                    "description": cfg.get("description", ""),
+                    "model": cfg.get("model", ""),
+                })
+    return jsonify({"stage": stage, "agent_sets": result})
 
 
 @app.route("/api/agents/<agent_set>")
 def agents_detail(agent_set: str):
-    """Get agent set config and prompts."""
+    """Get agent set config and prompts sorted by pipeline order."""
     from .agent import load_agent_config, list_agent_prompts
     from pathlib import Path
     agents_dir = Path(__file__).resolve().parents[2] / "agents"
@@ -330,9 +360,15 @@ def agents_detail(agent_set: str):
     if not config_file.exists():
         return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
 
-    import yaml
     cfg = yaml.safe_load(config_file.read_text()) or {}
     prompts = list_agent_prompts(agent_set)
+    stage_order = pipeline.stage_order
+    def prompt_sort_key(p):
+        try:
+            return stage_order.index(p["stage"])
+        except ValueError:
+            return len(stage_order)
+    prompts.sort(key=prompt_sort_key)
     return jsonify({"config": cfg, "prompts": prompts})
 
 
@@ -373,16 +409,17 @@ def pieces_run(piece_id: str):
         chain: If true, run all remaining stages.
     """
     data = request.get_json(silent=True) or {}
-    agent_set = data.get("agent_set", "default")
     stage = data.get("stage")
     chain = data.get("chain", False)
 
     from .runner import StageRunner
-    runner = StageRunner(agent_set=agent_set)
-
     piece = get_piece(piece_id)
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    # Use piece's agent_set, fall back to request body, then "default"
+    agent_set = data.get("agent_set") or piece.agent_set or "default"
+    runner = StageRunner(agent_set=agent_set)
 
     if chain:
         results = runner.run_chain(piece_id, from_stage=stage)

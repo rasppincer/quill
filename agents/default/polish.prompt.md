@@ -15,20 +15,23 @@ Rules:
 - Make minimal changes — this is polish, not rewrite
 - Don't add content — tighten what's there
 - Don't change the voice — enhance it
-- Output the COMPLETE polished text
 
 {{CONTENT}}
 
-After polishing, score:
-- **Readability**: 0-100 (higher = more readable)
-- **Opening strength**: 0-100
-- **Ending strength**: 0-100
+## Output Format
 
-Respond with a JSON block:
+Write the COMPLETE polished text first (the full story/article). Then, at the very end, add a JSON decision block with your scores.
+
+Example:
+
+(polished text starts here)
+[... your complete polished text ...]
+(polished text ends here)
+
 ```json
 {
-    "decision": "advance" or "loop_back",
-    "critique": "Readability: X/100. Opening: X/100. Ending: X/100. Changes: ..."
+    "decision": "advance",
+    "critique": "Readability: 92/100. Opening: 88/100. Ending: 95/100. Changes: tightened 3 sentences, varied rhythm in paragraph 2..."
 }
 ```
 

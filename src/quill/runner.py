@@ -226,11 +226,11 @@ class StageRunner:
 
     # Stage-specific input requirements (override default "previous stage" logic)
     # Maps stage → list of files to read as input
+    # Content stages read from the PREVIOUS CONTENT stage, not the feedback stage before them
     _STAGE_INPUTS = {
         "revise": ["draft.md", "review.md"],       # needs draft + critique
         "humanize": ["revise.md"],                  # needs revised text
-        "validate": ["humanize.md"],                # needs humanized text
-        "polish": ["validate.md"],                  # needs validated text
+        "polish": ["humanize.md", "validate.md"],   # needs humanized text + validation feedback
     }
 
     def _read_inputs(self, piece: Piece, stage: str, pipeline) -> str:

@@ -6,6 +6,25 @@
 <h2>Agent Sets</h2>
 <p style="color:var(--text-secondary);margin-bottom:20px">LLM-powered agents for each pipeline stage. Agents critique, decide, and loop autonomously.</p>
 
+<!-- Global model config -->
+<div class="section" style="margin-bottom:24px">
+    <h3 style="margin-bottom:12px">API Model</h3>
+    <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+            <div class="label" style="margin-bottom:4px">Model</div>
+            <select id="model-select" style="min-width:280px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div>
+            <div class="label" style="margin-bottom:4px">API Base</div>
+            <input id="model-api-base" type="text" style="min-width:280px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px" placeholder="http://host:port/v1">
+        </div>
+        <button class="btn success" onclick="saveModelConfig()">Save</button>
+        <span id="model-save-status" style="color:var(--text-muted);font-size:13px"></span>
+    </div>
+</div>
+
 <div id="agent-sets" class="meta-grid" style="margin-bottom:28px"></div>
 
 <div id="agent-detail" style="display:none">
@@ -13,8 +32,6 @@
     <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
 
     <div class="meta-grid" style="margin-bottom:20px">
-        <div class="meta-item"><div class="label">Model</div><div class="value" id="set-model"></div></div>
-        <div class="meta-item"><div class="label">API Base</div><div class="value" id="set-api-base"></div></div>
         <div class="meta-item"><div class="label">Max Loops</div><div class="value" id="set-max-loops"></div></div>
         <div class="meta-item"><div class="label">Trigger</div><div class="value" id="set-trigger"></div></div>
     </div>
@@ -64,7 +81,7 @@
             data.sets.forEach(function(s) {
                 html += '<div class="meta-item" style="cursor:pointer" onclick="window.showSet(\'' + s.name + '\')">';
                 html += '<div class="label">' + esc(s.name) + '</div>';
-                html += '<div class="value">' + esc(s.model || '—') + ' · ' + s.stages.length + ' stages</div>';
+                html += '<div class="value">' + s.stages.length + ' stages</div>';
                 html += '</div>';
             });
             container.innerHTML = html;
@@ -81,8 +98,6 @@
             document.getElementById('prompt-editor').style.display = 'none';
             document.getElementById('set-name').textContent = name;
             document.getElementById('set-desc').textContent = (data.config && data.config.description) || '';
-            document.getElementById('set-model').textContent = (data.config && data.config.model) || '—';
-            document.getElementById('set-api-base').textContent = (data.config && data.config.api_base) || '—';
             document.getElementById('set-max-loops').textContent = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
             document.getElementById('set-trigger').textContent = (data.config && data.config.trigger) || 'on_advance';
 
@@ -138,6 +153,78 @@
         });
     };
 
+    // Global model config
+    var modelBase = (window._SCRIPT_ROOT || '') + '/api/model';
+    var modelsBase = (window._SCRIPT_ROOT || '') + '/api/models';
+
+    function loadModelConfig() {
+        // Load current config
+        fetchJson(modelBase).then(function(cfg) {
+            document.getElementById('model-api-base').value = cfg.api_base || '';
+            var select = document.getElementById('model-select');
+            // Set current model as option (even if not in list yet)
+            if (cfg.model) {
+                var opt = document.createElement('option');
+                opt.value = cfg.model;
+                opt.textContent = cfg.model;
+                opt.selected = true;
+                select.innerHTML = '';
+                select.appendChild(opt);
+            }
+        });
+        // Fetch available models from the LLM
+        fetchJson(modelsBase).then(function(data) {
+            var select = document.getElementById('model-select');
+            var current = select.value;
+            select.innerHTML = '';
+            if (data.models && data.models.length > 0) {
+                data.models.forEach(function(m) {
+                    var opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m;
+                    if (m === current) opt.selected = true;
+                    select.appendChild(opt);
+                });
+            } else {
+                // Keep whatever was loaded from config
+                fetchJson(modelBase).then(function(cfg) {
+                    if (cfg.model) {
+                        var opt = document.createElement('option');
+                        opt.value = cfg.model;
+                        opt.textContent = cfg.model + ' (only option)';
+                        opt.selected = true;
+                        select.appendChild(opt);
+                    }
+                });
+            }
+        });
+    }
+
+    window.saveModelConfig = function() {
+        var model = document.getElementById('model-select').value;
+        var apiBase = document.getElementById('model-api-base').value.trim();
+        var status = document.getElementById('model-save-status');
+        if (!model || !apiBase) {
+            status.textContent = 'Model and API base required';
+            status.style.color = 'var(--accent-red)';
+            return;
+        }
+        fetchJson(modelBase, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({model: model, api_base: apiBase})
+        }).then(function(data) {
+            if (data.status === 'updated') {
+                status.textContent = 'Saved: ' + data.config.model;
+                status.style.color = 'var(--accent-green)';
+            } else {
+                status.textContent = 'Error';
+                status.style.color = 'var(--accent-red)';
+            }
+        });
+    };
+
+    loadModelConfig();
     window.loadSets();
 })();
 </script>

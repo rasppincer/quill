@@ -1,10 +1,8 @@
 # Non-Fiction Agent Set
 # Configurable LLM-powered agents for non-fiction writing pipeline.
+# Model/API config lives in agents/model.yaml (global).
 
 description: "Non-fiction agents for blog posts, essays, articles, and analysis"
-api_base: "http://192.168.0.3:1234/v1"
-api_key: ""  # Not needed for local LLM
-model: "google/gemma-4-e4b"
 temperature: 0.7
 max_tokens: 4096
 max_loops: 3

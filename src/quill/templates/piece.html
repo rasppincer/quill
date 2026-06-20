@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         sets.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.name;
-            opt.textContent = `${s.name} — ${s.model}`;
+            opt.textContent = s.name;
             if (s.name === PIECE_AGENT_SET || (!PIECE_AGENT_SET && s.name === 'default')) {
                 opt.selected = true;
             }

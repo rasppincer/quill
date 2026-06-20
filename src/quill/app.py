@@ -12,6 +12,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import yaml
@@ -330,6 +331,52 @@ def agents_list():
     return jsonify({"sets": sets, "stage_order": stage_order})
 
 
+@app.route("/api/model", methods=["GET"])
+def model_get():
+    """Get global model configuration."""
+    from .agent import load_model_config
+    return jsonify(load_model_config())
+
+
+@app.route("/api/model", methods=["PUT"])
+def model_put():
+    """Update global model configuration.
+
+    JSON body: any subset of api_base, api_key, model, temperature, max_tokens.
+    """
+    from .agent import load_model_config, save_model_config
+    current = load_model_config()
+    data = request.get_json(silent=True) or {}
+    for key in ("api_base", "api_key", "model", "temperature", "max_tokens"):
+        if key in data:
+            current[key] = data[key]
+    save_model_config(current)
+    return jsonify({"status": "updated", "config": current})
+
+
+@app.route("/api/models", methods=["GET"])
+def models_list():
+    """List available models from the configured LLM API."""
+    from .agent import load_model_config
+    import urllib.request
+    cfg = load_model_config()
+    api_base = cfg.get("api_base", "")
+    if not api_base:
+        return jsonify({"models": [], "error": "No api_base configured"})
+    try:
+        url = f"{api_base.rstrip('/')}/models"
+        headers = {}
+        if cfg.get("api_key"):
+            headers["Authorization"] = f"Bearer {cfg['api_key']}"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = sorted([m["id"] for m in data.get("data", []) if "embed" not in m["id"].lower()])
+            return jsonify({"models": models})
+    except Exception as e:
+        return jsonify({"models": [], "error": str(e)})
+
+
 @app.route("/api/agents/for-stage/<stage>")
 def agents_for_stage(stage: str):
     """List agent sets that have a prompt for the given stage."""
@@ -338,14 +385,13 @@ def agents_for_stage(stage: str):
     agents_dir = Path(__file__).resolve().parents[2] / "agents"
     result = []
     for d in sorted(agents_dir.iterdir()):
-        if d.is_dir() and (d / "config.yaml").exists():
+        if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
             prompt_file = d / f"{stage}.prompt.md"
             if prompt_file.exists():
                 cfg = yaml.safe_load((d / "config.yaml").read_text()) or {}
                 result.append({
                     "name": d.name,
                     "description": cfg.get("description", ""),
-                    "model": cfg.get("model", ""),
                 })
     return jsonify({"stage": stage, "agent_sets": result})
 

@@ -1,0 +1,10 @@
+# Global Model Configuration
+# This is the single source of truth for which LLM API and model to use.
+# Agent sets define prompts and per-stage behavior; model selection lives here.
+# Override via dashboard Agents tab or edit directly.
+
+api_base: "http://192.168.0.3:1234/v1"
+api_key: ""
+model: "google/gemma-4-e4b"
+temperature: 0.7
+max_tokens: 4096

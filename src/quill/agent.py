@@ -23,6 +23,23 @@ import yaml
 logger = logging.getLogger(__name__)
 
 AGENTS_DIR = Path(__file__).resolve().parents[2] / "agents"
+MODEL_CONFIG_FILE = AGENTS_DIR / "model.yaml"
+
+
+def load_model_config() -> dict:
+    """Load global model configuration from agents/model.yaml."""
+    if MODEL_CONFIG_FILE.exists():
+        with open(MODEL_CONFIG_FILE) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def save_model_config(cfg: dict):
+    """Save global model configuration to agents/model.yaml."""
+    MODEL_CONFIG_FILE.write_text(
+        yaml.dump(cfg, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 @dataclass
@@ -82,22 +99,25 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
     with open(config_file) as f:
         cfg = yaml.safe_load(f) or {}
 
+    # Load global model config first, then overlay agent set config
+    global_cfg = load_model_config()
+
     # Load prompt template
     prompt_template = ""
     if prompt_file.exists():
         prompt_template = prompt_file.read_text(encoding="utf-8")
 
-    # Build config
+    # Build config — global model.yaml is base, agent set can override
     stage_cfg = cfg.get("stages", {}).get(stage, {})
     return AgentConfig(
         stage=stage,
         name=stage_cfg.get("name", f"{stage} agent"),
         description=stage_cfg.get("description", ""),
-        api_base=cfg.get("api_base", "https://api.openai.com/v1"),
-        api_key=cfg.get("api_key", ""),
-        model=stage_cfg.get("model", cfg.get("model", "gpt-4o")),
-        temperature=stage_cfg.get("temperature", cfg.get("temperature", 0.7)),
-        max_tokens=stage_cfg.get("max_tokens", cfg.get("max_tokens", 4096)),
+        api_base=cfg.get("api_base", global_cfg.get("api_base", "https://api.openai.com/v1")),
+        api_key=cfg.get("api_key", global_cfg.get("api_key", "")),
+        model=cfg.get("model", global_cfg.get("model", "gpt-4o")),
+        temperature=stage_cfg.get("temperature", cfg.get("temperature", global_cfg.get("temperature", 0.7))),
+        max_tokens=stage_cfg.get("max_tokens", cfg.get("max_tokens", global_cfg.get("max_tokens", 4096))),
         max_loops=stage_cfg.get("max_loops", cfg.get("max_loops", 3)),
         trigger=stage_cfg.get("trigger", cfg.get("trigger", "on_advance")),
         prompt_template=prompt_template,
@@ -116,7 +136,6 @@ def list_agent_sets() -> list[dict]:
             sets.append({
                 "name": d.name,
                 "description": cfg.get("description", ""),
-                "model": cfg.get("model", ""),
                 "stages": stages,
             })
     return sets

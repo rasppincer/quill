@@ -51,9 +51,9 @@ document.addEventListener('click', e => {
 });
 // Auto-detect base path: if at /quill/dashboard, base is /quill
 var SCRIPT_ROOT = (function() {
-    // Will be overridden by template if ProxyFix sends X-Forwarded-Prefix
-    if (window._SCRIPT_ROOT) return window._SCRIPT_ROOT;
-    // Auto-detect from location
+    // Will be set by template via ProxyFix X-Forwarded-Prefix (empty string for direct access)
+    if (window._SCRIPT_ROOT !== undefined && window._SCRIPT_ROOT !== null) return window._SCRIPT_ROOT;
+    // Auto-detect from location (fallback if template didn't set it)
     var p = location.pathname;
     var parts = p.split('/').filter(Boolean);
     // If we're at /quill/dashboard, base is /quill

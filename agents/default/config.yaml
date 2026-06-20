@@ -1,0 +1,37 @@
+# Default Agent Set
+# Configurable LLM-powered agents for each pipeline stage.
+
+description: "Default agents for fiction/non-fiction writing pipeline"
+api_base: "https://api.openai.com/v1"
+api_key: ""  # SET THIS — or override per-request via API
+model: "gpt-4o"
+temperature: 0.7
+max_tokens: 4096
+max_loops: 3
+trigger: "on_advance"  # on_advance | auto
+
+stages:
+  review:
+    name: "Review Agent"
+    description: "Reads draft and produces structural/quality critique"
+    temperature: 0.5
+
+  revise:
+    name: "Revise Agent"
+    description: "Applies review feedback to produce revised draft"
+    temperature: 0.6
+
+  humanize:
+    name: "Humanize Agent"
+    description: "Strips AI patterns, scores human-ness"
+    temperature: 0.4
+
+  validate:
+    name: "Validate Agent"
+    description: "Checks domain accuracy, timeline, math, consistency"
+    temperature: 0.2
+
+  polish:
+    name: "Polish Agent"
+    description: "Final line-level edits, readability scoring"
+    temperature: 0.3

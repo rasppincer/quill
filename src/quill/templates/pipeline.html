@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set active_page = "pipeline" %}
+{% block title %}Quill — Pipeline{% endblock %}
+
+{% block content %}
+<h2>Pipeline Stages</h2>
+
+<div class="pipeline" style="margin-bottom:28px">
+    {% for stage in pipeline %}
+        {% if not loop.first %}<div class="arrow">→</div>{% endif %}
+        <div class="step {% if loop.last %}completed{% else %}pending{% endif %}">
+            {{ stage.name }}
+        </div>
+    {% endfor %}
+</div>
+
+<div class="section">
+    <h3>File Structure</h3>
+    <p style="color:var(--text-secondary);margin-bottom:12px">Each piece lives in its own directory under <code>quill/output/</code>. Every stage gets its own file — advancing preserves the previous stage's content.</p>
+    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-family:monospace;font-size:13px;color:var(--text-secondary);margin-bottom:20px">
+        <div>quill/output/</div>
+        <div>&nbsp;&nbsp;└── &lt;piece-id&gt;/</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span style="color:var(--accent-green)">meta.yaml</span> &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text-muted)">← source of truth (stage, metadata)</span></div>
+        {% for stage in pipeline %}
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span style="color:var(--accent-blue)">{{ stage.key }}.md</span>{% if stage.key == 'brief' %} &nbsp;&nbsp;&nbsp;<span style="color:var(--text-muted)">← YAML frontmatter + brief content</span>{% elif stage.key == 'outline' %} &nbsp;<span style="color:var(--text-muted)">← structure, arcs, pacing map</span>{% elif stage.key == 'draft' %} &nbsp;&nbsp;<span style="color:var(--text-muted)">← the actual prose</span>{% elif stage.key == 'review' %} &nbsp;&nbsp;<span style="color:var(--text-muted)">← reviewer notes + feedback</span>{% elif stage.key == 'humanize' %}<span style="color:var(--text-muted)"> ← de-AI'd version</span>{% elif stage.key == 'validate' %}<span style="color:var(--text-muted)"> ← fact-checked version</span>{% elif stage.key == 'polish' %} &nbsp;<span style="color:var(--text-muted)">← final line edits</span>{% elif stage.key == 'done' %} &nbsp;&nbsp;&nbsp;<span style="color:var(--text-muted)">← published version</span>{% endif %}</div>
+        {% endfor %}
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── ...</div>
+    </div>
+</div>
+
+{% for stage in pipeline %}
+<div class="section">
+    <h3>{{ stage.key }} — {{ stage.name }}</h3>
+    <p style="color:var(--text-secondary);margin-bottom:12px">{{ stage.description }}</p>
+    <div class="meta-grid">
+        <div class="meta-item"><div class="label">File</div><div class="value" style="font-family:monospace;font-size:12px">&lt;piece-id&gt;/{{ stage.key }}.md</div></div>
+        {% if stage.next %}
+        <div class="meta-item"><div class="label">Next</div><div class="value">{{ stage.next }}</div></div>
+        {% endif %}
+        {% if stage.can_reject_to %}
+        <div class="meta-item"><div class="label">Can Reject To</div><div class="value">{% if stage.can_reject_to is string %}{{ stage.can_reject_to }}{% else %}{{ stage.can_reject_to|join(', ') }}{% endif %}</div></div>
+        {% endif %}
+        {% if stage.rules %}
+        <div class="meta-item"><div class="label">Rules</div><div class="value">{{ stage.rules|join(', ') }}</div></div>
+        {% endif %}
+        {% if stage.required_artifacts %}
+        <div class="meta-item"><div class="label">Required Artifacts</div><div class="value">{{ stage.required_artifacts|join(', ') }}</div></div>
+        {% endif %}
+        {% if stage.required_fields %}
+        <div class="meta-item"><div class="label">Required Fields</div><div class="value">{{ stage.required_fields|join(', ') }}</div></div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

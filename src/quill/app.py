@@ -1,0 +1,425 @@
+"""Flask application — Quill writing workflow API.
+
+Endpoints:
+    GET  /health                       — Health check
+    GET  /api/pieces                   — List all pieces + current stages
+    POST /api/pieces                   — Create new piece from brief
+    GET  /api/pieces/<id>              — Piece detail
+    POST /api/pieces/<id>/advance      — Advance to next stage
+    POST /api/pieces/<id>/reject       — Revert to a previous stage
+    GET  /api/pipeline                 — Pipeline stage definitions
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from datetime import datetime, timezone
+
+from flask import Flask, jsonify, request, render_template, redirect, url_for
+
+from pathlib import Path
+from werkzeug.middleware.proxy_fix import ProxyFix
+from .pipeline import load_pipeline
+from .piece import Piece, get_piece, list_pieces, load_piece, _FRONTMATTER_RE
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+_pkg_dir = Path(__file__).resolve().parent
+app = Flask(
+    __name__,
+    template_folder=str(_pkg_dir / "templates"),
+    static_folder=str(_pkg_dir / "static"),
+)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
+
+
+@app.context_processor
+def inject_base():
+    """Inject base URL prefix for static files behind a reverse proxy."""
+    prefix = request.headers.get("X-Forwarded-Prefix", "/quill")
+    return {"base": prefix}
+
+pipeline = load_pipeline("default")
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+@app.route("/")
+def index():
+    """Redirect to dashboard."""
+    return redirect(url_for("dashboard"))
+
+
+
+@app.route("/health")
+def health():
+    """Health check."""
+    pieces = list_pieces()
+    return jsonify({
+        "status": "ok",
+        "piece_count": len(pieces),
+        "pipeline": pipeline.name,
+        "stages": pipeline.stage_order,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Pipeline info
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pipeline")
+def pipeline_info():
+    """Get pipeline stage definitions."""
+    return jsonify({
+        "name": pipeline.name,
+        "description": pipeline.description,
+        "stages": [
+            {
+                "key": s.key,
+                "name": s.name,
+                "description": s.description,
+                "next": s.next,
+                "can_reject_to": s.can_reject_to,
+            }
+            for s in pipeline.stages.values()
+        ],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Pieces CRUD
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pieces")
+def pieces_list():
+    """List all pieces with current stage and progress."""
+    pieces = list_pieces()
+    result = []
+    for p in pieces:
+        d = p.to_dict()
+        d["progress"] = pipeline.progress(p.current_stage)
+        result.append(d)
+    return jsonify({"count": len(result), "pieces": result})
+
+
+@app.route("/api/pieces", methods=["POST"])
+def pieces_create():
+    """Create a new piece from brief data.
+
+    JSON body:
+        title (required): Piece title.
+        genre: fiction | non-fiction
+        type: story | blog | editorial | analysis | tutorial | essay
+        audience: Target audience.
+        tone: Tone/style.
+        language: en | bg | mixed
+        target_length: e.g. "5000-8000 words"
+        constraints: List of constraints.
+        body: Brief content (optional).
+    """
+    data = request.get_json(silent=True) or {}
+
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Missing 'title'"}), 400
+
+    # Generate ID from title
+    piece_id = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60]
+    if not piece_id:
+        piece_id = f"piece-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+
+    # Check for duplicate
+    if get_piece(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' already exists"}), 409
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    piece = Piece(
+        id=piece_id,
+        title=title,
+        genre=data.get("genre", ""),
+        type=data.get("type", ""),
+        audience=data.get("audience", ""),
+        tone=data.get("tone", ""),
+        language=data.get("language", ""),
+        target_length=data.get("target_length", ""),
+        constraints=data.get("constraints", []) or [],
+        current_stage="brief",
+        created=now,
+        updated=now,
+        body=data.get("body", ""),
+    )
+
+    path = piece.save()
+    return jsonify({"id": piece.id, "title": piece.title, "stage": piece.current_stage, "path": str(path)}), 201
+
+
+@app.route("/api/pieces/<piece_id>")
+def pieces_get(piece_id: str):
+    """Get piece detail."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    d = piece.to_dict()
+    d["progress"] = pipeline.progress(piece.current_stage)
+    return jsonify(d)
+
+
+# ---------------------------------------------------------------------------
+# Stage management
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pieces/<piece_id>/advance", methods=["POST"])
+def pieces_advance(piece_id: str):
+    """Advance a piece to the next stage."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    next_stage = pipeline.next_stage(piece.current_stage)
+    if not next_stage:
+        return jsonify({"error": f"Piece is at final stage '{piece.current_stage}'"}), 400
+
+    valid, msg = pipeline.validate_transition(piece.current_stage, next_stage)
+    if not valid:
+        return jsonify({"error": msg}), 400
+
+    old_stage = piece.current_stage
+
+    # Save current stage file (preserves its body)
+    if not piece._is_legacy:
+        piece.save()
+
+    # Advance: update meta.yaml to point to next stage
+    piece.current_stage = next_stage
+    # Only clear body if the next stage file doesn't already exist
+    next_stage_file = piece.stage_dir() / f"{next_stage}.md"
+    if not next_stage_file.exists():
+        piece.body = ""
+    else:
+        # Load existing stage file body
+        text = next_stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        piece.body = text[m.end():] if m else text
+    piece.save()
+
+    return jsonify({
+        "id": piece.id,
+        "previous_stage": old_stage,
+        "current_stage": piece.current_stage,
+        "progress": pipeline.progress(piece.current_stage),
+    })
+
+
+@app.route("/api/pieces/<piece_id>/reject", methods=["POST"])
+def pieces_reject(piece_id: str):
+    """Revert a piece to a previous stage.
+
+    JSON body:
+        target (required): Stage to revert to.
+        reason: Why the revert is happening.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    target = data.get("target", "").strip()
+    if not target:
+        return jsonify({"error": "Missing 'target' stage"}), 400
+
+    valid, msg = pipeline.validate_transition(piece.current_stage, target)
+    if not valid:
+        return jsonify({"error": msg}), 400
+
+    old_stage = piece.current_stage
+    piece.current_stage = target
+
+    # Load body from target stage file
+    if not piece._is_legacy:
+        target_file = piece.stage_dir() / f"{target}.md"
+        if target_file.exists():
+            text = target_file.read_text(encoding="utf-8")
+            m = _FRONTMATTER_RE.match(text)
+            piece.body = text[m.end():] if m else text
+
+    piece.save()
+
+    return jsonify({
+        "id": piece.id,
+        "previous_stage": old_stage,
+        "current_stage": piece.current_stage,
+        "reason": data.get("reason", ""),
+        "progress": pipeline.progress(piece.current_stage),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Dashboard (frontend)
+# ---------------------------------------------------------------------------
+
+
+@app.route("/dashboard")
+def dashboard():
+    """Pieces overview page."""
+    return render_template("dashboard.html")
+
+
+@app.route("/pieces/<piece_id>")
+def dashboard_piece(piece_id: str):
+    """Piece detail page."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return render_template("dashboard.html"), 404
+
+    stages_list = list(pipeline.stages.values())
+    progress = pipeline.progress(piece.current_stage)
+    return render_template(
+        "piece.html",
+        piece=piece.to_dict(),
+        progress=progress,
+        pipeline=stages_list,
+        pipeline_order=pipeline.stage_order,
+    )
+
+
+@app.route("/dashboard/pipeline")
+def dashboard_pipeline():
+    """Pipeline info page."""
+    stages_list = list(pipeline.stages.values())
+    return render_template("pipeline.html", pipeline=stages_list)
+
+
+@app.route("/dashboard/agents")
+def dashboard_agents():
+    """Agent management page."""
+    return render_template("agents.html")
+
+
+# ---------------------------------------------------------------------------
+# Agent API
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/agents")
+def agents_list():
+    """List available agent sets."""
+    from .agent import list_agent_sets, list_agent_prompts
+    sets = list_agent_sets()
+    for s in sets:
+        s["prompts"] = list_agent_prompts(s["name"])
+    return jsonify({"sets": sets})
+
+
+@app.route("/api/agents/<agent_set>")
+def agents_detail(agent_set: str):
+    """Get agent set config and prompts."""
+    from .agent import load_agent_config, list_agent_prompts
+    from pathlib import Path
+    agents_dir = Path(__file__).resolve().parents[2] / "agents"
+    config_file = agents_dir / agent_set / "config.yaml"
+    if not config_file.exists():
+        return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
+
+    import yaml
+    cfg = yaml.safe_load(config_file.read_text()) or {}
+    prompts = list_agent_prompts(agent_set)
+    return jsonify({"config": cfg, "prompts": prompts})
+
+
+@app.route("/api/agents/<agent_set>/<stage>/prompt", methods=["GET"])
+def agents_get_prompt(agent_set: str, stage: str):
+    """Get prompt template for a stage."""
+    from pathlib import Path
+    prompt_file = Path(__file__).resolve().parents[2] / "agents" / agent_set / f"{stage}.prompt.md"
+    if not prompt_file.exists():
+        return jsonify({"error": f"Prompt not found"}), 404
+    return jsonify({"stage": stage, "content": prompt_file.read_text(encoding="utf-8")})
+
+
+@app.route("/api/agents/<agent_set>/<stage>/prompt", methods=["PUT"])
+def agents_update_prompt(agent_set: str, stage: str):
+    """Update prompt template for a stage."""
+    from pathlib import Path
+    data = request.get_json(silent=True) or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"error": "Missing 'content'"}), 400
+
+    prompt_file = Path(__file__).resolve().parents[2] / "agents" / agent_set / f"{stage}.prompt.md"
+    if not prompt_file.parent.exists():
+        return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
+
+    prompt_file.write_text(content, encoding="utf-8")
+    return jsonify({"stage": stage, "length": len(content), "status": "updated"})
+
+
+@app.route("/api/pieces/<piece_id>/run", methods=["POST"])
+def pieces_run(piece_id: str):
+    """Run an agent on a specific stage or chain all remaining stages.
+
+    JSON body:
+        stage: Stage to run (default: current stage).
+        agent_set: Agent set to use (default: "default").
+        chain: If true, run all remaining stages.
+    """
+    data = request.get_json(silent=True) or {}
+    agent_set = data.get("agent_set", "default")
+    stage = data.get("stage")
+    chain = data.get("chain", False)
+
+    from .runner import StageRunner
+    runner = StageRunner(agent_set=agent_set)
+
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    if chain:
+        results = runner.run_chain(piece_id, from_stage=stage)
+        return jsonify({
+            "piece_id": piece_id,
+            "chain": True,
+            "results": [
+                {
+                    "stage": r.stage,
+                    "decision": r.decision,
+                    "critique": r.critique[:500] + "..." if len(r.critique) > 500 else r.critique,
+                    "loop_count": r.loop_count,
+                    "error": r.error,
+                }
+                for r in results
+            ],
+        })
+    else:
+        target_stage = stage or piece.current_stage
+        result = runner.run_stage(piece_id, target_stage)
+        return jsonify({
+            "piece_id": piece_id,
+            "stage": result.stage,
+            "decision": result.decision,
+            "critique": result.critique,
+            "loop_count": result.loop_count,
+            "error": result.error,
+        })
+
+
+
+
+def main():
+    """Run the server."""
+    app.run(host="0.0.0.0", port=8325, debug=False)
+
+
+if __name__ == "__main__":
+    main()
+from flask import Flask, jsonify, request, render_template, redirect, url_for, redirect

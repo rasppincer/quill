@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% set active_page = "dashboard" %}
+{% block title %}Quill — {{ piece.title }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:8px">
+    <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);text-decoration:none;font-size:13px">← Back to pieces</a>
+</div>
+
+<h2>{{ piece.title }}</h2>
+
+<!-- Pipeline visualization -->
+<div class="pipeline">
+    {% for stage in pipeline %}
+        {% if not loop.first %}<div class="arrow">→</div>{% endif %}
+        {% set idx = loop.index0 %}
+        {% set current_idx = pipeline_order.index(piece.current_stage) if piece.current_stage in pipeline_order else -1 %}
+        <div class="step {% if idx < current_idx %}completed{% elif idx == current_idx %}current{% else %}pending{% endif %}">
+            {{ stage.name }}
+        </div>
+    {% endfor %}
+</div>
+
+<!-- Stats cards -->
+<div class="cards">
+    <div class="card">
+        <div class="label">Current Stage</div>
+        <div class="value purple">{{ piece.current_stage|title }}</div>
+    </div>
+    <div class="card">
+        <div class="label">Progress</div>
+        <div class="value blue">{{ progress.percent }}%</div>
+    </div>
+    <div class="card">
+        <div class="label">Genre</div>
+        <div class="value" style="font-size:18px">{{ piece.genre or '—' }}</div>
+    </div>
+    <div class="card">
+        <div class="label">Language</div>
+        <div class="value" style="font-size:18px">{{ piece.language or '—' }}</div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="actions">
+    {% for target in progress.can_reject_to %}
+    <button class="btn danger" onclick="reject('{{ target }}')">
+        ← Reject to {{ target|title }}
+    </button>
+    {% endfor %}
+    {% if progress.next %}
+    <button class="btn success" onclick="advance()">
+        Advance to {{ progress.next|title }} →
+    </button>
+    {% endif %}
+    <button class="btn" id="run-agent-btn" onclick="runAgent()" style="margin-left:auto">
+        ▶ Run Agent
+    </button>
+</div>
+
+<div id="agent-result" style="display:none" class="section">
+    <h3>Agent Result</h3>
+    <div class="meta-grid" style="margin-bottom:12px">
+        <div class="meta-item"><div class="label">Decision</div><div class="value" id="agent-decision"></div></div>
+        <div class="meta-item"><div class="label">Loops</div><div class="value" id="agent-loops"></div></div>
+        <div class="meta-item"><div class="label">Status</div><div class="value" id="agent-status"></div></div>
+    </div>
+    <div id="agent-critique" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
+</div>
+
+<!-- Metadata -->
+<div class="section">
+    <h3>Brief / Metadata</h3>
+    <div class="meta-grid">
+        <div class="meta-item"><div class="label">Type</div><div class="value">{{ piece.type or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Audience</div><div class="value">{{ piece.audience or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Tone</div><div class="value">{{ piece.tone or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Target Length</div><div class="value">{{ piece.target_length or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Created</div><div class="value">{{ piece.created or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Updated</div><div class="value">{{ piece.updated or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Body Length</div><div class="value">{{ piece.body_length }} chars</div></div>
+        <div class="meta-item"><div class="label">ID</div><div class="value" style="font-size:12px;color:var(--text-muted)">{{ piece.id }}</div></div>
+    </div>
+</div>
+
+{% if piece.constraints %}
+<div class="section">
+    <h3>Constraints</h3>
+    <ul style="padding-left:20px;color:var(--text-secondary)">
+        {% for c in piece.constraints %}
+        <li>{{ c }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PIECE_ID = {{ piece.id|tojson }};
+
+async function advance() {
+    const result = await api(`/api/pieces/${PIECE_ID}/advance`, { method: 'POST' });
+    if (result) {
+        toast(`Advanced to ${result.current_stage}`, 'success');
+        setTimeout(() => location.reload(), 500);
+    }
+}
+
+async function reject(target) {
+    if (!confirm(`Revert to "${target}"?`)) return;
+    const result = await api(`/api/pieces/${PIECE_ID}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ target, reason: 'Manual revert from dashboard' }),
+    });
+    if (result) {
+        toast(`Reverted to ${result.current_stage}`, 'info');
+        setTimeout(() => location.reload(), 500);
+    }
+}
+
+async function runAgent() {
+    const btn = document.getElementById('run-agent-btn');
+    const resultDiv = document.getElementById('agent-result');
+    const statusEl = document.getElementById('agent-status');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Running...';
+    resultDiv.style.display = 'block';
+    statusEl.textContent = 'Calling LLM...';
+    statusEl.style.color = 'var(--accent-blue)';
+    document.getElementById('agent-decision').textContent = '—';
+    document.getElementById('agent-loops').textContent = '—';
+    document.getElementById('agent-critique').textContent = 'Waiting for response...';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            statusEl.textContent = `Error: ${data.error}`;
+            statusEl.style.color = 'var(--accent-red)';
+            document.getElementById('agent-critique').textContent = data.error;
+        } else {
+            const decisionEl = document.getElementById('agent-decision');
+            decisionEl.textContent = data.decision;
+            decisionEl.style.color = data.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
+            document.getElementById('agent-loops').textContent = data.loop_count;
+            document.getElementById('agent-critique').textContent = data.critique || '(no critique)';
+            statusEl.textContent = 'Complete';
+            statusEl.style.color = 'var(--accent-green)';
+
+            if (data.decision === 'advance') {
+                toast('Agent decided: advance', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else if (data.decision === 'loop_back') {
+                toast('Agent decided: loop back', 'warning');
+            }
+        }
+    } catch (e) {
+        statusEl.textContent = `Error: ${e.message}`;
+        statusEl.style.color = 'var(--accent-red)';
+    }
+
+    btn.disabled = false;
+    btn.textContent = '▶ Run Agent';
+}
+</script>
+{% endblock %}

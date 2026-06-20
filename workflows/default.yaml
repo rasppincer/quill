@@ -37,10 +37,27 @@ stages:
 
   - key: review
     name: Review
-    description: Structural and quality review
-    checklist: templates/review.md
-    next: humanize
+    description: Read, annotate, flag issues
+    rules:
+      - pacing_check
+      - logic_check
+      - character_consistency
+      - completeness_vs_outline
+      - redundancy_scan
+    next: revise
     can_reject_to: draft
+
+  - key: revise
+    name: Revise
+    description: Apply review feedback to produce revised draft
+    rules:
+      - apply_review_comments
+      - preserve_voice
+      - atomic_changes
+    next: humanize
+    can_reject_to:
+      - review
+      - draft
 
   - key: humanize
     name: Humanize
@@ -50,7 +67,7 @@ stages:
       - anti_ai_audit_pass
       - voice_calibration
     next: validate
-    can_reject_to: review
+    can_reject_to: revise
 
   - key: validate
     name: Validate
@@ -60,8 +77,9 @@ stages:
       - consistency_check
       - language_quality
     next: polish
-    can_reject_to: humanize
-    can_reject_to: draft
+    can_reject_to:
+      - humanize
+      - revise
 
   - key: polish
     name: Polish
@@ -71,6 +89,7 @@ stages:
       - final_word_count
       - formatting
     next: done
+    can_reject_to: validate
 
   - key: done
     name: Done

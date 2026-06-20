@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Quill{% endblock %}</title>
+    <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
+    <script>window._SCRIPT_ROOT = {{ base|tojson }};</script>
+</head>
+<body>
+    <div class="sidebar">
+        <h1>✒ Quill</h1>
+        <div class="subtitle">Writing Workflow</div>
+        <nav>
+            <a href="{{ base }}/dashboard" class="{% if active_page == 'dashboard' %}active{% endif %}">⊞ Pieces</a>
+            <a href="{{ base }}/dashboard/pipeline" class="{% if active_page == 'pipeline' %}active{% endif %}">⟶ Pipeline</a>
+            <a href="{{ base }}/dashboard/agents" class="{% if active_page == 'agents' %}active{% endif %}">⚙ Agents</a>
+        </nav>
+    </div>
+
+    <div class="main">
+        {% block content %}{% endblock %}
+    </div>
+
+    <div class="toast-container"></div>
+
+    <script src="{{ base }}/static/js/dashboard.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% set active_page = "agents" %}
+{% block title %}Quill — Agents{% endblock %}
+
+{% block content %}
+<h2>Agent Sets</h2>
+<p style="color:var(--text-secondary);margin-bottom:20px">LLM-powered agents for each pipeline stage. Agents critique, decide, and loop autonomously.</p>
+
+<div id="agent-sets" class="meta-grid" style="margin-bottom:28px"></div>
+
+<div id="agent-detail" style="display:none">
+    <h3 id="set-name"></h3>
+    <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
+
+    <div class="meta-grid" style="margin-bottom:20px">
+        <div class="meta-item"><div class="label">Model</div><div class="value" id="set-model"></div></div>
+        <div class="meta-item"><div class="label">API Base</div><div class="value" id="set-api-base"></div></div>
+        <div class="meta-item"><div class="label">Max Loops</div><div class="value" id="set-max-loops"></div></div>
+        <div class="meta-item"><div class="label">Trigger</div><div class="value" id="set-trigger"></div></div>
+    </div>
+
+    <h3 style="margin-top:24px">Prompt Templates</h3>
+    <div id="prompt-list"></div>
+</div>
+
+<div id="prompt-editor" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 id="editor-title"></h3>
+        <button class="btn" onclick="closeEditor()">← Back</button>
+    </div>
+    <textarea id="prompt-content" style="width:100%;height:500px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;padding:16px;font-family:monospace;font-size:13px;resize:vertical"></textarea>
+    <div style="margin-top:12px;display:flex;gap:12px;align-items:center">
+        <button class="btn success" onclick="savePrompt()">Save</button>
+        <span id="save-status" style="color:var(--text-muted);font-size:13px"></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var BASE = (window._SCRIPT_ROOT || '') + '/api/agents';
+    var currentSet = '';
+    var currentStage = '';
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function fetchJson(url, opts) {
+        return fetch(url, opts).then(function(r) { return r.json(); });
+    }
+
+    window.loadSets = function() {
+        fetchJson(BASE).then(function(data) {
+            var container = document.getElementById('agent-sets');
+            if (!data.sets || data.sets.length === 0) {
+                container.innerHTML = '<div class="meta-item"><div class="value" style="color:var(--text-muted)">No agent sets found. Create one in agents/</div></div>';
+                return;
+            }
+            var html = '';
+            data.sets.forEach(function(s) {
+                html += '<div class="meta-item" style="cursor:pointer" onclick="window.showSet(\'' + s.name + '\')">';
+                html += '<div class="label">' + esc(s.name) + '</div>';
+                html += '<div class="value">' + esc(s.model || '—') + ' · ' + s.stages.length + ' stages</div>';
+                html += '</div>';
+            });
+            container.innerHTML = html;
+            if (data.sets.length > 0) {
+                window.showSet(data.sets[0].name);
+            }
+        });
+    };
+
+    window.showSet = function(name) {
+        currentSet = name;
+        fetchJson(BASE + '/' + name).then(function(data) {
+            document.getElementById('agent-detail').style.display = 'block';
+            document.getElementById('prompt-editor').style.display = 'none';
+            document.getElementById('set-name').textContent = name;
+            document.getElementById('set-desc').textContent = (data.config && data.config.description) || '';
+            document.getElementById('set-model').textContent = (data.config && data.config.model) || '—';
+            document.getElementById('set-api-base').textContent = (data.config && data.config.api_base) || '—';
+            document.getElementById('set-max-loops').textContent = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
+            document.getElementById('set-trigger').textContent = (data.config && data.config.trigger) || 'on_advance';
+
+            var list = document.getElementById('prompt-list');
+            if (!data.prompts || data.prompts.length === 0) {
+                list.innerHTML = '<div style="color:var(--text-muted);margin-top:12px">No prompt templates found.</div>';
+                return;
+            }
+            var html = '';
+            data.prompts.forEach(function(p) {
+                html += '<div class="section" style="margin-top:12px;cursor:pointer" onclick="window.editPrompt(\'' + p.stage + '\')">';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+                html += '<div><strong>' + esc(p.title) + '</strong>';
+                html += '<span style="color:var(--text-muted);font-size:12px;margin-left:8px">' + p.stage + '.prompt.md · ' + p.length + ' chars</span></div>';
+                html += '<span style="color:var(--accent-blue);font-size:13px">Edit →</span>';
+                html += '</div></div>';
+            });
+            list.innerHTML = html;
+        });
+    };
+
+    window.editPrompt = function(stage) {
+        currentStage = stage;
+        fetchJson(BASE + '/' + currentSet + '/' + stage + '/prompt').then(function(data) {
+            document.getElementById('agent-detail').style.display = 'none';
+            document.getElementById('prompt-editor').style.display = 'block';
+            document.getElementById('editor-title').textContent = currentSet + ' / ' + stage + '.prompt.md';
+            document.getElementById('prompt-content').value = data.content || '';
+            document.getElementById('save-status').textContent = '';
+        });
+    };
+
+    window.closeEditor = function() {
+        document.getElementById('agent-detail').style.display = 'block';
+        document.getElementById('prompt-editor').style.display = 'none';
+    };
+
+    window.savePrompt = function() {
+        var content = document.getElementById('prompt-content').value;
+        fetchJson(BASE + '/' + currentSet + '/' + currentStage + '/prompt', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: content})
+        }).then(function(data) {
+            var status = document.getElementById('save-status');
+            if (data.status === 'updated') {
+                status.textContent = 'Saved (' + data.length + ' chars)';
+                status.style.color = 'var(--accent-green)';
+            } else {
+                status.textContent = 'Error: ' + (data.error || 'unknown');
+                status.style.color = 'var(--accent-red)';
+            }
+        });
+    };
+
+    window.loadSets();
+})();
+</script>
+{% endblock %}

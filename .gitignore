@@ -20,3 +20,6 @@ Thumbs.db
 .env
 .venv/
 venv/
+
+# Output (piece content — local only, not in repo)
+output/

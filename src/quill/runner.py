@@ -159,8 +159,13 @@ class StageRunner:
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
-            # Write output to stage file
-            self._write_output(piece, stage, decision.output)
+            # Content-producing stages write the body (revised text, humanized text, etc.)
+            # Feedback stages write the critique
+            content_stages = {"revise", "humanize", "polish"}
+            if stage in content_stages and decision.body:
+                self._write_output(piece, stage, decision.body)
+            else:
+                self._write_output(piece, stage, decision.critique)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
                 self._advance_meta(piece, stage_def.next)
@@ -219,28 +224,44 @@ class StageRunner:
 
         return results
 
+    # Stage-specific input requirements (override default "previous stage" logic)
+    # Maps stage → list of files to read as input
+    _STAGE_INPUTS = {
+        "revise": ["draft.md", "review.md"],       # needs draft + critique
+        "humanize": ["revise.md"],                  # needs revised text
+        "validate": ["humanize.md"],                # needs humanized text
+        "polish": ["validate.md"],                  # needs validated text
+    }
+
     def _read_inputs(self, piece: Piece, stage: str, pipeline) -> str:
         """Read input files for a stage.
 
-        The input is typically the output of the previous stage,
-        plus any critique from the current stage if looping.
+        Uses stage-specific input mapping when defined,
+        otherwise falls back to reading the previous stage's output.
         """
         stage_dir = piece.stage_dir()
-
-        # Determine which files to read as input
         inputs = []
 
-        # Read the previous stage's output
-        stage_order = pipeline.stage_order
-        if stage in stage_order:
-            idx = stage_order.index(stage)
-            if idx > 0:
-                prev_stage = stage_order[idx - 1]
-                prev_file = stage_dir / f"{prev_stage}.md"
-                if prev_file.exists():
-                    text = prev_file.read_text(encoding="utf-8")
+        # Stage-specific inputs
+        if stage in self._STAGE_INPUTS:
+            for fname in self._STAGE_INPUTS[stage]:
+                fpath = stage_dir / fname
+                if fpath.exists():
+                    text = fpath.read_text(encoding="utf-8")
                     m = _FRONTMATTER_RE.match(text)
-                    inputs.append(f"=== {prev_stage}.md ===\n{text[m.end():] if m else text}")
+                    inputs.append(f"=== {fname} ===\n{text[m.end():] if m else text}")
+        else:
+            # Default: read previous stage's output
+            stage_order = pipeline.stage_order
+            if stage in stage_order:
+                idx = stage_order.index(stage)
+                if idx > 0:
+                    prev_stage = stage_order[idx - 1]
+                    prev_file = stage_dir / f"{prev_stage}.md"
+                    if prev_file.exists():
+                        text = prev_file.read_text(encoding="utf-8")
+                        m = _FRONTMATTER_RE.match(text)
+                        inputs.append(f"=== {prev_stage}.md ===\n{text[m.end():] if m else text}")
 
         # If looping, also read the current stage's existing content (critique)
         current_file = stage_dir / f"{stage}.md"
@@ -250,14 +271,6 @@ class StageRunner:
             body = text[m.end():] if m else text
             if body.strip():
                 inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
-
-        # For revise, also read review.md
-        if stage == "revise":
-            review_file = stage_dir / "review.md"
-            if review_file.exists():
-                text = review_file.read_text(encoding="utf-8")
-                m = _FRONTMATTER_RE.match(text)
-                inputs.append(f"=== review.md ===\n{text[m.end():] if m else text}")
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 

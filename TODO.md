@@ -47,6 +47,7 @@
 
 ## Backlog
 
+- [ ] Google Docs connector — push finished pieces to Google Docs (API auth, formatting, link sharing)
 - [ ] Voice-to-brief pipeline (mic → Whisper → brief.md)
 - [ ] Multi-author workflow (shared pieces, roles)
 - [ ] Template library (brief templates per genre)

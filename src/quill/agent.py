@@ -57,6 +57,7 @@ class AgentDecision:
     decision: str  # "advance" | "loop_back"
     critique: str  # feedback text
     output: str  # full LLM response
+    body: str = ""  # response text with JSON metadata stripped (for file output)
     loop_count: int = 0
     stage: str = ""
     error: str = ""
@@ -141,6 +142,15 @@ def list_agent_prompts(agent_set: str) -> list[dict]:
     return prompts
 
 
+def _strip_json_block(response: str) -> str:
+    """Remove JSON decision blocks from the response, leaving the content body."""
+    # Strip ```json ... ``` blocks
+    cleaned = re.sub(r'```json\s*.*?\s*```', '', response, flags=re.DOTALL)
+    # Strip bare JSON objects that look like decision blocks
+    cleaned = re.sub(r'\{[^{}]*"decision"\s*:\s*"[^"]*"[^{}]*\}', '', cleaned)
+    return cleaned.strip()
+
+
 def parse_agent_response(response: str) -> AgentDecision:
     """Parse an LLM response into an AgentDecision.
 
@@ -152,6 +162,8 @@ def parse_agent_response(response: str) -> AgentDecision:
 
     Falls back to heuristic parsing if JSON not found.
     """
+    body = _strip_json_block(response)
+
     # Try to extract JSON block
     json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
     if json_match:
@@ -161,6 +173,7 @@ def parse_agent_response(response: str) -> AgentDecision:
                 decision=data.get("decision", "advance"),
                 critique=data.get("critique", ""),
                 output=response,
+                body=body,
             )
         except json.JSONDecodeError:
             pass
@@ -174,6 +187,7 @@ def parse_agent_response(response: str) -> AgentDecision:
                 decision=data.get("decision", "advance"),
                 critique=data.get("critique", ""),
                 output=response,
+                body=body,
             )
         except json.JSONDecodeError:
             pass
@@ -190,4 +204,5 @@ def parse_agent_response(response: str) -> AgentDecision:
         decision=decision,
         critique=response,
         output=response,
+        body=body,
     )

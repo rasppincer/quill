@@ -14,13 +14,22 @@ Rules:
 - Preserve the author's voice and style
 - Don't pad — substance over word count
 - Keep the structure unless the review specifically requests restructuring
-- Output the COMPLETE revised text, not a diff or summary
+- Output the COMPLETE revised text (the full story/article), not a diff or summary
 
-Respond with a JSON block:
+## Output Format
+
+Write the COMPLETE revised text first. Then, at the very end, add a JSON decision block.
+
+Example:
+
+(revised text starts here)
+[... your complete revised text ...]
+(revised text ends here)
+
 ```json
 {
-    "decision": "advance" or "loop_back",
-    "critique": "summary of changes made, or issues that remain..."
+    "decision": "advance",
+    "critique": "Applied 3 changes: fixed pacing in paragraph 2, resolved logic gap at the climax, trimmed 200 words of repetition."
 }
 ```
 

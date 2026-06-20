@@ -21,5 +21,10 @@ Thumbs.db
 .venv/
 venv/
 
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Output (piece content — local only, not in repo)
 output/

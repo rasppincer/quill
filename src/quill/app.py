@@ -22,6 +22,13 @@ from flask import Flask, jsonify, request, render_template, redirect, url_for
 
 from pathlib import Path
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+except ImportError:
+    pass  # python-dotenv not installed — rely on env vars from systemd/shell
 from .pipeline import load_pipeline
 from .piece import Piece, get_piece, list_pieces, load_piece, _FRONTMATTER_RE
 
@@ -342,14 +349,17 @@ def model_get():
 def model_put():
     """Update global model configuration.
 
-    JSON body: any subset of api_base, api_key, model, temperature, max_tokens.
+    JSON body: any subset of api_base, model, temperature, max_tokens.
+    api_key is not stored here — use QUILL_API_KEY env var instead.
     """
     from .agent import load_model_config, save_model_config
     current = load_model_config()
     data = request.get_json(silent=True) or {}
-    for key in ("api_base", "api_key", "model", "temperature", "max_tokens"):
+    for key in ("api_base", "model", "temperature", "max_tokens"):
         if key in data:
             current[key] = data[key]
+    # Strip api_key if sent — it belongs in env, not yaml
+    current.pop("api_key", None)
     save_model_config(current)
     return jsonify({"status": "updated", "config": current})
 

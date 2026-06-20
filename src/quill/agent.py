@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,7 +115,7 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
         name=stage_cfg.get("name", f"{stage} agent"),
         description=stage_cfg.get("description", ""),
         api_base=cfg.get("api_base", global_cfg.get("api_base", "https://api.openai.com/v1")),
-        api_key=cfg.get("api_key", global_cfg.get("api_key", "")),
+        api_key=os.environ.get("QUILL_API_KEY") or cfg.get("api_key", global_cfg.get("api_key", "")),
         model=cfg.get("model", global_cfg.get("model", "gpt-4o")),
         temperature=stage_cfg.get("temperature", cfg.get("temperature", global_cfg.get("temperature", 0.7))),
         max_tokens=stage_cfg.get("max_tokens", cfg.get("max_tokens", global_cfg.get("max_tokens", 4096))),

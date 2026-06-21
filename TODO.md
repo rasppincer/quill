@@ -43,7 +43,7 @@
 - [ ] Trigger mode: run_chain on "Run Agent" — one click runs all remaining stages (review→done). User writes brief→outline→draft manually, then agent pipeline handles the rest.
 - [ ] Agent run history (per-piece run log in meta.yaml, toggle via config)
 - [ ] Agent set management via API (create/delete sets) — low priority
-- [ ] Text metrics — per-stage, stored as `{stage}.metrics.yaml` alongside each stage file
+- [x] Text metrics — per-stage, stored as `{stage}.metrics.yaml` alongside each stage file
   - Metrics: Flesch Reading Ease, Flesch-Kincaid Grade, word count, avg sentence length, type-token ratio, passive voice %
   - Computed mechanically (no LLM), injected into agent prompts so agents can react to readability regressions
   - Trigger: on advance or run_agent, compare `{stage}.md` mtime vs `{stage}.metrics.yaml` — recompute if content changed

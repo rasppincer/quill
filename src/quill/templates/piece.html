@@ -80,7 +80,18 @@
         <h3 style="margin:0">Stage Content — {{ piece.current_stage|title }}</h3>
         <button class="btn" id="toggle-content-btn" onclick="toggleStageContent()">Show</button>
     </div>
-    <div id="stage-content" style="display:none;margin-top:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;max-height:600px;overflow-y:auto;white-space:pre-wrap;font-family:monospace"></div>
+    <div id="stage-content" style="display:none;margin-top:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-size:14px;line-height:1.8;max-height:600px;overflow-y:auto">
+        <style>
+            #stage-content h1, #stage-content h2, #stage-content h3 { color: var(--text-primary); margin: 1.2em 0 0.4em; }
+            #stage-content h1 { font-size: 1.4em; } #stage-content h2 { font-size: 1.2em; } #stage-content h3 { font-size: 1.1em; }
+            #stage-content p { margin: 0.6em 0; }
+            #stage-content strong { color: var(--accent-blue); }
+            #stage-content em { color: var(--text-secondary); }
+            #stage-content blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--text-secondary); margin: 0.8em 0; }
+            #stage-content code { background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+            #stage-content ul, #stage-content ol { padding-left: 1.5em; margin: 0.4em 0; }
+        </style>
+    </div>
 </div>
 
 <!-- Metadata -->
@@ -190,7 +201,8 @@ async function toggleStageContent() {
             try {
                 const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
                 const data = await resp.json();
-                div.textContent = data.body || '(empty)';
+                const raw = data.body || '(empty)';
+                div.innerHTML = marked.parse(raw);
                 stageContentLoaded = true;
             } catch (e) {
                 div.textContent = 'Error loading content';

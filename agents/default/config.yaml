@@ -1,6 +1,6 @@
 description: Generic agents — works for any genre or type
 temperature: 0.7
-max_tokens: 4096
+max_tokens: 12288
 max_loops: 3
 trigger: on_advance
 stages:

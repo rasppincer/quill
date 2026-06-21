@@ -31,13 +31,6 @@ Example:
 [... your complete polished text ...]
 (polished text ends here)
 
-```json
-{
-    "decision": "advance",
-    "critique": "Readability: 92/100. SEO: 85/100. Opening: 88/100. Ending: 95/100. Heading hierarchy: valid. Meta description: suggested. CTA: sharpened. Changes: tightened 3 sentences, added keyword to intro, fixed H2 ordering..."
-}
-```
+## Output Format
 
-Decision guide:
-- "advance" if all scores > 70
-- "loop_back" if any score < 70
+Write the COMPLETE text. Output only the content — no meta-commentary, no JSON, no decision blocks.

@@ -19,27 +19,10 @@ Rules:
 
 ## Output Format
 
-Write the COMPLETE revised text first. Then, at the very end, add a JSON decision block.
-
-Example:
-
-(revised text starts here)
-[... your complete revised text ...]
-(revised text ends here)
+Write the COMPLETE revised text. Output only the content — no meta-commentary, no JSON, no decision blocks.
 
 {% if is_looping %}
 **This is a loop iteration.** Your previous attempt was evaluated and sent back for improvement.
 The previous attempt and evaluation feedback are included in the input above (look for "previous attempt" and "evaluation feedback" sections).
 Focus on addressing the specific critique while preserving the strengths of your previous output.
 {% endif %}
-
-```json
-{
-    "decision": "advance",
-    "critique": "Applied 3 changes: restructured section 2, clarified argument in paragraph 4, trimmed 200 words of repetition."
-}
-```
-
-Decision guide:
-- "advance" if all review feedback has been addressed
-- "loop_back" if some feedback couldn't be applied (explain why)

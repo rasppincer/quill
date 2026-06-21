@@ -26,14 +26,3 @@ Example:
 (outline starts here)
 [... your complete outline ...]
 (outline ends here)
-
-```json
-{
-    "decision": "advance",
-    "critique": "Outline covers all brief requirements in 5 balanced sections with clear thesis and evidence hooks."
-}
-```
-
-Decision guide:
-- "advance" if the outline fully addresses the brief with a clear argument structure
-- "loop_back" if key points are missing, thesis is unclear, or structure is weak

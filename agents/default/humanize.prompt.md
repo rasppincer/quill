@@ -32,13 +32,6 @@ Example:
 [... your complete rewritten text ...]
 (humanized text ends here)
 
-```json
-{
-    "decision": "advance",
-    "critique": "AI-ness score: 8/100. Remaining tells: ..."
-}
-```
+## Output Format
 
-Decision guide:
-- "advance" if AI-ness score < 20
-- "loop_back" if AI-ness score >= 20
+Write the COMPLETE text. Output only the content — no meta-commentary, no JSON, no decision blocks.

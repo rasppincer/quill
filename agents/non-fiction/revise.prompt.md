@@ -20,21 +20,10 @@ Rules:
 
 ## Output Format
 
-Write the COMPLETE revised text first. Then, at the very end, add a JSON decision block.
+Write the COMPLETE revised text. Output only the content — no meta-commentary, no JSON, no decision blocks.
 
 Example:
 
 (revised text starts here)
 [... your complete revised text ...]
 (revised text ends here)
-
-```json
-{
-    "decision": "advance",
-    "critique": "Applied 4 changes: strengthened thesis in intro, added evidence to paragraph 3, fixed transition between sections 2-3, addressed counterargument in conclusion."
-}
-```
-
-Decision guide:
-- "advance" if all review feedback has been addressed
-- "loop_back" if some feedback couldn't be applied (explain why)

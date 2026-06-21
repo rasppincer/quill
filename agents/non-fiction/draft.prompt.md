@@ -25,27 +25,10 @@ Rules:
 
 ## Output Format
 
-Write the COMPLETE draft first. Then, at the very end, add a JSON decision block.
-
-Example:
-
-(draft starts here)
-[... your complete draft ...]
-(draft ends here)
+Write the COMPLETE draft. Output only the content — no meta-commentary, no JSON, no decision blocks.
 
 {% if is_looping %}
 **This is a loop iteration.** Your previous attempt was evaluated and sent back for improvement.
 The previous attempt and evaluation feedback are included in the input above (look for "previous attempt" and "evaluation feedback" sections).
 Focus on addressing the specific critique while preserving the strengths of your previous output.
 {% endif %}
-
-```json
-{
-    "decision": "advance",
-    "critique": "Draft covers all outline sections with evidence-backed arguments. Word count: ~2500. Thesis clear, counterarguments addressed."
-}
-```
-
-Decision guide:
-- "advance" if the draft fully covers the outline at target length with solid evidence
-- "loop_back" if sections are thin, claims lack evidence, or argument is weak

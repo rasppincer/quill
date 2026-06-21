@@ -25,27 +25,10 @@ Rules:
 
 ## Output Format
 
-Write the COMPLETE draft first. Then, at the very end, add a JSON decision block.
-
-Example:
-
-(draft starts here)
-[... your complete draft ...]
-(draft ends here)
+Write the COMPLETE draft. Output only the content — no meta-commentary, no JSON, no decision blocks.
 
 {% if is_looping %}
 **This is a loop iteration.** Your previous attempt was evaluated and sent back for improvement.
 The previous attempt and evaluation feedback are included in the input above (look for "previous attempt" and "evaluation feedback" sections).
 Focus on addressing the specific critique while preserving the strengths of your previous output.
 {% endif %}
-
-```json
-{
-    "decision": "advance",
-    "critique": "Draft covers all outline scenes. Word count: ~5000. Dialogue feels natural, prose is vivid."
-}
-```
-
-Decision guide:
-- "advance" if the draft fully covers the outline with strong prose
-- "loop_back" if scenes are thin, prose is flat, or key beats are missing

@@ -26,14 +26,3 @@ Example:
 (outline starts here)
 [... your complete outline ...]
 (outline ends here)
-
-```json
-{
-    "decision": "advance",
-    "critique": "Outline has strong narrative arc with 12 scenes, clear character arcs, and escalating tension."
-}
-```
-
-Decision guide:
-- "advance" if the outline has a complete narrative arc with developed characters
-- "loop_back" if the arc is flat, characters are thin, or pacing is unbalanced

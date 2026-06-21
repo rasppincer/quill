@@ -79,6 +79,29 @@ class StageRunner:
             ctx.update(extra)
         return ctx
 
+    def _dump_debug_prompt(
+        self, piece: "Piece", stage: str, label: str,
+        system: str, user: str,
+    ):
+        """Write the actual prompt to a debug file when debug_prompts is on.
+
+        Files are written to the piece directory as:
+            {stage}.{label}-prompt.md  (e.g. draft.generate-prompt.md)
+        """
+        from .agent import load_model_config
+        cfg = load_model_config()
+        if not cfg.get("debug_prompts"):
+            return
+        debug_file = piece.stage_dir() / f"{stage}.{label}-prompt.md"
+        content = (
+            f"# Debug: {label} prompt for {stage}\n"
+            f"# Piece: {piece.id}\n\n"
+            f"## System\n{system}\n\n"
+            f"## User\n{user}\n"
+        )
+        debug_file.write_text(content, encoding="utf-8")
+        logger.info("Debug prompt dumped to %s", debug_file)
+
     def get_loop_count(self, piece: Piece, stage: str) -> int:
         """Get the current loop count for a stage."""
         meta_path = piece.stage_dir() / "meta.yaml"
@@ -313,6 +336,7 @@ class StageRunner:
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
+            self._dump_debug_prompt(piece, stage, "generate", gen_system, prompt)
             try:
                 generated = client.chat(gen_system, prompt)
             except ConnectionError as e:
@@ -626,6 +650,7 @@ class StageRunner:
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
+            self._dump_debug_prompt(piece, stage, "evaluate", eval_system, prompt)
         else:
             # Fallback to hardcoded if no template exists
             logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)

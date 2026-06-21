@@ -474,6 +474,43 @@ class TestBuildRenderContext:
 
 
 # ---------------------------------------------------------------------------
+# Debug prompt dump
+# ---------------------------------------------------------------------------
+
+
+class TestDebugPromptDump:
+    """Test the debug prompt file dump."""
+
+    def test_dump_creates_file(self, runner, sample_piece, monkeypatch):
+        """When debug_prompts is on, dump creates a file."""
+        from quill.piece import load_piece
+
+        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"debug_prompts": True})
+        piece = load_piece(sample_piece)
+
+        runner._dump_debug_prompt(piece, "review", "generate", "system prompt", "user prompt")
+
+        debug_file = sample_piece / "review.generate-prompt.md"
+        assert debug_file.exists()
+        content = debug_file.read_text()
+        assert "system prompt" in content
+        assert "user prompt" in content
+        assert "generate prompt for review" in content
+
+    def test_dump_no_file_when_disabled(self, runner, sample_piece, monkeypatch):
+        """When debug_prompts is off, no file is created."""
+        from quill.piece import load_piece
+
+        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"debug_prompts": False})
+        piece = load_piece(sample_piece)
+
+        runner._dump_debug_prompt(piece, "review", "generate", "system", "user")
+
+        debug_file = sample_piece / "review.generate-prompt.md"
+        assert not debug_file.exists()
+
+
+# ---------------------------------------------------------------------------
 # Two-file output (content stages)
 # ---------------------------------------------------------------------------
 

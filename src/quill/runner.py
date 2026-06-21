@@ -100,17 +100,26 @@ class StageRunner:
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
-            # Build the evaluate prompt too (no LLM call)
-            eval_prompt = (
-                f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-                f"## Stage: {stage}\n\n"
-                f"## Input given to the {stage} agent:\n{input_content[:2000]}\n\n"
-                f"## Generated {stage} output:\n<not yet generated>\n\n"
-                f"## Task\n"
-                f"Evaluate the generated {stage} output. Is it high quality? "
-                f"Does it meet the requirements?\n\n"
-                f"Be strict but fair. Only loop_back if there are real, fixable problems."
-            )
+            # Build the evaluate prompt from template (no LLM call)
+            eval_template = self._load_evaluate_template(self.agent_set)
+            if eval_template:
+                eval_prompt = eval_template.replace("{{GENERATED}}", "<not yet generated — will be filled at runtime>")
+                eval_prompt = eval_prompt.replace("{{INPUT_CONTENT}}", input_content)
+                eval_prompt = eval_prompt.replace("{{STAGE}}", stage)
+                eval_prompt = eval_prompt.replace("{{TITLE}}", piece.title)
+                eval_prompt = eval_prompt.replace("{{GENRE}}", piece.genre)
+                eval_prompt = eval_prompt.replace("{{TYPE}}", piece.type)
+                eval_prompt = eval_prompt.replace("{{LANGUAGE}}", piece.language)
+            else:
+                eval_prompt = (
+                    f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
+                    f"## Stage: {stage}\n\n"
+                    f"## Input given to the {stage} agent:\n{input_content}\n\n"
+                    f"## Generated {stage} output:\n<not yet generated>\n\n"
+                    f"## Task\n"
+                    f"Evaluate the generated {stage} output.\n\n"
+                    f"Be strict but fair. Only loop_back if there are real, fixable problems."
+                )
             eval_system = (
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
@@ -282,7 +291,8 @@ class StageRunner:
 
             # Second call: evaluate the generated content
             decision = self._evaluate_output(
-                client, stage, piece, generated, pipeline, input_content
+                client, stage, piece, generated, pipeline, input_content,
+                agent_set=self.agent_set,
             )
             decision.body = generated
             decision.output = generated
@@ -560,32 +570,64 @@ class StageRunner:
     def _evaluate_output(
         self, client: "LLMClient", stage: str, piece: "Piece",
         generated: str, pipeline, input_content: str,
+        agent_set: str = "default",
     ) -> AgentDecision:
-        """Second call: evaluate generated content and return a JSON decision."""
-        eval_prompt = (
-            f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-            f"## Stage: {stage}\n\n"
-            f"## Input given to the {stage} agent:\n{input_content[:2000]}\n\n"
-            f"## Generated {stage} output:\n{generated[:4000]}\n\n"
-            f"## Task\n"
-            f"Evaluate the generated {stage} output. Is it high quality? "
-            f"Does it meet the requirements? Respond with ONLY a JSON block:\n\n"
-            f'{{"decision": "advance", "critique": "brief feedback"}}\n'
-            f'or\n'
-            f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
-            f"Be strict but fair. Only loop_back if there are real, fixable problems."
-        )
-        eval_system = (
-            f"You are a quality evaluator. Respond with ONLY a JSON block "
-            f"containing 'decision' (advance or loop_back) and 'critique'."
-        )
+        """Second call: evaluate generated content and return a JSON decision.
+
+        Loads the evaluate.prompt.md template from the agent set, fills in
+        {{GENERATED}}, {{INPUT_CONTENT}}, and standard variables, then calls
+        the LLM with the full (untruncated) content.
+        """
+        # Load evaluate prompt template
+        eval_template = self._load_evaluate_template(agent_set)
+
+        if eval_template:
+            prompt = eval_template.replace("{{GENERATED}}", generated)
+            prompt = prompt.replace("{{INPUT_CONTENT}}", input_content)
+            prompt = prompt.replace("{{STAGE}}", stage)
+            prompt = prompt.replace("{{TITLE}}", piece.title)
+            prompt = prompt.replace("{{GENRE}}", piece.genre)
+            prompt = prompt.replace("{{TYPE}}", piece.type)
+            prompt = prompt.replace("{{LANGUAGE}}", piece.language)
+            eval_system = (
+                f"You are a quality evaluator. Respond with ONLY a JSON block "
+                f"containing 'decision' (advance or loop_back) and 'critique'."
+            )
+        else:
+            # Fallback to hardcoded if no template exists
+            logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
+            prompt = (
+                f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
+                f"## Stage: {stage}\n\n"
+                f"## Input given to the {stage} agent:\n{input_content}\n\n"
+                f"## Generated {stage} output:\n{generated}\n\n"
+                f"## Task\n"
+                f"Evaluate the generated {stage} output. Is it high quality? "
+                f"Does it meet the requirements? Respond with ONLY a JSON block:\n\n"
+                f'{{"decision": "advance", "critique": "brief feedback"}}\n'
+                f'or\n'
+                f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
+                f"Be strict but fair. Only loop_back if there are real, fixable problems."
+            )
+            eval_system = (
+                f"You are a quality evaluator. Respond with ONLY a JSON block "
+                f"containing 'decision' (advance or loop_back) and 'critique'."
+            )
+
         try:
-            eval_response = client.chat(eval_system, eval_prompt)
+            eval_response = client.chat(eval_system, prompt)
         except ConnectionError:
-            # If evaluation fails, default to advance (trust the generation)
             return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
 
         return parse_agent_response(eval_response)
+
+    def _load_evaluate_template(self, agent_set: str) -> str | None:
+        """Load evaluate.prompt.md from an agent set directory."""
+        from .agent import AGENTS_DIR
+        template_file = AGENTS_DIR / agent_set / "evaluate.prompt.md"
+        if template_file.exists():
+            return template_file.read_text(encoding="utf-8")
+        return None
 
     def _advance_meta(self, piece: Piece, next_stage: str):
         """Update meta.yaml to point to the next stage."""

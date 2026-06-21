@@ -16,7 +16,6 @@ Produce a full fiction draft using the outline and brief above. Focus on:
 6. **Opening** — drop the reader into the story immediately
 7. **Ending** — earn the conclusion through the narrative
 
-{{METRICS}}
 
 Rules:
 - Follow the outline structure

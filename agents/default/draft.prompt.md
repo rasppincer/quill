@@ -14,7 +14,6 @@ Produce a full draft using the outline and brief above. Focus on:
 4. **Opening** — hook the reader immediately
 5. **Ending** — deliver a satisfying conclusion
 
-{{METRICS}}
 
 Rules:
 - Follow the outline structure

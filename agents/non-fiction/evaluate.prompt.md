@@ -10,6 +10,8 @@ You are a quality evaluator for a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 ## Generated {{STAGE}} output:
 {{GENERATED}}
 
+{{METRICS}}
+
 ## Task
 Evaluate the generated {{STAGE}} output against the input. Is it high quality? Does it meet the requirements?
 

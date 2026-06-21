@@ -15,7 +15,6 @@ Produce a full draft using the outline and brief above. Focus on:
 5. **Opening** — hook with a compelling insight, question, or counterintuitive fact
 6. **Ending** — land the thesis with a strong concluding takeaway
 
-{{METRICS}}
 
 Rules:
 - Follow the outline structure

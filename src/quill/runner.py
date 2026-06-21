@@ -641,8 +641,30 @@ class StageRunner:
         eval_template = self._load_evaluate_template(agent_set)
 
         if eval_template:
+            # Compute metrics on the generated text for the evaluator
+            from .metrics import compute_and_save, load_metrics
+            stage_file = piece.stage_dir() / f"{stage}.md"
+            metrics_str = ""
+            if stage_file.exists():
+                try:
+                    compute_and_save(stage_file)
+                    mfile = piece.stage_dir() / f"{stage}.metrics.yaml"
+                    m = load_metrics(mfile) if mfile.exists() else None
+                    if m:
+                        metrics_str = "\n".join([
+                            f"--- {stage} metrics ---",
+                            f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}",
+                            f"  Flesch-Kincaid Grade: {m.get('flesch_kincaid', 'n/a')}",
+                            f"  Word count: {m.get('word_count', 'n/a')}",
+                            f"  Avg sentence length: {m.get('avg_sentence_length', 'n/a')} words",
+                            f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%",
+                            f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%",
+                        ])
+                except Exception:
+                    pass
+
             eval_ctx = self._build_render_context(
-                piece, stage, input_content, "", 0,
+                piece, stage, input_content, metrics_str, 0,
                 extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
             )
             prompt = _render_prompt(eval_template, eval_ctx)

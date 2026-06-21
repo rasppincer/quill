@@ -186,6 +186,51 @@ def pieces_get(piece_id: str):
     return jsonify(d)
 
 
+@app.route("/api/pieces/<piece_id>/rename", methods=["POST"])
+def pieces_rename(piece_id: str):
+    """Rename a piece (update title in meta.yaml and all stage files).
+
+    JSON body:
+        title (required): New title.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_title = data.get("title", "").strip()
+    if not new_title:
+        return jsonify({"error": "Missing 'title'"}), 400
+
+    old_title = piece.title
+    piece.title = new_title
+
+    # Update meta.yaml
+    piece.save()
+
+    # Update title in ALL stage files' frontmatter
+    stage_dir = piece.stage_dir()
+    for md_file in stage_dir.glob("*.md"):
+        try:
+            text = md_file.read_text(encoding="utf-8")
+            m = _FRONTMATTER_RE.match(text)
+            if m:
+                meta = yaml.safe_load(m.group(1)) or {}
+                if meta.get("title") == old_title:
+                    meta["title"] = new_title
+                    new_fm = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                    new_text = f"---\n{new_fm}---\n{text[m.end():]}"
+                    md_file.write_text(new_text, encoding="utf-8")
+        except Exception:
+            pass
+
+    return jsonify({
+        "id": piece.id,
+        "old_title": old_title,
+        "new_title": new_title,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Stage management
 # ---------------------------------------------------------------------------

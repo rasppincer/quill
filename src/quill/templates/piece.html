@@ -7,7 +7,12 @@
     <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);text-decoration:none;font-size:13px">← Back to pieces</a>
 </div>
 
-<h2>{{ piece.title }}</h2>
+<h2 id="piece-title" onclick="startRename()" style="cursor:pointer" title="Click to rename">{{ piece.title }}</h2>
+<div id="rename-bar" style="display:none;margin-bottom:12px">
+    <input id="rename-input" type="text" value="{{ piece.title }}" onkeydown="if(event.key==='Enter')saveRename()" style="min-width:300px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:16px">
+    <button class="btn success" onclick="saveRename()" style="margin-left:8px">Save</button>
+    <button class="btn" onclick="cancelRename()" style="margin-left:4px">Cancel</button>
+</div>
 
 <!-- Pipeline visualization -->
 <div class="pipeline">
@@ -190,6 +195,42 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 let stageContentLoaded = false;
+
+function startRename() {
+    document.getElementById('piece-title').style.display = 'none';
+    document.getElementById('rename-bar').style.display = 'flex';
+    const input = document.getElementById('rename-input');
+    input.focus();
+    input.select();
+}
+
+function cancelRename() {
+    document.getElementById('rename-bar').style.display = 'none';
+    document.getElementById('piece-title').style.display = '';
+}
+
+async function saveRename() {
+    const newTitle = document.getElementById('rename-input').value.trim();
+    if (!newTitle) return;
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/rename`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title: newTitle})
+        });
+        const data = await resp.json();
+        if (data.error) {
+            toast(data.error, 'error');
+        } else {
+            document.getElementById('piece-title').textContent = newTitle;
+            cancelRename();
+            toast('Renamed to: ' + newTitle, 'success');
+        }
+    } catch (e) {
+        toast('Rename failed', 'error');
+    }
+}
 
 async function toggleStageContent() {
     const div = document.getElementById('stage-content');

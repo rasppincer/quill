@@ -1,35 +1,26 @@
-# Default Agent Set
-# Generic prompts that work for any genre or type.
-# For specialized agents, use fiction/ or non-fiction/ flavors.
-
-description: "Generic agents — works for any genre or type"
+description: Generic agents — works for any genre or type
 temperature: 0.7
 max_tokens: 4096
 max_loops: 3
-trigger: "on_advance"
-
+trigger: on_advance
 stages:
   review:
-    name: "Review Agent"
-    description: "Structural critique — organization, completeness, clarity"
+    name: Review Agent
+    description: Structural critique — organization, completeness, clarity
     temperature: 0.5
-
   revise:
-    name: "Revise Agent"
-    description: "Applies review feedback to produce revised text"
+    name: Revise Agent
+    description: Applies review feedback to produce revised text
     temperature: 0.6
-
   humanize:
-    name: "Humanize Agent"
-    description: "Strips AI patterns, scores human-ness"
+    name: Humanize Agent
+    description: Strips AI patterns, scores human-ness
     temperature: 0.4
-
   validate:
-    name: "Validate Agent"
-    description: "Checks factual accuracy, consistency, logic"
+    name: Validate Agent
+    description: Checks factual accuracy, consistency, logic
     temperature: 0.2
-
   polish:
-    name: "Polish Agent"
-    description: "Final line-level edits, readability, rhythm"
+    name: Polish Agent
+    description: Final line-level edits, readability, rhythm
     temperature: 0.3

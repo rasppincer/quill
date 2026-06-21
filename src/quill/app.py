@@ -518,6 +518,32 @@ def agents_detail(agent_set: str):
     return jsonify({"config": cfg, "prompts": prompts})
 
 
+@app.route("/api/agents/<agent_set>", methods=["PUT"])
+def agents_update_config(agent_set: str):
+    """Update flavor config (max_loops, trigger, description, temperature).
+
+    JSON body: any subset of max_loops, trigger, description, temperature, max_tokens.
+    """
+    from .agent import AGENTS_DIR
+
+    config_file = AGENTS_DIR / agent_set / "config.yaml"
+    if not config_file.exists():
+        return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    cfg = yaml.safe_load(config_file.read_text()) or {}
+
+    for key in ("max_loops", "trigger", "description", "temperature", "max_tokens"):
+        if key in data:
+            cfg[key] = data[key]
+
+    config_file.write_text(
+        yaml.dump(cfg, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    return jsonify({"status": "updated", "config": cfg})
+
+
 @app.route("/api/agents/<agent_set>/<stage>/prompt", methods=["GET"])
 def agents_get_prompt(agent_set: str, stage: str):
     """Get prompt template for a stage."""

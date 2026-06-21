@@ -63,8 +63,24 @@
     <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
 
     <div class="meta-grid" style="margin-bottom:20px">
-        <div class="meta-item"><div class="label">Max Loops</div><div class="value" id="set-max-loops"></div></div>
-        <div class="meta-item"><div class="label">Trigger</div><div class="value" id="set-trigger"></div></div>
+        <div class="meta-item">
+            <div class="label">Max Loops</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input id="set-max-loops" type="number" min="1" max="20" value="3" style="width:60px;padding:4px 8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:14px;text-align:center">
+                <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
+            </div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Trigger</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <select id="set-trigger" style="padding:4px 8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+                    <option value="on_advance">on_advance</option>
+                    <option value="auto">auto</option>
+                </select>
+                <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
+            </div>
+        </div>
+        <span id="flavor-config-status" style="color:var(--text-muted);font-size:13px"></span>
     </div>
 
     <h3 style="margin-top:24px">Prompt Templates</h3>
@@ -151,8 +167,9 @@
             var deleteBtn = document.getElementById('delete-flavor-btn');
             if (deleteBtn) deleteBtn.style.display = (name === 'default') ? 'none' : '';
             document.getElementById('delete-flavor-status').textContent = '';
-            document.getElementById('set-max-loops').textContent = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
-            document.getElementById('set-trigger').textContent = (data.config && data.config.trigger) || 'on_advance';
+            document.getElementById('set-max-loops').value = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
+            document.getElementById('set-trigger').value = (data.config && data.config.trigger) || 'on_advance';
+            document.getElementById('flavor-config-status').textContent = '';
 
             var list = document.getElementById('prompt-list');
             if (!data.prompts || data.prompts.length === 0) {
@@ -255,6 +272,28 @@
                 status.style.color = 'var(--accent-green)';
                 window.loadSets(); // Refresh the list
                 setTimeout(hideCreateFlavor, 1500);
+            }
+        });
+    };
+
+    window.saveFlavorConfig = function() {
+        if (!currentSet) return;
+        var maxLoops = parseInt(document.getElementById('set-max-loops').value) || 3;
+        var trigger = document.getElementById('set-trigger').value;
+        var status = document.getElementById('flavor-config-status');
+
+        fetchJson(BASE + '/' + currentSet, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({max_loops: maxLoops, trigger: trigger})
+        }).then(function(data) {
+            if (data.error) {
+                status.textContent = data.error;
+                status.style.color = 'var(--accent-red)';
+            } else {
+                status.textContent = 'Saved';
+                status.style.color = 'var(--accent-green)';
+                setTimeout(function() { status.textContent = ''; }, 2000);
             }
         });
     };

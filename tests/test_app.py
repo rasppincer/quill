@@ -256,6 +256,34 @@ class TestAgentAPI:
         resp = client.put("/api/agents/default/review/prompt", json={"content": ""})
         assert resp.status_code == 400
 
+    def test_prompt_endpoints_use_AGENTS_DIR(self, client, tmp_agents):
+        """Prompt PUT must write to the monkeypatched dir, not the real one.
+
+        Regression test: app.py previously hardcoded Path.parents[2]/agents
+        instead of using AGENTS_DIR, so tests clobbered production prompt files.
+        """
+        from quill.agent import AGENTS_DIR
+        real_agents = Path(__file__).resolve().parents[2] / "agents"
+        real_review = real_agents / "default" / "review.prompt.md"
+
+        # Read the real prompt before the test
+        real_before = real_review.read_text(encoding="utf-8") if real_review.exists() else ""
+
+        # PUT via API — should write to tmp_agents, not real_agents
+        resp = client.put("/api/agents/default/review/prompt", json={
+            "content": "# Test Isolation Check\n\nThis should not appear in the real file.",
+        })
+        assert resp.status_code == 200
+
+        # Real file must be unchanged
+        real_after = real_review.read_text(encoding="utf-8") if real_review.exists() else ""
+        assert real_before == real_after, "Prompt PUT wrote to real agents dir instead of tmp!"
+
+        # Tmp file must have the new content
+        tmp_review = tmp_agents / "default" / "review.prompt.md"
+        assert tmp_review.exists()
+        assert "Test Isolation Check" in tmp_review.read_text(encoding="utf-8")
+
 
 # ---------------------------------------------------------------------------
 # Run agent

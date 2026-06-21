@@ -52,7 +52,8 @@
 
 ## Phase 6 — Quality
 
-- [x] Backend unit tests (109 tests, pytest, 0.67s)
+- [x] Backend unit tests (139 tests, pytest, 0.7s)
+- [ ] Dashboard E2E tests (Playwright) — piece detail, agent selector, flavor management, stage content viewer
 
 ## Backlog
 

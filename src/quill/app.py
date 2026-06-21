@@ -410,10 +410,9 @@ def models_list():
 def agents_for_stage(stage: str):
     """List agent sets that have a prompt for the given stage."""
     from .agent import list_agent_sets
-    from pathlib import Path
-    agents_dir = Path(__file__).resolve().parents[2] / "agents"
+    from .agent import AGENTS_DIR
     result = []
-    for d in sorted(agents_dir.iterdir()):
+    for d in sorted(AGENTS_DIR.iterdir()):
         if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
             prompt_file = d / f"{stage}.prompt.md"
             if prompt_file.exists():
@@ -428,10 +427,8 @@ def agents_for_stage(stage: str):
 @app.route("/api/agents/<agent_set>")
 def agents_detail(agent_set: str):
     """Get agent set config and prompts sorted by pipeline order."""
-    from .agent import load_agent_config, list_agent_prompts
-    from pathlib import Path
-    agents_dir = Path(__file__).resolve().parents[2] / "agents"
-    config_file = agents_dir / agent_set / "config.yaml"
+    from .agent import load_agent_config, list_agent_prompts, AGENTS_DIR
+    config_file = AGENTS_DIR / agent_set / "config.yaml"
     if not config_file.exists():
         return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
 
@@ -450,8 +447,8 @@ def agents_detail(agent_set: str):
 @app.route("/api/agents/<agent_set>/<stage>/prompt", methods=["GET"])
 def agents_get_prompt(agent_set: str, stage: str):
     """Get prompt template for a stage."""
-    from pathlib import Path
-    prompt_file = Path(__file__).resolve().parents[2] / "agents" / agent_set / f"{stage}.prompt.md"
+    from .agent import AGENTS_DIR
+    prompt_file = AGENTS_DIR / agent_set / f"{stage}.prompt.md"
     if not prompt_file.exists():
         return jsonify({"error": f"Prompt not found"}), 404
     return jsonify({"stage": stage, "content": prompt_file.read_text(encoding="utf-8")})
@@ -460,13 +457,13 @@ def agents_get_prompt(agent_set: str, stage: str):
 @app.route("/api/agents/<agent_set>/<stage>/prompt", methods=["PUT"])
 def agents_update_prompt(agent_set: str, stage: str):
     """Update prompt template for a stage."""
-    from pathlib import Path
+    from .agent import AGENTS_DIR
     data = request.get_json(silent=True) or {}
     content = data.get("content", "").strip()
     if not content:
         return jsonify({"error": "Missing 'content'"}), 400
 
-    prompt_file = Path(__file__).resolve().parents[2] / "agents" / agent_set / f"{stage}.prompt.md"
+    prompt_file = AGENTS_DIR / agent_set / f"{stage}.prompt.md"
     if not prompt_file.parent.exists():
         return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
 

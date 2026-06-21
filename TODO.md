@@ -61,6 +61,16 @@
 - [x] Backend unit tests (139 tests, pytest, 0.7s)
 - [ ] Dashboard E2E tests (Playwright) — piece detail, agent selector, flavor management, stage content viewer
 
+## Phase 7 — Architecture (from DESIGN_REPORT.md)
+
+- [ ] **Move stage inputs to pipeline config** — `_STAGE_INPUTS` in runner.py is hardcoded Python. Move to `workflows/default.yaml` so custom stages (Research, SEO) get proper input routing without code changes.
+- [ ] **Jinja2 for prompt templates** — Replace `.replace()` interpolation with `jinja2.Template`. Enables conditional sections (`{% if loop_count > 0 %}...{% endif %}`) for loop context injection.
+- [ ] **Async execution worker** — Flask blocks on LLM calls (seconds/minutes). Use thread pool or background job runner. Expose SSE at `/api/pieces/<id>/logs` for live dashboard output.
+- [ ] **Loop guardrails** — Semantic drift detection across loop iterations. Flag if vocabulary diversity or word counts oscillate wildly between loops instead of blind advance.
+- [ ] **Structured JSON outputs** — Use OpenAI structured outputs / Anthropic tool use / Pydantic schemas for decision routing instead of regex parsing. Eliminates false positives from heuristic fallback.
+- [ ] **Content stripping safety** — `_strip_json_block()` in agent.py uses regex that could delete JSON code examples in API tutorials or programming blog posts. Needs context-aware stripping.
+- [ ] **Prompt git-history in dashboard** — Show git diffs of `.prompt.md` files in the Agents tab so writers can rollback templates without leaving the UI.
+
 ## Backlog
 
 - [x] Google Docs connector — push finished pieces to Google Docs (API auth, formatting, link sharing)

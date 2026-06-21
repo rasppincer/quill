@@ -648,8 +648,7 @@ class StageRunner:
             if stage_file.exists():
                 try:
                     compute_and_save(stage_file)
-                    mfile = piece.stage_dir() / f"{stage}.metrics.yaml"
-                    m = load_metrics(mfile) if mfile.exists() else None
+                    m = load_metrics(stage_file)
                     if m:
                         metrics_str = "\n".join([
                             f"--- {stage} metrics ---",
@@ -660,8 +659,8 @@ class StageRunner:
                             f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%",
                             f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%",
                         ])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to compute metrics for evaluate prompt: %s", e)
 
             eval_ctx = self._build_render_context(
                 piece, stage, input_content, metrics_str, 0,

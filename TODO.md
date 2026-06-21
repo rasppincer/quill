@@ -33,9 +33,12 @@
 - [x] Agent API endpoints (list, config, prompt CRUD, run)
 - [x] Loop tracking in meta.yaml (loop_history)
 - [x] Response parser with JSON + heuristic fallback
-- [ ] Agent execution testing with real API key
+- [x] Agent swap per piece (agent_set in meta.yaml, dropdown on piece detail)
+- [x] Non-fiction agent set (separate prompts for blog/essay review, validate, humanize, polish)
+- [x] Global model config (agents/model.yaml) — decoupled from agent sets
+- [x] Model selector on Agents tab (fetches models from LLM server)
+- [x] Agent flavor selector on piece detail (dropdown, filtered by stage)
 - [ ] Trigger mode: full_auto (chain on completion)
-- [ ] Agent swap per piece (select agent set in meta.yaml)
 
 ## Phase 5 — Polish
 
@@ -45,9 +48,15 @@
 - [ ] Bulk operations (run agent on all pieces at stage X)
 - [ ] Export formats (PDF, EPUB, HTML)
 
+## Phase 6 — Quality
+
+- [x] Backend unit tests (109 tests, pytest, 0.67s)
+- [ ] Frontend behavioral tests (belongs in one-ring project)
+
 ## Backlog
 
 - [x] Google Docs connector — push finished pieces to Google Docs (API auth, formatting, link sharing)
+- [x] .env for secrets — api_key via QUILL_API_KEY env var, not in yaml
 - [ ] Voice-to-brief pipeline (mic → Whisper → brief.md)
 - [ ] Multi-author workflow (shared pieces, roles)
 - [ ] Template library (brief templates per genre)

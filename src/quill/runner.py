@@ -25,7 +25,7 @@ import yaml
 
 from .agent import AgentConfig, AgentDecision, load_agent_config, parse_agent_response
 from .llm import LLMClient
-from .piece import Piece, load_piece, _FRONTMATTER_RE
+from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class StageRunner:
         cfg = load_model_config()
         if not cfg.get("debug_prompts"):
             return
-        debug_file = piece.stage_dir() / f"{stage}.{label}-prompt.md"
+        debug_file = piece.stage_dir() / _stage_filename(stage, f".{label}-prompt.md")
         content = (
             f"# Debug: {label} prompt for {stage}\n"
             f"# Piece: {piece.id}\n\n"
@@ -505,12 +505,14 @@ class StageRunner:
 
         # Stage-specific inputs
         if stage in self._STAGE_INPUTS:
-            for fname in self._STAGE_INPUTS[stage]:
-                fpath = stage_dir / fname
+            for input_stage in self._STAGE_INPUTS[stage]:
+                # Strip .md suffix to get the stage name
+                input_stage_name = input_stage.replace(".md", "")
+                fpath = stage_dir / _stage_filename(input_stage_name)
                 if fpath.exists():
                     text = fpath.read_text(encoding="utf-8")
                     m = _FRONTMATTER_RE.match(text)
-                    inputs.append(f"=== {fname} ===\n{text[m.end():] if m else text}")
+                    inputs.append(f"=== {fpath.name} ===\n{text[m.end():] if m else text}")
         else:
             # Default: read previous stage's output
             stage_order = pipeline.stage_order
@@ -518,26 +520,26 @@ class StageRunner:
                 idx = stage_order.index(stage)
                 if idx > 0:
                     prev_stage = stage_order[idx - 1]
-                    prev_file = stage_dir / f"{prev_stage}.md"
+                    prev_file = stage_dir / _stage_filename(prev_stage)
                     if prev_file.exists():
                         text = prev_file.read_text(encoding="utf-8")
                         m = _FRONTMATTER_RE.match(text)
-                        inputs.append(f"=== {prev_stage}.md ===\n{text[m.end():] if m else text}")
+                        inputs.append(f"=== {_stage_filename(prev_stage)} ===\n{text[m.end():] if m else text}")
 
         # If looping, also read the current stage's existing content and decision
         if loop_count > 0:
-            current_file = stage_dir / f"{stage}.md"
+            current_file = stage_dir / _stage_filename(stage)
             if current_file.exists():
                 text = current_file.read_text(encoding="utf-8")
                 m = _FRONTMATTER_RE.match(text)
                 body = text[m.end():] if m else text
                 if body.strip():
-                    inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
+                    inputs.append(f"=== {_stage_filename(stage)} (previous attempt) ===\n{body}")
 
-            decision_file = stage_dir / f"{stage}.decision.md"
+            decision_file = stage_dir / _stage_filename(stage, ".decision.md")
             if decision_file.exists():
                 text = decision_file.read_text(encoding="utf-8")
-                inputs.append(f"=== {stage}.decision.md (evaluation feedback) ===\n{text}")
+                inputs.append(f"=== {_stage_filename(stage, '.decision.md')} (evaluation feedback) ===\n{text}")
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 
@@ -549,19 +551,19 @@ class StageRunner:
 
     def _write_output(self, piece: Piece, stage: str, content: str):
         """Write agent output to a stage file."""
-        output_file = piece.stage_dir() / f"{stage}.md"
+        output_file = piece.stage_dir() / _stage_filename(stage)
         output_file.write_text(content, encoding="utf-8")
         logger.info("Wrote output to %s", output_file)
 
     def _write_critique(self, piece: Piece, stage: str, critique: str):
         """Write critique to a stage file (for loop context)."""
-        output_file = piece.stage_dir() / f"{stage}.md"
+        output_file = piece.stage_dir() / _stage_filename(stage)
         output_file.write_text(critique, encoding="utf-8")
         logger.info("Wrote critique to %s", output_file)
 
     def _write_decision(self, piece: Piece, stage: str, decision: "AgentDecision"):
         """Write evaluation decision to a separate .decision.md file."""
-        decision_file = piece.stage_dir() / f"{stage}.decision.md"
+        decision_file = piece.stage_dir() / _stage_filename(stage, ".decision.md")
         content = (
             f"## Decision: {decision.decision}\n\n"
             f"## Critique\n{decision.critique}\n"
@@ -572,7 +574,7 @@ class StageRunner:
     def _compute_metrics(self, piece: Piece, stage: str):
         """Compute and save text metrics for a stage's output file."""
         from .metrics import compute_and_save
-        stage_file = piece.stage_dir() / f"{stage}.md"
+        stage_file = piece.stage_dir() / _stage_filename(stage)
         if stage_file.exists():
             try:
                 metrics = compute_and_save(stage_file)
@@ -604,8 +606,8 @@ class StageRunner:
                 input_stages = []
 
         for input_stage in input_stages:
-            mfile = stage_dir / f"{input_stage}.metrics.yaml"
-            m = load_metrics(mfile) if mfile.exists() else None
+            stage_file = stage_dir / _stage_filename(input_stage)
+            m = load_metrics(stage_file) if stage_file.exists() else None
             if m:
                 lines.append(f"--- {input_stage} metrics ---")
                 lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
@@ -616,9 +618,9 @@ class StageRunner:
                 lines.append(f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%")
 
         # Also include current stage metrics if looping
-        current_file = stage_dir / f"{stage}.metrics.yaml"
-        if current_file.exists():
-            m = load_metrics(current_file)
+        current_stage_file = stage_dir / _stage_filename(stage)
+        if current_stage_file.exists():
+            m = load_metrics(current_stage_file)
             if m:
                 lines.append(f"--- {stage} metrics (current) ---")
                 lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
@@ -644,7 +646,7 @@ class StageRunner:
         if eval_template:
             # Compute metrics on the generated text for the evaluator
             from .metrics import compute_and_save, load_metrics
-            stage_file = piece.stage_dir() / f"{stage}.md"
+            stage_file = piece.stage_dir() / _stage_filename(stage)
             metrics_str = ""
             if stage_file.exists():
                 try:

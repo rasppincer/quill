@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 
 import yaml
+from quill.piece import _stage_filename
 
 
 @pytest.fixture
@@ -139,13 +140,13 @@ def sample_piece(tmp_output):
     )
 
     # Brief
-    (piece_dir / "brief.md").write_text(
+    (piece_dir / _stage_filename("brief")).write_text(
         "---\nid: test-piece\ntitle: Test Piece\ncurrent_stage: brief\n---\n\nThis is the brief.",
         encoding="utf-8",
     )
 
     # Draft
-    (piece_dir / "draft.md").write_text(
+    (piece_dir / _stage_filename("draft")).write_text(
         "---\nid: test-piece\ntitle: Test Piece\ncurrent_stage: draft\n---\n\nThis is the draft content. It needs work.",
         encoding="utf-8",
     )
@@ -157,5 +158,5 @@ def sample_piece(tmp_output):
 def sample_piece_with_review(sample_piece):
     """Sample piece that also has a review file."""
     review_content = "The draft needs a stronger opening and better pacing."
-    (sample_piece / "review.md").write_text(review_content, encoding="utf-8")
+    (sample_piece / _stage_filename("review")).write_text(review_content, encoding="utf-8")
     return sample_piece

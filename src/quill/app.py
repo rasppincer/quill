@@ -34,7 +34,7 @@ try:
 except ImportError:
     pass  # python-dotenv not installed — rely on env vars from systemd/shell
 from .pipeline import load_pipeline
-from .piece import Piece, get_piece, list_pieces, load_piece, _FRONTMATTER_RE
+from .piece import Piece, get_piece, list_pieces, load_piece, _FRONTMATTER_RE, _stage_filename
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ def pieces_import():
         if not stage_content:
             continue  # skip empty stages
 
-        stage_file = piece.stage_dir() / f"{stage_name}.md"
+        stage_file = piece.stage_dir() / _stage_filename(stage_name)
         if stage_file.exists() and stage_name == current_stage:
             continue  # already saved by piece.save()
 
@@ -277,7 +277,7 @@ def pieces_get(piece_id: str):
 
     # Include metrics for current stage
     from .metrics import maybe_recompute
-    stage_file = piece.stage_dir() / f"{piece.current_stage}.md"
+    stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
     d["metrics"] = maybe_recompute(stage_file)
 
     # Read body from stage file when piece.body is empty
@@ -389,7 +389,7 @@ def pieces_advance(piece_id: str):
     # Advance: update meta.yaml to point to next stage
     piece.current_stage = next_stage
     # Only clear body if the next stage file doesn't already exist
-    next_stage_file = piece.stage_dir() / f"{next_stage}.md"
+    next_stage_file = piece.stage_dir() / _stage_filename(next_stage)
     if not next_stage_file.exists():
         piece.body = ""
     else:
@@ -401,7 +401,7 @@ def pieces_advance(piece_id: str):
 
     # Compute metrics for the stage we just left (if it has content)
     from .metrics import maybe_recompute
-    old_stage_file = piece.stage_dir() / f"{old_stage}.md"
+    old_stage_file = piece.stage_dir() / _stage_filename(old_stage)
     if old_stage_file.exists():
         maybe_recompute(old_stage_file)
 
@@ -439,7 +439,7 @@ def pieces_reject(piece_id: str):
 
     # Load body from target stage file
     if not piece._is_legacy:
-        target_file = piece.stage_dir() / f"{target}.md"
+        target_file = piece.stage_dir() / _stage_filename(target)
         if target_file.exists():
             text = target_file.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)
@@ -482,7 +482,7 @@ def dashboard_piece(piece_id: str):
 
     # Include metrics for current stage
     from .metrics import maybe_recompute
-    stage_file = piece.stage_dir() / f"{piece.current_stage}.md"
+    stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
     metrics = maybe_recompute(stage_file)
 
     return render_template(
@@ -839,7 +839,7 @@ def pieces_export_google_docs(piece_id: str):
     stage = data.get("stage", piece.current_stage)
 
     # Load the stage content
-    stage_file = piece.stage_dir() / f"{stage}.md"
+    stage_file = piece.stage_dir() / _stage_filename(stage)
     if not stage_file.exists():
         return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
 
@@ -951,7 +951,7 @@ def pieces_audio_generate(piece_id: str):
     stage = data.get("stage", piece.current_stage)
 
     # Load the stage content
-    stage_file = piece.stage_dir() / f"{stage}.md"
+    stage_file = piece.stage_dir() / _stage_filename(stage)
     if not stage_file.exists():
         return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
 

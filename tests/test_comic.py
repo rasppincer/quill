@@ -10,7 +10,7 @@ from quill.comic import (
     _parse_comic_json, _pages_from_json, _render_panel_html, _render_comic_html,
     generate_comic, generate_comic_html, save_comic_html,
 )
-from quill.piece import load_piece
+from quill.piece import load_piece, _stage_filename
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ class TestGenerateComic:
         piece_dir.mkdir()
         (piece_dir / "meta.yaml").write_text("id: empty\ncurrent_stage: brief\n")
         # Proper frontmatter with genuinely empty body
-        (piece_dir / "brief.md").write_text("---\nid: empty\ntitle: Empty\ncurrent_stage: brief\n---\n\n")
+        (piece_dir / _stage_filename("brief")).write_text("---\nid: empty\ntitle: Empty\ncurrent_stage: brief\n---\n\n")
 
         piece = load_piece(piece_dir)
 

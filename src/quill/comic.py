@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 from .llm import LLMClient
-from .piece import Piece, _FRONTMATTER_RE
+from .piece import Piece, _FRONTMATTER_RE, _stage_filename
 
 logger = logging.getLogger(__name__)
 
@@ -542,7 +542,7 @@ def generate_comic(piece: Piece, stage: str | None = None,
     # Try the target stage, then fall back to any stage with content
     content = ""
     for try_stage in [target_stage, "done", "polish", "humanize", "revise", "draft"]:
-        stage_file = stage_dir / f"{try_stage}.md"
+        stage_file = stage_dir / _stage_filename(try_stage)
         if stage_file.exists():
             text = stage_file.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)

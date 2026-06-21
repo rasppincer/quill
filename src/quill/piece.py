@@ -33,6 +33,26 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output"
 # Matches YAML frontmatter between --- delimiters
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+# Stage → numeric prefix mapping for sorted file listing
+_STAGE_PREFIXES = {
+    "brief": "01", "outline": "02", "draft": "03",
+    "review": "04", "revise": "05", "humanize": "06",
+    "validate": "07", "polish": "08", "done": "09",
+}
+
+
+def _stage_filename(stage: str, suffix: str = ".md") -> str:
+    """Return the prefixed filename for a stage file.
+
+    Examples: _stage_filename("draft") → "03_draft.md"
+              _stage_filename("draft", ".decision.md") → "03_draft.decision.md"
+              _stage_filename("unknown") → "unknown.md"
+    """
+    prefix = _STAGE_PREFIXES.get(stage)
+    if prefix:
+        return f"{prefix}_{stage}{suffix}"
+    return f"{stage}{suffix}"
+
 
 @dataclass
 class Piece:
@@ -40,11 +60,7 @@ class Piece:
 
     # Stage classification
     CONTENT_STAGES = {"draft", "revise", "humanize", "polish", "done"}
-    STAGE_PREFIXES = {
-        "brief": "01", "outline": "02", "draft": "03",
-        "revise": "04", "humanize": "05", "polish": "06", "done": "07",
-    }
-    # review and validate are feedback stages — no prefix
+    STAGE_PREFIXES = _STAGE_PREFIXES  # delegate to module-level
 
     # Identity
     id: str = ""
@@ -114,7 +130,7 @@ class Piece:
     def stage_file(self, stage: str | None = None) -> Path:
         """Get the file path for a specific stage."""
         stage = stage or self.current_stage
-        return self.stage_dir() / f"{stage}.md"
+        return self.stage_dir() / _stage_filename(stage)
 
     def list_stages(self) -> list[dict]:
         """List all stage files that exist for this piece."""
@@ -123,14 +139,24 @@ class Piece:
             return []
         stages = []
         for f in sorted(d.glob("*.md")):
+            # Skip decision, metrics, and debug files
+            name = f.name
+            if ".decision." in name or ".metrics." in name:
+                continue
+            if ".generate-prompt." in name or ".evaluate-prompt." in name:
+                continue
             try:
                 text = f.read_text(encoding="utf-8")
                 m = _FRONTMATTER_RE.match(text)
                 if m:
                     meta = yaml.safe_load(m.group(1))
                     body = text[m.end():]
+                    # Strip numeric prefix from stem: "03_draft" → "draft"
+                    stem = f.stem
+                    if len(stem) > 2 and stem[0:2].isdigit() and stem[2] == "_":
+                        stem = stem[3:]
                     stages.append({
-                        "stage": f.stem,
+                        "stage": stem,
                         "path": str(f),
                         "body_length": len(body),
                         "updated": meta.get("updated", ""),
@@ -148,12 +174,7 @@ class Piece:
         """
         stages = self.list_stages()
         for entry in stages:
-            stage = entry["stage"]
-            prefix = self.STAGE_PREFIXES.get(stage)
-            if prefix:
-                entry["display_name"] = f"{prefix}_{stage}.md"
-            else:
-                entry["display_name"] = f"{stage}.md"
+            entry["display_name"] = _stage_filename(entry["stage"])
         return stages
 
     def save(self, output_dir: Path | None = None) -> Path:
@@ -178,7 +199,7 @@ class Piece:
         d.mkdir(parents=True, exist_ok=True)
 
         # Save stage file
-        path = d / f"{self.current_stage}.md"
+        path = d / _stage_filename(self.current_stage)
         path.write_text(self.to_markdown(), encoding="utf-8")
 
         # Save/update meta.yaml
@@ -249,7 +270,7 @@ def load_piece(path: Path) -> Piece:
         current_stage = meta.get("current_stage", "brief")
 
         # Load the current stage file
-        stage_file = path / f"{current_stage}.md"
+        stage_file = path / _stage_filename(current_stage)
         body = ""
         if stage_file.exists():
             text = stage_file.read_text(encoding="utf-8")

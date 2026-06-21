@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 import yaml
 
 from quill.runner import StageRunner, _render_prompt
+from quill.piece import _stage_filename
 from quill.agent import AgentDecision
 
 
@@ -66,7 +67,7 @@ class TestReadInputs:
         d.mkdir()
         meta = {"id": "hz-piece", "title": "T", "current_stage": "humanize"}
         (d / "meta.yaml").write_text(yaml.dump(meta))
-        (d / "revise.md").write_text("The revised text here.")
+        (d / _stage_filename("revise")).write_text("The revised text here.")
 
         piece = load_piece(d)
         inputs = runner._read_inputs(piece, "humanize", None)
@@ -100,7 +101,7 @@ class TestWriteOutput:
         piece = load_piece(sample_piece)
 
         runner._write_output(piece, "review", "This is the review feedback.")
-        review_file = sample_piece / "review.md"
+        review_file = sample_piece / _stage_filename("review")
         assert review_file.exists()
         assert "review feedback" in review_file.read_text()
 
@@ -210,7 +211,7 @@ class TestRunStage:
 
         assert result.decision == "advance"
         # The revise.md file should have the body text, not the JSON
-        revise_file = sample_piece_with_review / "revise.md"
+        revise_file = sample_piece_with_review / _stage_filename("revise")
         content = revise_file.read_text()
         assert "revised draft" in content
         assert "decision" not in content
@@ -272,7 +273,7 @@ class TestRunChain:
             "current_stage": "outline", "agent_set": "default",
         }
         (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
-        (piece_dir / "draft.md").write_text("The draft content for chain test.")
+        (piece_dir / _stage_filename("draft")).write_text("The draft content for chain test.")
 
         # Mock LLM for stages that have prompts (review, revise)
         mock_client = MagicMock()
@@ -365,7 +366,7 @@ class TestFeedbackOutputFormat:
         result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
 
         assert result.decision == "advance"
-        review_file = sample_piece / "review.md"
+        review_file = sample_piece / _stage_filename("review")
         content = review_file.read_text()
         # Should NOT contain JSON formatting
         assert "```" not in content
@@ -490,7 +491,7 @@ class TestDebugPromptDump:
 
         runner._dump_debug_prompt(piece, "review", "generate", "system prompt", "user prompt")
 
-        debug_file = sample_piece / "review.generate-prompt.md"
+        debug_file = sample_piece / _stage_filename("review", ".generate-prompt.md")
         assert debug_file.exists()
         content = debug_file.read_text()
         assert "system prompt" in content
@@ -506,7 +507,7 @@ class TestDebugPromptDump:
 
         runner._dump_debug_prompt(piece, "review", "generate", "system", "user")
 
-        debug_file = sample_piece / "review.generate-prompt.md"
+        debug_file = sample_piece / _stage_filename("review", ".generate-prompt.md")
         assert not debug_file.exists()
 
 
@@ -575,12 +576,12 @@ class TestTwoFileOutput:
         assert result.decision == "advance"
 
         # Stage file has generated text
-        revise_file = sample_piece_with_review / "revise.md"
+        revise_file = sample_piece_with_review / _stage_filename("revise")
         assert revise_file.exists()
         assert "revised draft" in revise_file.read_text()
 
         # Decision file has evaluation
-        decision_file = sample_piece_with_review / "revise.decision.md"
+        decision_file = sample_piece_with_review / _stage_filename("revise", ".decision.md")
         assert decision_file.exists()
         decision_content = decision_file.read_text()
         assert "Decision: advance" in decision_content
@@ -609,11 +610,11 @@ class TestTwoFileOutput:
         assert result.decision == "loop_back"
 
         # Stage file still has the generated text
-        revise_file = sample_piece_with_review / "revise.md"
+        revise_file = sample_piece_with_review / _stage_filename("revise")
         assert "First attempt" in revise_file.read_text()
 
         # Decision file has the critique
-        decision_file = sample_piece_with_review / "revise.decision.md"
+        decision_file = sample_piece_with_review / _stage_filename("revise", ".decision.md")
         assert "Needs more depth" in decision_file.read_text()
 
     @patch("quill.runner.LLMClient")
@@ -633,9 +634,9 @@ class TestTwoFileOutput:
             "created": "2026-01-01", "updated": "2026-01-01",
         }
         (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
-        (piece_dir / "draft.decision.md").write_text("## Decision: advance\n\n## Critique\nLooks good.\n")
+        (piece_dir / _stage_filename("draft", ".decision.md")).write_text("## Decision: advance\n\n## Critique\nLooks good.\n")
         # A brief.md with actual content so the fallback has something to find
-        (piece_dir / "brief.md").write_text("The brief content for the piece.")
+        (piece_dir / _stage_filename("brief")).write_text("The brief content for the piece.")
 
         flask_app.config["TESTING"] = True
         with flask_app.test_client() as client:
@@ -658,7 +659,7 @@ class TestTwoFileOutput:
         )
         runner._write_decision(piece, "draft", decision)
 
-        decision_file = sample_piece / "draft.decision.md"
+        decision_file = sample_piece / _stage_filename("draft", ".decision.md")
         assert decision_file.exists()
         content = decision_file.read_text()
         assert "Decision: loop_back" in content
@@ -673,9 +674,9 @@ class TestTwoFileOutput:
         d.mkdir()
         meta = {"id": "loop-piece", "title": "T", "current_stage": "draft"}
         (d / "meta.yaml").write_text(yaml.dump(meta))
-        (d / "brief.md").write_text("The brief.")
-        (d / "draft.md").write_text("Previous draft attempt here.")
-        (d / "draft.decision.md").write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
+        (d / _stage_filename("brief")).write_text("The brief.")
+        (d / _stage_filename("draft")).write_text("Previous draft attempt here.")
+        (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
         inputs = runner._read_inputs(piece, "draft", None, loop_count=1)
@@ -692,9 +693,9 @@ class TestTwoFileOutput:
         d.mkdir()
         meta = {"id": "first-run-piece", "title": "T", "current_stage": "draft"}
         (d / "meta.yaml").write_text(yaml.dump(meta))
-        (d / "brief.md").write_text("The brief.")
-        (d / "draft.md").write_text("Previous draft attempt here.")
-        (d / "draft.decision.md").write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
+        (d / _stage_filename("brief")).write_text("The brief.")
+        (d / _stage_filename("draft")).write_text("Previous draft attempt here.")
+        (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
         inputs = runner._read_inputs(piece, "draft", None, loop_count=0)

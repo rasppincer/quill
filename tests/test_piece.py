@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from quill.piece import Piece, load_piece, list_pieces, get_piece, _FRONTMATTER_RE
+from quill.piece import Piece, load_piece, list_pieces, _stage_filename, get_piece, _FRONTMATTER_RE
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ class TestLoadPiece:
         """Directory without meta.yaml should raise ValueError."""
         d = tmp_output / "no-meta"
         d.mkdir()
-        (d / "draft.md").write_text("content", encoding="utf-8")
+        (d / _stage_filename("draft")).write_text("content", encoding="utf-8")
         with pytest.raises(ValueError, match="No meta.yaml"):
             load_piece(d)
 
@@ -102,7 +102,7 @@ class TestSavePiece:
         path = piece.save(tmp_output)
 
         assert path.exists()
-        assert path.name == "brief.md"
+        assert path.name == _stage_filename("brief")
         assert (tmp_output / "new-piece" / "meta.yaml").exists()
 
     def test_save_meta_yaml_content(self, tmp_output):
@@ -139,8 +139,8 @@ class TestSavePiece:
         piece.save(tmp_output)
 
         # Both draft.md and review.md should exist
-        assert (sample_piece / "draft.md").exists()
-        assert (sample_piece / "review.md").exists()
+        assert (sample_piece / _stage_filename("draft")).exists()
+        assert (sample_piece / _stage_filename("review")).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ class TestDisplayStages:
         displays = piece.display_stages()
         for d in displays:
             if d["stage"] == "review":
-                assert d["display_name"] == "review.md"  # no prefix
+                assert d["display_name"] == _stage_filename("review")  # 04_review.md
 
 
 # ---------------------------------------------------------------------------

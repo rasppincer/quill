@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 import yaml
 
 from quill.app import app as flask_app
+from quill.piece import _stage_filename
 
 
 # ---------------------------------------------------------------------------
@@ -484,9 +485,9 @@ class TestImportAPI:
 
         # Verify multiple stage files exist on disk
         piece_dir = tmp_output / "seruil"
-        assert (piece_dir / "brief.md").exists()
-        assert (piece_dir / "outline.md").exists()
-        assert (piece_dir / "draft.md").exists()
+        assert (piece_dir / _stage_filename("brief")).exists()
+        assert (piece_dir / _stage_filename("outline")).exists()
+        assert (piece_dir / _stage_filename("draft")).exists()
         assert (piece_dir / "meta.yaml").exists()
 
     def test_import_minimal(self, client, tmp_output, monkeypatch):
@@ -513,9 +514,9 @@ class TestImportAPI:
 
         # Should have revise.md but no earlier stage files
         piece_dir = tmp_output / "body-only"
-        assert (piece_dir / "revise.md").exists()
-        assert not (piece_dir / "brief.md").exists()
-        assert not (piece_dir / "draft.md").exists()
+        assert (piece_dir / _stage_filename("revise")).exists()
+        assert not (piece_dir / _stage_filename("brief")).exists()
+        assert not (piece_dir / _stage_filename("draft")).exists()
 
     def test_import_missing_title(self, client):
         """Import without title returns 400."""
@@ -592,7 +593,7 @@ class TestAudioAPI:
             "language": "en", "created": "2026-01-01", "updated": "2026-01-01",
         }
         (piece_dir / "meta.yaml").write_text(yaml.dump(meta), encoding="utf-8")
-        (piece_dir / "draft.md").write_text(
+        (piece_dir / _stage_filename("draft")).write_text(
             "---\nid: empty-piece\n---\n\n   ", encoding="utf-8"
         )
 

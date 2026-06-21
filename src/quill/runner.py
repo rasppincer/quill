@@ -20,6 +20,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import jinja2
 import yaml
 
 from .agent import AgentConfig, AgentDecision, load_agent_config, parse_agent_response
@@ -29,11 +30,54 @@ from .piece import Piece, load_piece, _FRONTMATTER_RE
 logger = logging.getLogger(__name__)
 
 
+def _render_prompt(template: str, context: dict) -> str:
+    """Render a prompt template with Jinja2, falling back to .replace().
+
+    Jinja2 enables conditionals ({% if %}), loops, and filters.
+    Falls back to simple string replacement if the template contains
+    syntax that breaks Jinja2 (e.g., code examples with { }).
+    """
+    try:
+        t = jinja2.Environment(
+            undefined=jinja2.Undefined  # silently ignore undefined vars
+        ).from_string(template)
+        return t.render(**context)
+    except jinja2.TemplateSyntaxError:
+        # Fallback: manual .replace() for templates with non-Jinja2 braces
+        result = template
+        for key, value in context.items():
+            result = result.replace("{{" + key + "}}", str(value))
+        return result
+
+
 class StageRunner:
     """Executes a pipeline stage using an LLM agent."""
 
     def __init__(self, agent_set: str = "default"):
         self.agent_set = agent_set
+
+    def _build_render_context(
+        self, piece: "Piece", stage: str, input_content: str, metrics_context: str,
+        loop_count: int | None = None, extra: dict | None = None,
+    ) -> dict:
+        """Build the full template variable context for prompt rendering."""
+        if loop_count is None:
+            loop_count = self.get_loop_count(piece, stage)
+        ctx = {
+            "TITLE": piece.title,
+            "GENRE": piece.genre,
+            "TYPE": piece.type,
+            "LANGUAGE": piece.language,
+            "STAGE": stage,
+            "PIECE_ID": piece.id,
+            "CONTENT": input_content,
+            "METRICS": metrics_context,
+            "loop_count": loop_count,
+            "is_looping": loop_count > 0,
+        }
+        if extra:
+            ctx.update(extra)
+        return ctx
 
     def get_loop_count(self, piece: Piece, stage: str) -> int:
         """Get the current loop count for a stage."""
@@ -79,17 +123,10 @@ class StageRunner:
 
         loop_count = self.get_loop_count(piece, stage)
         input_content = self._read_inputs(piece, stage, pipeline)
-
-        prompt = agent_cfg.prompt_template.replace("{{CONTENT}}", input_content)
-        prompt = prompt.replace("{{STAGE}}", stage)
-        prompt = prompt.replace("{{PIECE_ID}}", piece_id)
-        prompt = prompt.replace("{{TITLE}}", piece.title)
-        prompt = prompt.replace("{{GENRE}}", piece.genre)
-        prompt = prompt.replace("{{TYPE}}", piece.type)
-        prompt = prompt.replace("{{LANGUAGE}}", piece.language)
-
         metrics_context = self._build_metrics_context(piece, stage, pipeline)
-        prompt = prompt.replace("{{METRICS}}", metrics_context)
+
+        ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
+        prompt = _render_prompt(agent_cfg.prompt_template, ctx)
 
         content_stages = {"outline", "draft", "revise", "humanize", "polish"}
         is_content_stage = stage in content_stages
@@ -103,13 +140,12 @@ class StageRunner:
             # Build the evaluate prompt from template (no LLM call)
             eval_template = self._load_evaluate_template(self.agent_set)
             if eval_template:
-                eval_prompt = eval_template.replace("{{GENERATED}}", "<not yet generated — will be filled at runtime>")
-                eval_prompt = eval_prompt.replace("{{INPUT_CONTENT}}", input_content)
-                eval_prompt = eval_prompt.replace("{{STAGE}}", stage)
-                eval_prompt = eval_prompt.replace("{{TITLE}}", piece.title)
-                eval_prompt = eval_prompt.replace("{{GENRE}}", piece.genre)
-                eval_prompt = eval_prompt.replace("{{TYPE}}", piece.type)
-                eval_prompt = eval_prompt.replace("{{LANGUAGE}}", piece.language)
+                eval_ctx = self._build_render_context(
+                    piece, stage, input_content, "", loop_count,
+                    extra={"GENERATED": "<not yet generated — will be filled at runtime>",
+                           "INPUT_CONTENT": input_content},
+                )
+                eval_prompt = _render_prompt(eval_template, eval_ctx)
             else:
                 eval_prompt = (
                     f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
@@ -155,6 +191,9 @@ class StageRunner:
                     "STAGE": stage,
                     "PIECE_ID": piece_id,
                     "METRICS": metrics_context,
+                    "loop_count": loop_count,
+                    "is_looping": loop_count > 0,
+                    "max_loops": agent_cfg.max_loops,
                 },
             }
         else:
@@ -188,6 +227,9 @@ class StageRunner:
                     "STAGE": stage,
                     "PIECE_ID": piece_id,
                     "METRICS": metrics_context,
+                    "loop_count": loop_count,
+                    "is_looping": loop_count > 0,
+                    "max_loops": agent_cfg.max_loops,
                 },
             }
 
@@ -247,18 +289,11 @@ class StageRunner:
         input_content = self._read_inputs(piece, stage, pipeline)
 
         # Fill prompt template
-        prompt = agent_cfg.prompt_template.replace("{{CONTENT}}", input_content)
-        prompt = prompt.replace("{{STAGE}}", stage)
-        prompt = prompt.replace("{{PIECE_ID}}", piece_id)
-        prompt = prompt.replace("{{TITLE}}", piece.title)
-        prompt = prompt.replace("{{GENRE}}", piece.genre)
-        prompt = prompt.replace("{{TYPE}}", piece.type)
-        prompt = prompt.replace("{{LANGUAGE}}", piece.language)
-
-        # Inject text metrics from input stages
         from .metrics import load_metrics
         metrics_context = self._build_metrics_context(piece, stage, pipeline)
-        prompt = prompt.replace("{{METRICS}}", metrics_context)
+        loop_count = self.get_loop_count(piece, stage)
+        ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
+        prompt = _render_prompt(agent_cfg.prompt_template, ctx)
 
         client = LLMClient(
             api_base=agent_cfg.api_base,
@@ -582,13 +617,11 @@ class StageRunner:
         eval_template = self._load_evaluate_template(agent_set)
 
         if eval_template:
-            prompt = eval_template.replace("{{GENERATED}}", generated)
-            prompt = prompt.replace("{{INPUT_CONTENT}}", input_content)
-            prompt = prompt.replace("{{STAGE}}", stage)
-            prompt = prompt.replace("{{TITLE}}", piece.title)
-            prompt = prompt.replace("{{GENRE}}", piece.genre)
-            prompt = prompt.replace("{{TYPE}}", piece.type)
-            prompt = prompt.replace("{{LANGUAGE}}", piece.language)
+            eval_ctx = self._build_render_context(
+                piece, stage, input_content, "", 0,
+                extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
+            )
+            prompt = _render_prompt(eval_template, eval_ctx)
             eval_system = (
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."

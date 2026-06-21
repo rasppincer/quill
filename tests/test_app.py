@@ -402,7 +402,7 @@ class TestDebugPrompt:
         assert resp.status_code == 404
 
     def test_debug_prompt_template_vars(self, client, sample_piece, tmp_output, monkeypatch):
-        """Debug shows all template variable values."""
+        """Debug shows all template variable values including loop state."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
         resp = client.get("/api/pieces/test-piece/prompt/review")
@@ -411,6 +411,9 @@ class TestDebugPrompt:
         assert tv["TITLE"] == "Test Piece"
         assert tv["GENRE"] == "fiction"
         assert tv["STAGE"] == "review"
+        assert tv["loop_count"] == 0
+        assert tv["is_looping"] is False
+        assert tv["max_loops"] == 3
 
 
 # ---------------------------------------------------------------------------

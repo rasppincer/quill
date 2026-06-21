@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import yaml
 
-from quill.runner import StageRunner
+from quill.runner import StageRunner, _render_prompt
 from quill.agent import AgentDecision
 
 
@@ -372,6 +372,105 @@ class TestFeedbackOutputFormat:
         assert '"decision"' not in content
         # Should contain the clean critique text
         assert "Good structure" in content
+
+
+# ---------------------------------------------------------------------------
+# Jinja2 prompt rendering
+# ---------------------------------------------------------------------------
+
+
+class TestRenderPrompt:
+    """Test the Jinja2 prompt renderer."""
+
+    def test_replaces_standard_vars(self):
+        """Basic {{VAR}} replacement works."""
+        template = "Title: {{TITLE}}, Genre: {{GENRE}}"
+        ctx = {"TITLE": "My Post", "GENRE": "fiction"}
+        result = _render_prompt(template, ctx)
+        assert result == "Title: My Post, Genre: fiction"
+
+    def test_jinja2_conditional_true(self):
+        """Jinja2 conditionals render when condition is true."""
+        template = "Write content.{% if is_looping %}\nPrevious attempt:\n{{CONTENT}}{% endif %}"
+        ctx = {"is_looping": True, "CONTENT": "Old draft here."}
+        result = _render_prompt(template, ctx)
+        assert "Previous attempt" in result
+        assert "Old draft" in result
+
+    def test_jinja2_conditional_false(self):
+        """Conditional block excluded when condition is false."""
+        template = "Write content.{% if is_looping %}\nPrevious:\n{{CONTENT}}{% endif %}"
+        ctx = {"is_looping": False, "CONTENT": "Old draft."}
+        result = _render_prompt(template, ctx)
+        assert "Previous" not in result
+        assert "Write content" in result
+
+    def test_fallback_on_invalid_jinja(self):
+        """Falls back to .replace() when template has invalid Jinja2."""
+        template = "Code: {x = 5} and title: {{TITLE}}"
+        ctx = {"TITLE": "Test"}
+        result = _render_prompt(template, ctx)
+        assert "Test" in result
+
+    def test_multiline_content_no_corruption(self):
+        """Content with markdown, code blocks, special chars renders cleanly."""
+        template = "## Input\n{{CONTENT}}\n## Stage: {{STAGE}}"
+        content = "# Heading\n\n```python\ndef foo():\n    return {1: 2}\n```\n\n*bold* **italic**"
+        ctx = {"CONTENT": content, "STAGE": "draft"}
+        result = _render_prompt(template, ctx)
+        assert "# Heading" in result
+        assert "def foo" in result
+        assert "Stage: draft" in result
+
+    def test_undefined_vars_silent(self):
+        """Undefined template vars are silently ignored."""
+        template = "Title: {{TITLE}}, Missing: {{MISSING_VAR}}"
+        ctx = {"TITLE": "Test"}
+        result = _render_prompt(template, ctx)
+        assert "Title: Test" in result
+
+
+class TestBuildRenderContext:
+    """Test _build_render_context()."""
+
+    def test_context_has_all_vars(self, runner, sample_piece, tmp_output, monkeypatch):
+        """Context dict has all standard vars plus loop state."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        ctx = runner._build_render_context(piece, "review", "test content", "metrics here")
+        assert ctx["TITLE"] == "Test Piece"
+        assert ctx["GENRE"] == "fiction"
+        assert ctx["TYPE"] == "story"
+        assert ctx["LANGUAGE"] == "en"
+        assert ctx["STAGE"] == "review"
+        assert ctx["CONTENT"] == "test content"
+        assert ctx["METRICS"] == "metrics here"
+        assert ctx["PIECE_ID"] == "test-piece"
+        assert ctx["loop_count"] == 0
+        assert ctx["is_looping"] is False
+
+    def test_context_looping(self, runner, sample_piece, tmp_output, monkeypatch):
+        """Context shows is_looping=True when loop_count > 0."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        runner.set_loop_count(piece, "review", 2)
+        ctx = runner._build_render_context(piece, "review", "content", "metrics")
+        assert ctx["loop_count"] == 2
+        assert ctx["is_looping"] is True
+
+    def test_context_extra_vars(self, runner, sample_piece, tmp_output, monkeypatch):
+        """Extra vars are merged into context."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        ctx = runner._build_render_context(
+            piece, "draft", "input", "metrics",
+            extra={"GENERATED": "some text", "INPUT_CONTENT": "full input"},
+        )
+        assert ctx["GENERATED"] == "some text"
+        assert ctx["INPUT_CONTENT"] == "full input"
 
 
 # ---------------------------------------------------------------------------

@@ -56,6 +56,25 @@ On **loop_back**, the next iteration receives both the previous generated text (
 
 This two-file design eliminates the risk of losing generated content on loop_back and prevents LLM-generated content from accidentally triggering decisions via instructional text.
 
+### Template Variables
+
+Prompt templates use Jinja2 syntax. Available variables:
+
+| Variable | Description |
+|----------|-------------|
+| `{{CONTENT}}` | Input content (previous stage output, loop context) |
+| `{{TITLE}}` | Piece title |
+| `{{GENRE}}` | fiction / non-fiction |
+| `{{TYPE}}` | blog / story / essay / editorial / analysis / tutorial |
+| `{{LANGUAGE}}` | en / bg / mixed |
+| `{{STAGE}}` | Current stage name |
+| `{{PIECE_ID}}` | Piece ID |
+| `{{METRICS}}` | Text metrics block (Flesch, word count, etc.) |
+| `{{loop_count}}` | Current loop iteration (0 on first run) |
+| `{{is_looping}}` | Boolean — true when loop_count > 0 |
+
+Conditional blocks: `{% if is_looping %}...{% endif %}` inject context only during loop iterations.
+
 The user is only involved at the publish/scrap decision. Everything else is autonomous.
 
 ### Agent Sets

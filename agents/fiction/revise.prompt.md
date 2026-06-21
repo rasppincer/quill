@@ -27,6 +27,12 @@ Example:
 [... your complete revised text ...]
 (revised text ends here)
 
+{% if is_looping %}
+**This is a loop iteration.** Your previous attempt was evaluated and sent back for improvement.
+The previous attempt and evaluation feedback are included in the input above (look for "previous attempt" and "evaluation feedback" sections).
+Focus on addressing the specific critique while preserving the strengths of your previous output.
+{% endif %}
+
 ```json
 {
     "decision": "advance",

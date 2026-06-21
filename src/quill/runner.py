@@ -16,7 +16,9 @@ Loop tracking is stored in meta.yaml under `loops`:
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +29,10 @@ from .llm import LLMClient
 from .piece import Piece, load_piece, _FRONTMATTER_RE
 
 logger = logging.getLogger(__name__)
+
+# UUID separator between content and JSON decision in LLM responses.
+# Chosen to be impossible to occur naturally in generated text.
+_DECISION_SEPARATOR = "======= dad40ab6-2d44-4c2c-af5d-8e8644f60b95 ======="
 
 
 class StageRunner:
@@ -94,102 +100,46 @@ class StageRunner:
         content_stages = {"outline", "draft", "revise", "humanize", "polish"}
         is_content_stage = stage in content_stages
 
-        if is_content_stage:
-            gen_system = (
-                f"You are a {stage} agent for a {piece.genre} {piece.type} "
-                f"in {piece.language}. Produce high-quality content. "
-                f"Do NOT include any JSON or decision blocks — just write the content."
-            )
-            # Build the evaluate prompt from template (no LLM call)
-            eval_template = self._load_evaluate_template(self.agent_set)
-            if eval_template:
-                eval_prompt = eval_template.replace("{{GENERATED}}", "<not yet generated — will be filled at runtime>")
-                eval_prompt = eval_prompt.replace("{{INPUT_CONTENT}}", input_content)
-                eval_prompt = eval_prompt.replace("{{STAGE}}", stage)
-                eval_prompt = eval_prompt.replace("{{TITLE}}", piece.title)
-                eval_prompt = eval_prompt.replace("{{GENRE}}", piece.genre)
-                eval_prompt = eval_prompt.replace("{{TYPE}}", piece.type)
-                eval_prompt = eval_prompt.replace("{{LANGUAGE}}", piece.language)
-            else:
-                eval_prompt = (
-                    f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-                    f"## Stage: {stage}\n\n"
-                    f"## Input given to the {stage} agent:\n{input_content}\n\n"
-                    f"## Generated {stage} output:\n<not yet generated>\n\n"
-                    f"## Task\n"
-                    f"Evaluate the generated {stage} output.\n\n"
-                    f"Be strict but fair. Only loop_back if there are real, fixable problems."
-                )
-            eval_system = (
-                f"You are a quality evaluator. Respond with ONLY a JSON block "
-                f"containing 'decision' (advance or loop_back) and 'critique'."
-            )
-            return {
-                "piece_id": piece_id,
-                "stage": stage,
-                "agent_set": self.agent_set,
-                "loop_count": loop_count,
-                "max_loops": agent_cfg.max_loops,
-                "is_content_stage": True,
-                "model": agent_cfg.model,
-                "api_base": agent_cfg.api_base,
-                "temperature": agent_cfg.temperature,
-                "max_tokens": agent_cfg.max_tokens,
-                "generate": {
-                    "system": gen_system,
-                    "user": prompt,
-                    "char_count": len(prompt),
-                },
-                "evaluate": {
-                    "system": eval_system,
-                    "user": eval_prompt,
-                    "char_count": len(eval_prompt),
-                    "note": "The 'Generated output' section above shows '<not yet generated>' — the real evaluate prompt includes the actual generated text from the generate call.",
-                },
-                "input_content_char_count": len(input_content),
-                "template_vars": {
-                    "TITLE": piece.title,
-                    "GENRE": piece.genre,
-                    "TYPE": piece.type,
-                    "LANGUAGE": piece.language,
-                    "STAGE": stage,
-                    "PIECE_ID": piece_id,
-                    "METRICS": metrics_context,
-                },
-            }
-        else:
-            eval_system = (
-                f"You are a {stage} agent for a {piece.genre} {piece.type} "
-                f"in {piece.language}. Be critical and precise. "
-                f"Respond with a JSON block containing 'decision' and 'critique'."
-            )
-            return {
-                "piece_id": piece_id,
-                "stage": stage,
-                "agent_set": self.agent_set,
-                "loop_count": loop_count,
-                "max_loops": agent_cfg.max_loops,
-                "is_content_stage": False,
-                "model": agent_cfg.model,
-                "api_base": agent_cfg.api_base,
-                "temperature": agent_cfg.temperature,
-                "max_tokens": agent_cfg.max_tokens,
-                "single_call": {
-                    "system": eval_system,
-                    "user": prompt,
-                    "char_count": len(prompt),
-                },
-                "input_content_char_count": len(input_content),
-                "template_vars": {
-                    "TITLE": piece.title,
-                    "GENRE": piece.genre,
-                    "TYPE": piece.type,
-                    "LANGUAGE": piece.language,
-                    "STAGE": stage,
-                    "PIECE_ID": piece_id,
-                    "METRICS": metrics_context,
-                },
-            }
+        system = (
+            f"You are a {stage} agent for a {piece.genre} {piece.type} "
+            f"in {piece.language}. Produce high-quality content.\n\n"
+            f"IMPORTANT: After your content, you MUST write this EXACT separator on its own line, "
+            f"then a JSON decision block:\n\n"
+            f"{_DECISION_SEPARATOR}\n"
+            f'{{"decision": "advance", "critique": "brief feedback"}}\n'
+            f'or\n'
+            f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n'
+        )
+
+        return {
+            "piece_id": piece_id,
+            "stage": stage,
+            "agent_set": self.agent_set,
+            "loop_count": loop_count,
+            "max_loops": agent_cfg.max_loops,
+            "is_content_stage": is_content_stage,
+            "model": agent_cfg.model,
+            "api_base": agent_cfg.api_base,
+            "temperature": agent_cfg.temperature,
+            "max_tokens": agent_cfg.max_tokens,
+            "single_call": {
+                "system": system,
+                "user": prompt,
+                "char_count": len(prompt),
+                "system_char_count": len(system),
+            },
+            "separator": _DECISION_SEPARATOR,
+            "input_content_char_count": len(input_content),
+            "template_vars": {
+                "TITLE": piece.title,
+                "GENRE": piece.genre,
+                "TYPE": piece.type,
+                "LANGUAGE": piece.language,
+                "STAGE": stage,
+                "PIECE_ID": piece_id,
+                "METRICS": metrics_context,
+            },
+        }
 
     def run_stage(self, piece_id: str, stage: str, output_dir: Path | None = None) -> AgentDecision:
         """Execute a pipeline stage.
@@ -271,50 +221,32 @@ class StageRunner:
         content_stages = {"outline", "draft", "revise", "humanize", "polish"}
         is_content_stage = stage in content_stages
 
-        if is_content_stage:
-            # Two-call approach: generate first, then evaluate
-            gen_system = (
-                f"You are a {stage} agent for a {piece.genre} {piece.type} "
-                f"in {piece.language}. Produce high-quality content. "
-                f"Do NOT include any JSON or decision blocks — just write the content."
+        # Single-call approach: LLM writes content + separator + JSON decision
+        system = (
+            f"You are a {stage} agent for a {piece.genre} {piece.type} "
+            f"in {piece.language}. Produce high-quality content.\n\n"
+            f"IMPORTANT: After your content, you MUST write this EXACT separator on its own line, "
+            f"then a JSON decision block:\n\n"
+            f"{_DECISION_SEPARATOR}\n"
+            f'{{"decision": "advance", "critique": "brief feedback"}}\n'
+            f'or\n'
+            f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n'
+        )
+        try:
+            response = client.chat(system, prompt)
+        except ConnectionError as e:
+            return AgentDecision(
+                decision="error", critique="", output="",
+                error=str(e), stage=stage,
             )
-            try:
-                generated = client.chat(gen_system, prompt)
-            except ConnectionError as e:
-                return AgentDecision(
-                    decision="error", critique="", output="",
-                    error=str(e), stage=stage,
-                )
 
-            # Persist generated content immediately (survives loop_back)
-            self._write_output(piece, stage, generated)
+        # Split on separator: body before, decision after
+        decision = self._parse_with_separator(response)
+        decision.output = response
 
-            # Second call: evaluate the generated content
-            decision = self._evaluate_output(
-                client, stage, piece, generated, pipeline, input_content,
-                agent_set=self.agent_set,
-            )
-            decision.body = generated
-            decision.output = generated
-
-            # Persist evaluation result to separate file
-            self._write_decision(piece, stage, decision)
-        else:
-            # Feedback stages: single call with JSON decision expected
-            eval_system = (
-                f"You are a {stage} agent for a {piece.genre} {piece.type} "
-                f"in {piece.language}. Be critical and precise. "
-                f"Respond with a JSON block containing 'decision' and 'critique'."
-            )
-            try:
-                response = client.chat(eval_system, prompt)
-            except ConnectionError as e:
-                return AgentDecision(
-                    decision="error", critique="", output="",
-                    error=str(e), stage=stage,
-                )
-            decision = parse_agent_response(response)
-            decision.output = response
+        # Persist content and decision to separate files
+        self._write_output(piece, stage, decision.body)
+        self._write_decision(piece, stage, decision)
 
         decision.loop_count = loop_count
         decision.stage = stage
@@ -322,22 +254,12 @@ class StageRunner:
         # Execute decision
         if decision.decision == "loop_back":
             self.set_loop_count(piece, stage, loop_count + 1)
-            # For feedback stages, write critique to decision file
-            if not is_content_stage:
-                self._write_decision(piece, stage, decision)
-            # Content stages already wrote both output and decision above
             logger.info("Stage '%s' loop_back (loop %d/%d)",
                        stage, loop_count + 1, agent_cfg.max_loops)
         elif decision.decision == "advance":
-            # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
-            # Content stages: output already written above, just clean up decision file
-            # Feedback stages: write critique as the stage output
-            if not is_content_stage:
-                self._write_output(piece, stage, self._format_feedback(decision.critique))
-            # Compute text metrics for content stages
-            if is_content_stage:
-                self._compute_metrics(piece, stage)
+            # Compute text metrics
+            self._compute_metrics(piece, stage)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
                 self._advance_meta(piece, stage_def.next)
@@ -567,67 +489,62 @@ class StageRunner:
 
         return "\n".join(lines) if lines else "(no metrics available)"
 
-    def _evaluate_output(
-        self, client: "LLMClient", stage: str, piece: "Piece",
-        generated: str, pipeline, input_content: str,
-        agent_set: str = "default",
-    ) -> AgentDecision:
-        """Second call: evaluate generated content and return a JSON decision.
+    def _parse_with_separator(self, response: str) -> "AgentDecision":
+        """Parse LLM response that uses the UUID separator between content and decision.
 
-        Loads the evaluate.prompt.md template from the agent set, fills in
-        {{GENERATED}}, {{INPUT_CONTENT}}, and standard variables, then calls
-        the LLM with the full (untruncated) content.
+        Splits on _DECISION_SEPARATOR. Everything before is the body/content,
+        everything after is parsed as JSON decision. Falls back to the old
+        parse_agent_response if separator not found.
         """
-        # Load evaluate prompt template
-        eval_template = self._load_evaluate_template(agent_set)
+        from .agent import _strip_json_block
 
-        if eval_template:
-            prompt = eval_template.replace("{{GENERATED}}", generated)
-            prompt = prompt.replace("{{INPUT_CONTENT}}", input_content)
-            prompt = prompt.replace("{{STAGE}}", stage)
-            prompt = prompt.replace("{{TITLE}}", piece.title)
-            prompt = prompt.replace("{{GENRE}}", piece.genre)
-            prompt = prompt.replace("{{TYPE}}", piece.type)
-            prompt = prompt.replace("{{LANGUAGE}}", piece.language)
-            eval_system = (
-                f"You are a quality evaluator. Respond with ONLY a JSON block "
-                f"containing 'decision' (advance or loop_back) and 'critique'."
+        if _DECISION_SEPARATOR in response:
+            parts = response.split(_DECISION_SEPARATOR, 1)
+            body = parts[0].strip()
+            decision_part = parts[1].strip()
+
+            # Parse the JSON from the decision part
+            decision = "advance"
+            critique = ""
+
+            # Try code block JSON
+            json_match = re.search(r'```json\s*(.*?)\s*```', decision_part, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(1))
+                    decision = data.get("decision", "advance")
+                    critique = data.get("critique", "")
+                except json.JSONDecodeError:
+                    pass
+            else:
+                # Try bare JSON
+                json_match = re.search(r'\{[^{}]*"decision"\s*:\s*"[^"]*"[^{}]*\}', decision_part)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group(0))
+                        decision = data.get("decision", "advance")
+                        critique = data.get("critique", "")
+                    except json.JSONDecodeError:
+                        pass
+                else:
+                    # Heuristic on the decision part only
+                    lower = decision_part.lower()
+                    if re.search(r'loop[_\s]back', lower):
+                        decision = "loop_back"
+                        critique = decision_part
+
+            return AgentDecision(
+                decision=decision,
+                critique=critique,
+                output=response,
+                body=body,
             )
-        else:
-            # Fallback to hardcoded if no template exists
-            logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
-            prompt = (
-                f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-                f"## Stage: {stage}\n\n"
-                f"## Input given to the {stage} agent:\n{input_content}\n\n"
-                f"## Generated {stage} output:\n{generated}\n\n"
-                f"## Task\n"
-                f"Evaluate the generated {stage} output. Is it high quality? "
-                f"Does it meet the requirements? Respond with ONLY a JSON block:\n\n"
-                f'{{"decision": "advance", "critique": "brief feedback"}}\n'
-                f'or\n'
-                f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
-                f"Be strict but fair. Only loop_back if there are real, fixable problems."
-            )
-            eval_system = (
-                f"You are a quality evaluator. Respond with ONLY a JSON block "
-                f"containing 'decision' (advance or loop_back) and 'critique'."
-            )
 
-        try:
-            eval_response = client.chat(eval_system, prompt)
-        except ConnectionError:
-            return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
-
-        return parse_agent_response(eval_response)
-
-    def _load_evaluate_template(self, agent_set: str) -> str | None:
-        """Load evaluate.prompt.md from an agent set directory."""
-        from .agent import AGENTS_DIR
-        template_file = AGENTS_DIR / agent_set / "evaluate.prompt.md"
-        if template_file.exists():
-            return template_file.read_text(encoding="utf-8")
-        return None
+        # Fallback: no separator found, use old parser
+        logger.warning("Separator not found in response, falling back to heuristic parser")
+        decision = parse_agent_response(response)
+        decision.body = _strip_json_block(response)
+        return decision
 
     def _advance_meta(self, piece: Piece, next_stage: str):
         """Update meta.yaml to point to the next stage."""

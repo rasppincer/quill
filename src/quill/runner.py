@@ -118,6 +118,11 @@ class StageRunner:
         prompt = prompt.replace("{{GENRE}}", piece.genre)
         prompt = prompt.replace("{{LANGUAGE}}", piece.language)
 
+        # Inject text metrics from input stages
+        from .metrics import load_metrics
+        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        prompt = prompt.replace("{{METRICS}}", metrics_context)
+
         # Call LLM
         system_prompt = (
             f"You are a {stage} agent for a {piece.genre} {piece.type} "
@@ -166,6 +171,9 @@ class StageRunner:
                 self._write_output(piece, stage, decision.body)
             else:
                 self._write_output(piece, stage, decision.critique)
+            # Compute text metrics for content stages
+            if stage in content_stages:
+                self._compute_metrics(piece, stage)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
                 self._advance_meta(piece, stage_def.next)
@@ -285,6 +293,64 @@ class StageRunner:
         output_file = piece.stage_dir() / f"{stage}.md"
         output_file.write_text(critique, encoding="utf-8")
         logger.info("Wrote critique to %s", output_file)
+
+    def _compute_metrics(self, piece: Piece, stage: str):
+        """Compute and save text metrics for a stage's output file."""
+        from .metrics import compute_and_save
+        stage_file = piece.stage_dir() / f"{stage}.md"
+        if stage_file.exists():
+            try:
+                metrics = compute_and_save(stage_file)
+                logger.info("Metrics for %s/%s: flesch=%.1f, words=%d",
+                           piece.id, stage, metrics["flesch_ease"], metrics["word_count"])
+            except Exception as e:
+                logger.warning("Failed to compute metrics for %s/%s: %s",
+                              piece.id, stage, e)
+
+    def _build_metrics_context(self, piece: Piece, stage: str, pipeline) -> str:
+        """Build a metrics context string for the agent prompt.
+
+        Loads metrics from the input stages and formats them as a readable block.
+        """
+        from .metrics import load_metrics
+
+        stage_dir = piece.stage_dir()
+        lines = []
+
+        # Get input stage names
+        if stage in self._STAGE_INPUTS:
+            input_stages = [f.replace(".md", "") for f in self._STAGE_INPUTS[stage]]
+        else:
+            stage_order = pipeline.stage_order
+            if stage in stage_order:
+                idx = stage_order.index(stage)
+                input_stages = [stage_order[idx - 1]] if idx > 0 else []
+            else:
+                input_stages = []
+
+        for input_stage in input_stages:
+            mfile = stage_dir / f"{input_stage}.metrics.yaml"
+            m = load_metrics(mfile) if mfile.exists() else None
+            if m:
+                lines.append(f"--- {input_stage} metrics ---")
+                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
+                lines.append(f"  Flesch-Kincaid Grade: {m.get('flesch_kincaid', 'n/a')}")
+                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
+                lines.append(f"  Avg sentence length: {m.get('avg_sentence_length', 'n/a')} words")
+                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
+                lines.append(f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%")
+
+        # Also include current stage metrics if looping
+        current_file = stage_dir / f"{stage}.metrics.yaml"
+        if current_file.exists():
+            m = load_metrics(current_file)
+            if m:
+                lines.append(f"--- {stage} metrics (current) ---")
+                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
+                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
+                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
+
+        return "\n".join(lines) if lines else "(no metrics available)"
 
     def _advance_meta(self, piece: Piece, next_stage: str):
         """Update meta.yaml to point to the next stage."""

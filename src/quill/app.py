@@ -176,6 +176,12 @@ def pieces_get(piece_id: str):
 
     d = piece.to_dict()
     d["progress"] = pipeline.progress(piece.current_stage)
+
+    # Include metrics for current stage
+    from .metrics import maybe_recompute
+    stage_file = piece.stage_dir() / f"{piece.current_stage}.md"
+    d["metrics"] = maybe_recompute(stage_file)
+
     return jsonify(d)
 
 
@@ -217,6 +223,12 @@ def pieces_advance(piece_id: str):
         m = _FRONTMATTER_RE.match(text)
         piece.body = text[m.end():] if m else text
     piece.save()
+
+    # Compute metrics for the stage we just left (if it has content)
+    from .metrics import maybe_recompute
+    old_stage_file = piece.stage_dir() / f"{old_stage}.md"
+    if old_stage_file.exists():
+        maybe_recompute(old_stage_file)
 
     return jsonify({
         "id": piece.id,
@@ -292,12 +304,19 @@ def dashboard_piece(piece_id: str):
 
     stages_list = list(pipeline.stages.values())
     progress = pipeline.progress(piece.current_stage)
+
+    # Include metrics for current stage
+    from .metrics import maybe_recompute
+    stage_file = piece.stage_dir() / f"{piece.current_stage}.md"
+    metrics = maybe_recompute(stage_file)
+
     return render_template(
         "piece.html",
         piece=piece.to_dict(),
         progress=progress,
         pipeline=stages_list,
         pipeline_order=pipeline.stage_order,
+        metrics=metrics,
     )
 
 

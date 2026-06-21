@@ -99,6 +99,41 @@
     </ul>
 </div>
 {% endif %}
+
+{% if metrics %}
+<div class="section">
+    <h3>Text Metrics <span style="color:var(--text-muted);font-size:12px;font-weight:normal">— {{ piece.current_stage }}</span></h3>
+    <div class="meta-grid">
+        <div class="meta-item">
+            <div class="label">Flesch Ease</div>
+            <div class="value {% if metrics.flesch_ease >= 60 %}green{% elif metrics.flesch_ease >= 40 %}yellow{% else %}red{% endif %}">{{ metrics.flesch_ease }}</div>
+            <div style="font-size:11px;color:var(--text-muted)">0=hard, 100=easy</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Grade Level</div>
+            <div class="value">{{ metrics.flesch_kincaid }}</div>
+            <div style="font-size:11px;color:var(--text-muted)">US school grade</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Words</div>
+            <div class="value blue">{{ metrics.word_count }}</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Avg Sentence</div>
+            <div class="value">{{ metrics.avg_sentence_length }} words</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Vocabulary</div>
+            <div class="value">{{ (metrics.type_token_ratio * 100)|round(1) }}%</div>
+            <div style="font-size:11px;color:var(--text-muted)">type-token ratio</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Passive Voice</div>
+            <div class="value {% if metrics.passive_voice_pct <= 10 %}green{% elif metrics.passive_voice_pct <= 20 %}yellow{% else %}red{% endif %}">{{ metrics.passive_voice_pct }}%</div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

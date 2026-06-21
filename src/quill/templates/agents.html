@@ -69,6 +69,10 @@
 
     <h3 style="margin-top:24px">Prompt Templates</h3>
     <div id="prompt-list"></div>
+    <div id="flavor-actions" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn danger" id="delete-flavor-btn" onclick="deleteFlavor()" style="font-size:12px">🗑 Delete this flavor</button>
+        <span id="delete-flavor-status" style="margin-left:12px;color:var(--text-muted);font-size:13px"></span>
+    </div>
 </div>
 
 <div id="prompt-editor" style="display:none">
@@ -142,6 +146,11 @@
             document.getElementById('agent-detail').style.display = 'block';
             document.getElementById('prompt-editor').style.display = 'none';
             document.getElementById('set-desc').textContent = (data.config && data.config.description) || '';
+
+            // Hide delete button for default flavor
+            var deleteBtn = document.getElementById('delete-flavor-btn');
+            if (deleteBtn) deleteBtn.style.display = (name === 'default') ? 'none' : '';
+            document.getElementById('delete-flavor-status').textContent = '';
             document.getElementById('set-max-loops').textContent = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
             document.getElementById('set-trigger').textContent = (data.config && data.config.trigger) || 'on_advance';
 
@@ -248,6 +257,30 @@
                 setTimeout(hideCreateFlavor, 1500);
             }
         });
+    };
+
+    window.deleteFlavor = function() {
+        if (!currentSet || currentSet === 'default') return;
+        if (!confirm('Delete flavor "' + currentSet + '"? This cannot be undone.')) return;
+
+        var status = document.getElementById('delete-flavor-status');
+        status.textContent = 'Deleting...';
+        status.style.color = 'var(--text-muted)';
+
+        fetch(BASE + '/' + currentSet, {method: 'DELETE'})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    status.textContent = data.error;
+                    status.style.color = 'var(--accent-red)';
+                } else {
+                    status.textContent = 'Deleted: ' + data.name;
+                    status.style.color = 'var(--accent-green)';
+                    window.loadSets(); // Refresh
+                    // Switch to default
+                    setTimeout(function() { window.showSet('default'); }, 500);
+                }
+            });
     };
 
     // Global model config

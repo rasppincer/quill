@@ -411,6 +411,26 @@ def agents_create():
     }), 201
 
 
+@app.route("/api/agents/<flavor_name>", methods=["DELETE"])
+def agents_delete(flavor_name: str):
+    """Delete a flavor (agent set).
+
+    Cannot delete 'default' — it's the base flavor.
+    """
+    from .agent import AGENTS_DIR
+    import shutil
+
+    if flavor_name == "default":
+        return jsonify({"error": "Cannot delete the 'default' flavor"}), 403
+
+    target_dir = AGENTS_DIR / flavor_name
+    if not target_dir.exists():
+        return jsonify({"error": f"Flavor '{flavor_name}' not found"}), 404
+
+    shutil.rmtree(target_dir)
+    return jsonify({"status": "deleted", "name": flavor_name})
+
+
 @app.route("/api/model", methods=["GET"])
 def model_get():
     """Get global model configuration."""

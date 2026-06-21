@@ -176,6 +176,7 @@ def pieces_get(piece_id: str):
 
     d = piece.to_dict()
     d["progress"] = pipeline.progress(piece.current_stage)
+    d["body"] = piece.body
 
     # Include metrics for current stage
     from .metrics import maybe_recompute

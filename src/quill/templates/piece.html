@@ -74,6 +74,15 @@
     <div id="agent-critique" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
 </div>
 
+<!-- Stage content viewer -->
+<div class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Stage Content — {{ piece.current_stage|title }}</h3>
+        <button class="btn" id="toggle-content-btn" onclick="toggleStageContent()">Show</button>
+    </div>
+    <div id="stage-content" style="display:none;margin-top:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;max-height:600px;overflow-y:auto;white-space:pre-wrap;font-family:monospace"></div>
+</div>
+
 <!-- Metadata -->
 <div class="section">
     <h3>Brief / Metadata</h3>
@@ -168,6 +177,32 @@ document.addEventListener('DOMContentLoaded', async function() {
         select.innerHTML = '<option value="default">default</option>';
     }
 });
+
+let stageContentLoaded = false;
+
+async function toggleStageContent() {
+    const div = document.getElementById('stage-content');
+    const btn = document.getElementById('toggle-content-btn');
+
+    if (div.style.display === 'none') {
+        if (!stageContentLoaded) {
+            btn.textContent = 'Loading...';
+            try {
+                const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
+                const data = await resp.json();
+                div.textContent = data.body || '(empty)';
+                stageContentLoaded = true;
+            } catch (e) {
+                div.textContent = 'Error loading content';
+            }
+        }
+        div.style.display = 'block';
+        btn.textContent = 'Hide';
+    } else {
+        div.style.display = 'none';
+        btn.textContent = 'Show';
+    }
+}
 
 async function advance() {
     const result = await api(`/api/pieces/${PIECE_ID}/advance`, { method: 'POST' });

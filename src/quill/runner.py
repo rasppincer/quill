@@ -145,7 +145,7 @@ class StageRunner:
             return {"error": f"No agent config for stage '{stage}' in set '{self.agent_set}'"}
 
         loop_count = self.get_loop_count(piece, stage)
-        input_content = self._read_inputs(piece, stage, pipeline)
+        input_content = self._read_inputs(piece, stage, pipeline, loop_count)
         metrics_context = self._build_metrics_context(piece, stage, pipeline)
 
         ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
@@ -309,7 +309,7 @@ class StageRunner:
             )
 
         # Read input files
-        input_content = self._read_inputs(piece, stage, pipeline)
+        input_content = self._read_inputs(piece, stage, pipeline, loop_count)
 
         # Fill prompt template
         from .metrics import load_metrics
@@ -494,7 +494,7 @@ class StageRunner:
         "polish": ["humanize.md", "validate.md"],   # needs humanized text + validation feedback
     }
 
-    def _read_inputs(self, piece: Piece, stage: str, pipeline) -> str:
+    def _read_inputs(self, piece: Piece, stage: str, pipeline, loop_count: int = 0) -> str:
         """Read input files for a stage.
 
         Uses stage-specific input mapping when defined,
@@ -525,18 +525,19 @@ class StageRunner:
                         inputs.append(f"=== {prev_stage}.md ===\n{text[m.end():] if m else text}")
 
         # If looping, also read the current stage's existing content and decision
-        current_file = stage_dir / f"{stage}.md"
-        if current_file.exists():
-            text = current_file.read_text(encoding="utf-8")
-            m = _FRONTMATTER_RE.match(text)
-            body = text[m.end():] if m else text
-            if body.strip():
-                inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
+        if loop_count > 0:
+            current_file = stage_dir / f"{stage}.md"
+            if current_file.exists():
+                text = current_file.read_text(encoding="utf-8")
+                m = _FRONTMATTER_RE.match(text)
+                body = text[m.end():] if m else text
+                if body.strip():
+                    inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
 
-        decision_file = stage_dir / f"{stage}.decision.md"
-        if decision_file.exists():
-            text = decision_file.read_text(encoding="utf-8")
-            inputs.append(f"=== {stage}.decision.md (evaluation feedback) ===\n{text}")
+            decision_file = stage_dir / f"{stage}.decision.md"
+            if decision_file.exists():
+                text = decision_file.read_text(encoding="utf-8")
+                inputs.append(f"=== {stage}.decision.md (evaluation feedback) ===\n{text}")
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 

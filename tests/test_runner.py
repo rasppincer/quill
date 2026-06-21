@@ -81,7 +81,7 @@ class TestReadInputs:
 
         # brief has no explicit mapping and is the first stage.
         # Runner also reads the current stage file as "previous attempt" if it exists.
-        inputs = runner._read_inputs(piece, "brief", pipeline)
+        inputs = runner._read_inputs(piece, "brief", pipeline, loop_count=1)
         # sample_piece has brief.md, so it gets picked up as "previous attempt"
         assert "brief" in inputs.lower()
 
@@ -678,8 +678,27 @@ class TestTwoFileOutput:
         (d / "draft.decision.md").write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "draft", None)
+        inputs = runner._read_inputs(piece, "draft", None, loop_count=1)
 
         assert "Previous draft attempt" in inputs
         assert "Needs more evidence" in inputs
         assert "evaluation feedback" in inputs
+
+    def test_read_inputs_excludes_decision_on_first_run(self, runner, tmp_output):
+        """First run (loop_count=0) does NOT include previous attempt or decision."""
+        from quill.piece import load_piece, Piece
+
+        d = tmp_output / "first-run-piece"
+        d.mkdir()
+        meta = {"id": "first-run-piece", "title": "T", "current_stage": "draft"}
+        (d / "meta.yaml").write_text(yaml.dump(meta))
+        (d / "brief.md").write_text("The brief.")
+        (d / "draft.md").write_text("Previous draft attempt here.")
+        (d / "draft.decision.md").write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
+
+        piece = load_piece(d)
+        inputs = runner._read_inputs(piece, "draft", None, loop_count=0)
+
+        assert "Previous draft attempt" not in inputs
+        assert "evaluation feedback" not in inputs
+        assert "brief" in inputs.lower()

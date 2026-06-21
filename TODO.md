@@ -43,6 +43,12 @@
 - [ ] Trigger mode: run_chain on "Run Agent" — one click runs all remaining stages (review→done). User writes brief→outline→draft manually, then agent pipeline handles the rest.
 - [ ] Agent run history (per-piece run log in meta.yaml, toggle via config)
 - [ ] Agent set management via API (create/delete sets) — low priority
+- [x] **Chain run error UX** — Chain now skips stages without agent prompts and continues to the next stage. Errors only if ALL remaining stages lack prompts.
+- [x] **Word count preservation in agent prompts** — Added "expand rather than condense" instructions to revise/humanize prompts in both default and fiction agent sets.
+- [x] **Outline/draft agent prompts** — Created outline.prompt.md and draft.prompt.md for both default and fiction agent sets, updated config.yaml files, added to runner content_stages + _STAGE_INPUTS.
+- [x] **Review agent output format** — Added _format_feedback() method that strips JSON code fences, writes clean markdown to review.md.
+- [x] **Reading level regression** — Added Flesch-Kincaid grade 8-10 target instruction to humanize prompts in both agent sets.
+- [x] **body_length=0 in piece detail API** — Fixed: falls back to latest stage file with content when current stage file is missing. Regression test added.
 - [x] Text metrics — per-stage, stored as `{stage}.metrics.yaml` alongside each stage file
   - Metrics: Flesch Reading Ease, Flesch-Kincaid Grade, word count, avg sentence length, type-token ratio, passive voice %
   - Computed mechanically (no LLM), injected into agent prompts so agents can react to readability regressions

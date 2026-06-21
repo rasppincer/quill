@@ -4,6 +4,14 @@ max_tokens: 4096
 max_loops: 3
 trigger: on_advance
 stages:
+  outline:
+    name: Outline Agent
+    description: Generates structured outline from brief
+    temperature: 0.5
+  draft:
+    name: Draft Agent
+    description: Produces full draft from outline and brief
+    temperature: 0.7
   review:
     name: Review Agent
     description: Structural critique — organization, completeness, clarity

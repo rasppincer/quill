@@ -214,12 +214,16 @@ def parse_agent_response(response: str) -> AgentDecision:
         except json.JSONDecodeError:
             pass
 
-    # Heuristic: look for decision keywords
+    # Heuristic: look for decision keywords (be conservative — avoid matching
+    # instructional text like "use loop_back if..." in prompts echoed by the LLM)
     decision = "advance"
     lower = response.lower()
-    if "loop_back" in lower or "loop back" in lower or "needs revision" in lower:
+    # Only match loop_back if it appears as a standalone decision, not in instructional context
+    if re.search(r'(?<!\w)loop[_\s]back(?!\w)', lower) and not re.search(r'(use|choose|if|option|type)\s+loop[_\s]back', lower):
         decision = "loop_back"
-    elif "needs work" in lower or "reject" in lower or "revise" in lower:
+    elif re.search(r'\bdecision\s*[:=]\s*["\']?loop', lower):
+        decision = "loop_back"
+    elif "needs revision" in lower or "needs work" in lower or "reject" in lower:
         decision = "loop_back"
 
     return AgentDecision(

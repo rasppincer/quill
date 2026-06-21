@@ -123,13 +123,6 @@ class StageRunner:
         metrics_context = self._build_metrics_context(piece, stage, pipeline)
         prompt = prompt.replace("{{METRICS}}", metrics_context)
 
-        # Call LLM
-        system_prompt = (
-            f"You are a {stage} agent for a {piece.genre} {piece.type} "
-            f"in {piece.language}. Be critical and precise. "
-            f"Respond with a JSON block containing 'decision' and 'critique'."
-        )
-
         client = LLMClient(
             api_base=agent_cfg.api_base,
             api_key=agent_cfg.api_key,
@@ -138,19 +131,47 @@ class StageRunner:
             max_tokens=agent_cfg.max_tokens,
         )
 
-        try:
-            response = client.chat(system_prompt, prompt)
-        except ConnectionError as e:
-            return AgentDecision(
-                decision="error",
-                critique="",
-                output="",
-                error=str(e),
-                stage=stage,
-            )
+        content_stages = {"outline", "draft", "revise", "humanize", "polish"}
+        is_content_stage = stage in content_stages
 
-        # Parse response
-        decision = parse_agent_response(response)
+        if is_content_stage:
+            # Two-call approach: generate first, then evaluate
+            gen_system = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Produce high-quality content. "
+                f"Do NOT include any JSON or decision blocks — just write the content."
+            )
+            try:
+                generated = client.chat(gen_system, prompt)
+            except ConnectionError as e:
+                return AgentDecision(
+                    decision="error", critique="", output="",
+                    error=str(e), stage=stage,
+                )
+
+            # Second call: evaluate the generated content
+            decision = self._evaluate_output(
+                client, stage, piece, generated, pipeline, input_content
+            )
+            decision.body = generated
+            decision.output = generated
+        else:
+            # Feedback stages: single call with JSON decision expected
+            eval_system = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Be critical and precise. "
+                f"Respond with a JSON block containing 'decision' and 'critique'."
+            )
+            try:
+                response = client.chat(eval_system, prompt)
+            except ConnectionError as e:
+                return AgentDecision(
+                    decision="error", critique="", output="",
+                    error=str(e), stage=stage,
+                )
+            decision = parse_agent_response(response)
+            decision.output = response
+
         decision.loop_count = loop_count
         decision.stage = stage
 
@@ -165,12 +186,12 @@ class StageRunner:
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
             # Content-producing stages write the body (revised text, humanized text, etc.)
-            # Feedback stages write the critique
-            content_stages = {"revise", "humanize", "polish"}
+            # Feedback stages write the critique, stripped of JSON formatting
+            content_stages = {"outline", "draft", "revise", "humanize", "polish"}
             if stage in content_stages and decision.body:
                 self._write_output(piece, stage, decision.body)
             else:
-                self._write_output(piece, stage, decision.critique)
+                self._write_output(piece, stage, self._format_feedback(decision.critique))
             # Compute text metrics for content stages
             if stage in content_stages:
                 self._compute_metrics(piece, stage)
@@ -213,8 +234,25 @@ class StageRunner:
         current = from_stage or piece.current_stage
         results = []
         max_stages = 20  # safety limit
+        skipped_stages = []
 
         while current and current != "done" and len(results) < max_stages:
+            # Check if agent set has a prompt for this stage
+            agent_cfg = load_agent_config(self.agent_set, current)
+            if not agent_cfg or not agent_cfg.prompt_template:
+                logger.warning(
+                    "Skipping stage '%s' — no agent prompt in set '%s'",
+                    current, self.agent_set,
+                )
+                skipped_stages.append(current)
+                # Advance to next stage via pipeline
+                stage_def = pipeline.get_stage(current)
+                if stage_def and stage_def.next:
+                    current = stage_def.next
+                    continue
+                else:
+                    break
+
             result = self.run_stage(piece_id, current, output_dir)
             results.append(result)
 
@@ -230,12 +268,25 @@ class StageRunner:
             else:
                 break
 
+        # If no stages ran and we only skipped, return an error
+        if not results and skipped_stages:
+            return [AgentDecision(
+                decision="error", critique="", output="",
+                error=(
+                    f"No agent prompts found for any stage starting from "
+                    f"'{from_stage or piece.current_stage}' in set '{self.agent_set}'. "
+                    f"Skipped: {', '.join(skipped_stages)}"
+                ),
+            )]
+
         return results
 
     # Stage-specific input requirements (override default "previous stage" logic)
     # Maps stage → list of files to read as input
     # Content stages read from the PREVIOUS CONTENT stage, not the feedback stage before them
     _STAGE_INPUTS = {
+        "outline": ["brief.md"],                       # needs brief
+        "draft": ["outline.md", "brief.md"],           # needs outline + brief
         "revise": ["draft.md", "review.md"],       # needs draft + critique
         "humanize": ["revise.md"],                  # needs revised text
         "polish": ["humanize.md", "validate.md"],   # needs humanized text + validation feedback
@@ -281,6 +332,12 @@ class StageRunner:
                 inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
+
+    def _format_feedback(self, critique: str) -> str:
+        """Clean feedback text by stripping JSON code fences and formatting."""
+        from .agent import _strip_json_block
+        cleaned = _strip_json_block(critique)
+        return cleaned if cleaned else critique
 
     def _write_output(self, piece: Piece, stage: str, content: str):
         """Write agent output to a stage file."""
@@ -351,6 +408,36 @@ class StageRunner:
                 lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
 
         return "\n".join(lines) if lines else "(no metrics available)"
+
+    def _evaluate_output(
+        self, client: "LLMClient", stage: str, piece: "Piece",
+        generated: str, pipeline, input_content: str,
+    ) -> AgentDecision:
+        """Second call: evaluate generated content and return a JSON decision."""
+        eval_prompt = (
+            f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
+            f"## Stage: {stage}\n\n"
+            f"## Input given to the {stage} agent:\n{input_content[:2000]}\n\n"
+            f"## Generated {stage} output:\n{generated[:4000]}\n\n"
+            f"## Task\n"
+            f"Evaluate the generated {stage} output. Is it high quality? "
+            f"Does it meet the requirements? Respond with ONLY a JSON block:\n\n"
+            f'{{"decision": "advance", "critique": "brief feedback"}}\n'
+            f'or\n'
+            f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
+            f"Be strict but fair. Only loop_back if there are real, fixable problems."
+        )
+        eval_system = (
+            f"You are a quality evaluator. Respond with ONLY a JSON block "
+            f"containing 'decision' (advance or loop_back) and 'critique'."
+        )
+        try:
+            eval_response = client.chat(eval_system, eval_prompt)
+        except ConnectionError:
+            # If evaluation fails, default to advance (trust the generation)
+            return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
+
+        return parse_agent_response(eval_response)
 
     def _advance_meta(self, piece: Piece, next_stage: str):
         """Update meta.yaml to point to the next stage."""

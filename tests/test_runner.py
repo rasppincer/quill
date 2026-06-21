@@ -192,11 +192,11 @@ class TestRunStage:
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        mock_client.chat.return_value = _mock_llm_response(
-            decision="advance",
-            critique="Much improved.",
-            body="The revised draft is much stronger now with a compelling opening.",
-        )
+        # Two-call approach: first call generates content, second call evaluates
+        mock_client.chat.side_effect = [
+            "The revised draft is much stronger now with a compelling opening.",  # generate
+            _mock_llm_response(decision="advance", critique="Much improved."),    # evaluate
+        ]
         mock_llm_cls.return_value = mock_client
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
@@ -247,3 +247,128 @@ class TestRunStage:
         result = runner.run_stage("no-such-piece", "review", output_dir=tmp_output)
         assert result.decision == "error"
         assert "not found" in result.error
+
+
+# ---------------------------------------------------------------------------
+# Chain run — skip stages without prompts
+# ---------------------------------------------------------------------------
+
+
+class TestRunChain:
+    """Test chain execution with stage skipping."""
+
+    @patch("quill.runner.LLMClient")
+    def test_chain_skips_stages_without_prompts(self, mock_llm_cls, runner, tmp_output, tmp_agents, monkeypatch):
+        """Chain starting from a stage without a prompt should skip it and continue."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        # Create piece starting at "outline" (no prompt in default set)
+        piece_dir = tmp_output / "chain-piece"
+        piece_dir.mkdir()
+        meta = {
+            "id": "chain-piece", "title": "Chain Test", "genre": "fiction",
+            "type": "story", "audience": "general", "tone": "casual",
+            "language": "en", "target_length": "1000 words",
+            "current_stage": "outline", "agent_set": "default",
+        }
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
+        (piece_dir / "draft.md").write_text("The draft content for chain test.")
+
+        # Mock LLM for stages that have prompts (review, revise)
+        mock_client = MagicMock()
+        mock_client.chat.return_value = _mock_llm_response(
+            decision="advance", critique="Looks good.",
+        )
+        mock_llm_cls.return_value = mock_client
+
+        results = runner.run_chain("chain-piece", from_stage="outline", output_dir=tmp_output)
+
+        # Should have run review and revise (skipped outline, draft, humanize, validate, polish)
+        assert len(results) == 2
+        assert all(r.decision == "advance" for r in results)
+        # No errors
+        assert not any(r.error for r in results)
+
+    def test_chain_errors_when_all_stages_lack_prompts(self, runner, tmp_output, tmp_agents, monkeypatch):
+        """Chain should error when ALL remaining stages have no prompts."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        # Use an agent set with no prompts at all
+        empty_dir = tmp_agents / "empty"
+        empty_dir.mkdir()
+        (empty_dir / "config.yaml").write_text(
+            yaml.dump({"stages": {}}, default_flow_style=False), encoding="utf-8"
+        )
+
+        runner.agent_set = "empty"
+
+        piece_dir = tmp_output / "empty-chain-piece"
+        piece_dir.mkdir()
+        meta = {
+            "id": "empty-chain-piece", "title": "Empty", "genre": "fiction",
+            "type": "story", "audience": "general", "tone": "casual",
+            "language": "en", "target_length": "1000 words",
+            "current_stage": "outline", "agent_set": "empty",
+        }
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
+
+        results = runner.run_chain("empty-chain-piece", from_stage="outline", output_dir=tmp_output)
+
+        assert len(results) == 1
+        assert results[0].decision == "error"
+        assert "No agent prompts" in results[0].error
+        assert "outline" in results[0].error
+
+
+# ---------------------------------------------------------------------------
+# Feedback output format
+# ---------------------------------------------------------------------------
+
+
+class TestFeedbackOutputFormat:
+    """Test that feedback stages write clean markdown, not raw JSON."""
+
+    def test_format_feedback_strips_json(self, runner):
+        """_format_feedback should strip JSON code fences."""
+        raw = 'The draft needs work.\n\n```json\n{"decision": "advance", "critique": "ok"}\n```'
+        cleaned = runner._format_feedback(raw)
+        assert "```" not in cleaned
+        assert "decision" not in cleaned
+        assert "draft needs work" in cleaned
+
+    def test_format_feedback_strips_bare_json(self, runner):
+        """_format_feedback should strip bare JSON decision blocks."""
+        raw = 'Good structure.\n\n{"decision": "advance", "critique": "Solid"}'
+        cleaned = runner._format_feedback(raw)
+        assert "decision" not in cleaned
+        assert "Good structure" in cleaned
+
+    def test_format_feedback_preserves_clean_text(self, runner):
+        """_format_feedback should not alter text without JSON."""
+        raw = "The piece has strong character development and pacing."
+        cleaned = runner._format_feedback(raw)
+        assert cleaned == raw
+
+    @patch("quill.runner.LLMClient")
+    def test_review_writes_clean_markdown(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
+        """Review stage output file should contain clean markdown, not JSON."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        mock_client = MagicMock()
+        # Simulate LLM returning JSON-wrapped response for a feedback stage
+        mock_client.chat.return_value = (
+            'The draft needs a stronger opening.\n\n'
+            '```json\n{"decision": "advance", "critique": "Good structure overall."}\n```'
+        )
+        mock_llm_cls.return_value = mock_client
+
+        result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
+
+        assert result.decision == "advance"
+        review_file = sample_piece / "review.md"
+        content = review_file.read_text()
+        # Should NOT contain JSON formatting
+        assert "```" not in content
+        assert '"decision"' not in content
+        # Should contain the clean critique text
+        assert "Good structure" in content

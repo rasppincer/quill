@@ -5,6 +5,10 @@ Title: {{TITLE}}
 
 Scan for these AI patterns and remove them:
 
+## Word Count & Reading Level
+- If the piece is under the target word count, expand rather than condense. Preserve or grow word count. Do not sacrifice content for brevity.
+- Check reading level against the target audience. For general fiction audiences, target Flesch-Kincaid grade 8-10. If reading level is too high, simplify sentence structures and vocabulary.
+
 1. **Repetitive sentence starts** — no word should start more than 5% of sentences
 2. **Em dash overuse** — keep only where they add genuine punch
 3. **Rule of three** — don't force ideas into groups of three

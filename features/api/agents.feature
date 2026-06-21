@@ -1,0 +1,40 @@
+Feature: Agent pipeline
+  As a writer using Quill
+  I want agents to process my piece through the pipeline
+  So that I get automated critique, revision, and polish
+
+  Background:
+    Given a clean Quill instance
+
+  Scenario: Chain run processes all stages with agent prompts
+    Given a piece "chain-test" at stage "brief"
+    And the piece has outline.md and draft.md content
+    When I run the agent chain from "outline" with agent set "fiction"
+    Then the chain runs "outline", "draft", "review", "revise", "humanize", "validate", "polish"
+    And the piece reaches stage "done"
+
+  Scenario: Chain run skips stages without agent prompts
+    Given a piece "chain-skip" at stage "brief"
+    And the piece has outline.md and draft.md content
+    When I run the agent chain from "brief" with agent set "fiction"
+    Then the chain skips "brief"
+    And the chain runs "outline"
+
+  Scenario: Chain run errors when all stages lack prompts
+    Given a piece "no-agent" at stage "brief"
+    When I run the agent chain from "brief" with agent set "nonexistent"
+    Then I get an error about no agent prompts
+
+  Scenario: Single stage agent run
+    Given a piece "single-run" at stage "review"
+    And the piece has draft.md content
+    When I run the agent for stage "review" with agent set "default"
+    Then the review.md contains clean markdown critique
+    And the review.md has no JSON code fences
+
+  Scenario: Agent run produces output without JSON wrappers
+    Given a piece "format-test" at stage "review"
+    And the piece has draft.md content
+    When I run the agent for stage "review" with agent set "fiction"
+    Then the review.md does not contain "```json"
+    And the review.md does not contain JSON decision block

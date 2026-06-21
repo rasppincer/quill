@@ -13,6 +13,7 @@ Rules:
 - Apply every piece of feedback from the review
 - Preserve the author's voice and style
 - Don't pad — substance over word count
+- If the piece is under the target word count, expand rather than condense. Preserve or grow word count. Do not sacrifice content for brevity.
 - Keep the structure unless the review specifically requests restructuring
 - Output the COMPLETE revised text (the full story/article), not a diff or summary
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Quill is an **agentic writing workflow engine**. It runs long-form content through a multi-stage pipeline where stages 4-8 (review through polish) are executed by autonomous LLM agents. The user provides the brief and makes the final publish/scrap decision — everything in between is agent-driven.
+Quill is an **agentic writing workflow engine**. It runs long-form content through a multi-stage pipeline where all stages (outline through polish) are executed by autonomous LLM agents using a two-call approach: one call generates content, a separate call evaluates and decides. The user provides the brief and makes the final publish/scrap decision — everything in between is agent-driven.
 
 **This is a pure API server** — no frontend. The UI lives in the One Ring dashboard.
 
@@ -54,8 +54,8 @@ Each stage is **atomic** — one concern per stage, one file per stage.
 | Stage | File | Input | Output | Concern | Mode |
 |-------|------|-------|--------|---------|------|
 | brief | `brief.md` | — | metadata + constraints | Define what you're writing | manual |
-| outline | `outline.md` | brief | structure, arcs, pacing | Structure before prose | manual |
-| draft | `draft.md` | outline | raw prose | Write in chunks | manual |
+| outline | `outline.md` | brief | structure, arcs, pacing | Structure before prose | **agent** |
+| draft | `draft.md` | outline | raw prose | Write in chunks | **agent** |
 | review | `review.md` | draft | annotations, feedback | Read, flag, annotate | **agent** |
 | revise | `revise.md` | draft + review | revised prose | Apply review feedback | **agent** |
 | humanize | `humanize.md` | revise | de-AI'd prose | Strip AI-isms, add voice | **agent** |
@@ -86,19 +86,26 @@ The agent system is the core of Quill's evolution from a tracking tool to an aut
 
 ### Flow
 
+The agent system uses a **two-call approach** for each stage:
+
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Load     │───▶│ Call LLM │───▶│ Parse    │───▶│ Decide   │
-│ prompt + │    │ (critique│    │ response │    │ advance  │
-│ prev     │    │  stage)  │    │ (JSON)   │    │ or loop  │
-│ content  │    │          │    │          │    │          │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
-                                                      │
-                                            ┌─────────┴─────────┐
-                                            │                   │
-                                       advance             loop_back
-                                       (next stage)        (retry ≤ max_loops)
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│ Load     │───▶│ Generate │───▶│ Save     │───▶│ Evaluate │───▶│ Decide   │
+│ prompt + │    │ call     │    │ content  │    │ call     │    │ advance  │
+│ prev     │    │ (produce │    │ to stage │    │ (JSON    │    │ or loop  │
+│ content  │    │  content)│    │ file     │    │  decision)│    │          │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
+                                                                    │
+                                                          ┌─────────┴─────────┐
+                                                          │                   │
+                                                     advance             loop_back
+                                                     (next stage)        (retry ≤ max_loops)
 ```
+
+- **Generate call**: LLM produces the stage content (outline, draft, review text, etc.)
+- **Evaluate call**: A separate LLM call inspects the content and returns a structured JSON decision
+
+This separation eliminates the risk of LLM-generated content accidentally triggering false loop_back decisions from instructional text containing the word "loop_back".
 
 ### Agent Config (`agents/<set>/config.yaml`)
 
@@ -109,6 +116,8 @@ api_base: "https://api.openai.com/v1"
 api_key: "[REDACTED]"
 max_loops: 3
 trigger:
+  outline: run_on_advance
+  draft: run_on_advance
   review: run_on_advance
   revise: run_on_advance
   humanize: run_on_advance
@@ -145,7 +154,7 @@ Agents return structured JSON:
 }
 ```
 
-If the LLM returns malformed JSON, `agent.py` falls back to heuristic parsing (looks for "advance" or "loop_back" keywords).
+If the LLM returns malformed JSON, `agent.py` falls back to heuristic parsing. The parser uses regex with **negative lookahead** to avoid matching "loop_back" in instructional or example text within the content itself.
 
 ### Loop Tracking
 
@@ -250,3 +259,33 @@ Legacy single-file pieces (`output/<id>.md`) are still supported. The loader det
 - Systemd (service management)
 - nginx (reverse proxy at `/quill/`)
 - **No external LLM client dependencies** — stdlib urllib
+
+## Text Metrics
+
+Text readability metrics (Flesch Reading Ease, word count, sentence count, etc.) are computed per-stage and stored as `.metrics.yaml` files alongside stage content. These metrics allow tracking quality improvements across stages and loop iterations.
+
+## Testing
+
+**219 pytest tests + 13 behave BDD scenarios** — all passing.
+
+### Pytest
+
+Unit and integration tests covering the API, pipeline, piece management, and agent system.
+
+### Behave BDD
+
+```
+features/api/
+├── pieces.feature          ← 8 scenarios (CRUD, rename, advance, reject, body length, duplicates)
+├── agents.feature          ← 5 scenarios (chain runs, skip logic, output format)
+├── steps/
+│   └── pieces_steps.py     ← step definitions
+└── environment.py          ← test hooks / cleanup
+```
+
+13 scenarios, 69 steps, all passing. Run with:
+
+```bash
+pytest                          # unit + integration tests
+behave features/api/            # BDD scenarios
+```

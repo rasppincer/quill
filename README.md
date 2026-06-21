@@ -45,12 +45,14 @@ Polish can bounce back to validate for iterative refinement. Each pass tightens 
 
 ## Agent System
 
-Stages 4-8 (review through polish) are **agent-driven**. Each stage has a prompt template and an LLM agent that:
+All stages (outline through polish) are **agent-driven**. The chain can run from brief→done fully automated. Each stage has a prompt template and an LLM agent that uses a **two-call approach**:
 
-1. **Reads** the previous stage's output
-2. **Critiques** it (structured JSON response: advance/loop_back, summary, critique text)
+1. **Generate call** — reads the previous stage's output and produces the content for the current stage (e.g., outline from brief, draft from outline, review from draft)
+2. **Evaluate call** — a separate LLM call returns a structured JSON decision: `advance` or `loop_back`, plus summary and critique
 3. **Decides** — advance to next stage, or loop back to redo the current stage
 4. **Loops** up to `max_loops` times per stage (default: 3)
+
+This two-call design eliminates the risk of LLM-generated content accidentally triggering loop_back decisions from instructional text.
 
 The user is only involved at the publish/scrap decision. Everything else is autonomous.
 
@@ -62,6 +64,8 @@ Agents are **swappable** — different agent sets for different genres or qualit
 quill/agents/
 └── default/
     ├── config.yaml              ← model, api_key, max_loops, trigger mode
+    ├── outline.prompt.md        ← outline agent prompt
+    ├── draft.prompt.md          ← draft agent prompt
     ├── review.prompt.md         ← review agent prompt
     ├── revise.prompt.md         ← revise agent prompt
     ├── humanize.prompt.md       ← humanize agent prompt
@@ -70,8 +74,7 @@ quill/agents/
 ```
 
 - **Default set** — general-purpose writing critique
-- **Sci-fi set** — stricter world-building validation, consistency checks
-- **Editorial set** — publication-ready tone, fact-checking emphasis
+- **Fiction set** — narrative-focused prompts for stories and creative writing
 
 Different pieces can use different agent sets. The prompt templates are fully editable via the dashboard.
 
@@ -79,6 +82,10 @@ Different pieces can use different agent sets. The prompt templates are fully ed
 
 - **`run_on_advance`** — agent runs when you click "Run Agent" (manual trigger)
 - **`full_auto`** — agent runs automatically on stage completion, chains through all remaining stages
+
+### Heuristic Parser
+
+When the LLM returns malformed JSON, `agent.py` falls back to heuristic parsing. The parser uses regex with **negative lookahead** to avoid matching "loop_back" in instructional or example text within the content itself.
 
 ### LLM Client
 
@@ -159,6 +166,33 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 - Works standalone (port 8325) or via nginx (`/quill/`)
 - ProxyFix handles `X-Forwarded-Prefix` for correct URL generation behind nginx
 - Agent loop history tracked in `meta.yaml` under `loop_history`
+- Text metrics (Flesch Reading Ease, word count, etc.) computed per-stage as `.metrics.yaml` files
+
+## Testing
+
+**219 pytest tests + 13 behave BDD scenarios** — all passing.
+
+### Pytest
+
+Unit and integration tests covering the API, pipeline, piece management, and agent system.
+
+### Behave BDD
+
+```
+features/api/
+├── pieces.feature          ← 8 scenarios (CRUD, rename, advance, reject, body length, duplicates)
+├── agents.feature          ← 5 scenarios (chain runs, skip logic, output format)
+├── steps/
+│   └── pieces_steps.py     ← step definitions
+└── environment.py          ← test hooks / cleanup
+```
+
+13 scenarios, 69 steps, all passing. Run with:
+
+```bash
+pytest                          # unit + integration tests
+behave features/api/            # BDD scenarios
+```
 
 ## Dependencies
 

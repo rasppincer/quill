@@ -321,21 +321,31 @@ def pieces_rename(piece_id: str):
 
     old_title = piece.title
     piece.title = new_title
+    piece.updated = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Update meta.yaml
-    piece.save()
-
-    # Update title in ALL stage files' frontmatter
+    # Update ONLY meta.yaml — do NOT call piece.save() which would
+    # overwrite the current stage file with frontmatter + empty body.
     stage_dir = piece.stage_dir()
+    meta_path = stage_dir / "meta.yaml"
+    if meta_path.exists():
+        meta_data = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        meta_data["title"] = new_title
+        meta_data["updated"] = piece.updated
+        meta_path.write_text(
+            yaml.dump(meta_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+
+    # Update title in ALL stage files' frontmatter (patch in-place, don't rewrite)
     for md_file in stage_dir.glob("*.md"):
         try:
             text = md_file.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)
             if m:
-                meta = yaml.safe_load(m.group(1)) or {}
-                if meta.get("title") == old_title:
-                    meta["title"] = new_title
-                    new_fm = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                fm = yaml.safe_load(m.group(1)) or {}
+                if fm.get("title") == old_title:
+                    fm["title"] = new_title
+                    new_fm = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
                     new_text = f"---\n{new_fm}---\n{text[m.end():]}"
                     md_file.write_text(new_text, encoding="utf-8")
         except Exception:

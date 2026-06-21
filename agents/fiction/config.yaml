@@ -9,6 +9,14 @@ max_loops: 3
 trigger: "on_advance"
 
 stages:
+  outline:
+    name: "Outline Agent"
+    description: "Generates fiction outline — narrative structure, character arcs, pacing"
+    temperature: 0.5
+  draft:
+    name: "Draft Agent"
+    description: "Produces full fiction draft — vivid prose, dialogue, show-don't-tell"
+    temperature: 0.7
   review:
     name: "Review Agent"
     description: "Narrative critique — pacing, character, plot, world-building"

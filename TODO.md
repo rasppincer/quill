@@ -60,7 +60,7 @@
 - [x] .env for secrets — api_key via QUILL_API_KEY env var, not in yaml
 - [ ] Export formats (PDF, EPUB, HTML) — lowest priority, Google Docs covers most needs
 - [ ] Multi-author workflow (shared pieces, roles) — lowest priority
-- [ ] Prompt template docs — how to view git history, roll back to earlier version
+- [x] Prompt template docs — how to view git history, roll back to earlier version (docs/PROMPTS.md)
 
 ## Killed (won't do)
 

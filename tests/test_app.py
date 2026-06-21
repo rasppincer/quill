@@ -354,6 +354,66 @@ class TestAgentAPI:
 
 
 # ---------------------------------------------------------------------------
+# Debug prompt
+# ---------------------------------------------------------------------------
+
+
+class TestDebugPrompt:
+    def test_debug_prompt_returns_composed_prompt(self, client, sample_piece, tmp_output, monkeypatch):
+        """Debug endpoint returns the filled prompt without calling LLM."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        # Advance to review
+        client.post("/api/pieces/test-piece/advance")
+
+        resp = client.get("/api/pieces/test-piece/prompt/review")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["stage"] == "review"
+        assert "single_call" in data
+        assert data["single_call"]["char_count"] > 0
+        assert data["is_content_stage"] is False
+
+    def test_debug_prompt_content_stage_shows_both_calls(self, client, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stage debug shows generate + evaluate prompts."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        # Advance to revise (a content stage that has a prompt in the fixture)
+        client.post("/api/pieces/test-piece/advance")  # draft → review
+        client.post("/api/pieces/test-piece/advance")  # review → revise
+
+        resp = client.get("/api/pieces/test-piece/prompt/revise")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["is_content_stage"] is True
+        assert "generate" in data
+        assert "evaluate" in data
+        assert data["generate"]["char_count"] > 0
+
+    def test_debug_prompt_with_agent_set(self, client, sample_piece, tmp_output, monkeypatch):
+        """Debug endpoint accepts agent_set query param."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        resp = client.get("/api/pieces/test-piece/prompt/review?agent_set=fiction")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["agent_set"] == "fiction"
+
+    def test_debug_prompt_nonexistent_piece(self, client):
+        resp = client.get("/api/pieces/nope/prompt/review")
+        assert resp.status_code == 404
+
+    def test_debug_prompt_template_vars(self, client, sample_piece, tmp_output, monkeypatch):
+        """Debug shows all template variable values."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        resp = client.get("/api/pieces/test-piece/prompt/review")
+        data = resp.get_json()
+        tv = data["template_vars"]
+        assert tv["TITLE"] == "Test Piece"
+        assert tv["GENRE"] == "fiction"
+        assert tv["STAGE"] == "review"
+
+
+# ---------------------------------------------------------------------------
 # Run agent
 # ---------------------------------------------------------------------------
 

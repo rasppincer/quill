@@ -746,6 +746,26 @@ def agents_update_prompt(agent_set: str, stage: str):
     return jsonify({"stage": stage, "length": len(content), "status": "updated"})
 
 
+@app.route("/api/pieces/<piece_id>/prompt/<stage>")
+def pieces_debug_prompt(piece_id: str, stage: str):
+    """Debug: show the composed prompt for a stage without calling the LLM.
+
+    Query params:
+        agent_set: Agent set to use (default: piece's agent_set or "default").
+    """
+    from .runner import StageRunner
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    agent_set = request.args.get("agent_set") or piece.agent_set or "default"
+    runner = StageRunner(agent_set=agent_set)
+    result = runner.compose_prompt(piece_id, stage)
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify(result)
+
+
 @app.route("/api/pieces/<piece_id>/run", methods=["POST"])
 def pieces_run(piece_id: str):
     """Run an agent on a specific stage or chain all remaining stages.

@@ -382,6 +382,40 @@ class TestFeedbackOutputFormat:
 class TestTwoFileOutput:
     """Content stages write .md (generated text) + .decision.md (evaluation)."""
 
+    def test_compose_prompt_returns_filled_template(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """compose_prompt returns the filled prompt template without calling LLM."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        result = runner.compose_prompt("test-piece", "review", output_dir=tmp_output)
+
+        assert "error" not in result
+        assert result["stage"] == "review"
+        assert result["is_content_stage"] is False
+        assert "single_call" in result
+        assert "draft content" in result["single_call"]["user"]
+        assert result["single_call"]["char_count"] > 0
+        assert result["template_vars"]["TITLE"] == "Test Piece"
+
+    def test_compose_prompt_content_stage_two_calls(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stage compose_prompt returns both generate and evaluate prompts."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        result = runner.compose_prompt("test-piece", "revise", output_dir=tmp_output)
+
+        assert "error" not in result
+        assert result["is_content_stage"] is True
+        assert "generate" in result
+        assert "evaluate" in result
+        assert "Do NOT include any JSON" in result["generate"]["system"]
+        assert result["generate"]["char_count"] > 0
+        assert result["evaluate"]["char_count"] > 0
+
+    def test_compose_prompt_nonexistent_piece(self, runner, tmp_output):
+        """compose_prompt returns error for missing piece."""
+        result = runner.compose_prompt("nope", "review", output_dir=tmp_output)
+        assert "error" in result
+        assert "not found" in result["error"]
+
     @patch("quill.runner.LLMClient")
     def test_content_stage_writes_decision_file(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
         """Content stage writes both stage.md and stage.decision.md."""

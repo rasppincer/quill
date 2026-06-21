@@ -55,6 +55,133 @@ class StageRunner:
             encoding="utf-8",
         )
 
+    def compose_prompt(self, piece_id: str, stage: str, output_dir: Path | None = None) -> dict:
+        """Assemble the full prompt for a stage without calling the LLM.
+
+        Returns a dict with the system prompt, user prompt, and metadata
+        so you can inspect exactly what would be sent.
+        """
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+        stage_def = pipeline.get_stage(stage)
+
+        from .piece import DEFAULT_OUTPUT_DIR
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        piece_dir = base / piece_id
+        if not piece_dir.exists():
+            return {"error": f"Piece '{piece_id}' not found"}
+
+        piece = load_piece(piece_dir)
+
+        agent_cfg = load_agent_config(self.agent_set, stage)
+        if not agent_cfg or not agent_cfg.prompt_template:
+            return {"error": f"No agent config for stage '{stage}' in set '{self.agent_set}'"}
+
+        loop_count = self.get_loop_count(piece, stage)
+        input_content = self._read_inputs(piece, stage, pipeline)
+
+        prompt = agent_cfg.prompt_template.replace("{{CONTENT}}", input_content)
+        prompt = prompt.replace("{{STAGE}}", stage)
+        prompt = prompt.replace("{{PIECE_ID}}", piece_id)
+        prompt = prompt.replace("{{TITLE}}", piece.title)
+        prompt = prompt.replace("{{GENRE}}", piece.genre)
+        prompt = prompt.replace("{{TYPE}}", piece.type)
+        prompt = prompt.replace("{{LANGUAGE}}", piece.language)
+
+        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        prompt = prompt.replace("{{METRICS}}", metrics_context)
+
+        content_stages = {"outline", "draft", "revise", "humanize", "polish"}
+        is_content_stage = stage in content_stages
+
+        if is_content_stage:
+            gen_system = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Produce high-quality content. "
+                f"Do NOT include any JSON or decision blocks — just write the content."
+            )
+            # Build the evaluate prompt too (no LLM call)
+            eval_prompt = (
+                f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
+                f"## Stage: {stage}\n\n"
+                f"## Input given to the {stage} agent:\n{input_content[:2000]}\n\n"
+                f"## Generated {stage} output:\n<not yet generated>\n\n"
+                f"## Task\n"
+                f"Evaluate the generated {stage} output. Is it high quality? "
+                f"Does it meet the requirements?\n\n"
+                f"Be strict but fair. Only loop_back if there are real, fixable problems."
+            )
+            eval_system = (
+                f"You are a quality evaluator. Respond with ONLY a JSON block "
+                f"containing 'decision' (advance or loop_back) and 'critique'."
+            )
+            return {
+                "piece_id": piece_id,
+                "stage": stage,
+                "agent_set": self.agent_set,
+                "loop_count": loop_count,
+                "max_loops": agent_cfg.max_loops,
+                "is_content_stage": True,
+                "model": agent_cfg.model,
+                "api_base": agent_cfg.api_base,
+                "temperature": agent_cfg.temperature,
+                "max_tokens": agent_cfg.max_tokens,
+                "generate": {
+                    "system": gen_system,
+                    "user": prompt,
+                    "char_count": len(prompt),
+                },
+                "evaluate": {
+                    "system": eval_system,
+                    "user": eval_prompt,
+                    "char_count": len(eval_prompt),
+                    "note": "The 'Generated output' section above shows '<not yet generated>' — the real evaluate prompt includes the actual generated text from the generate call.",
+                },
+                "input_content_char_count": len(input_content),
+                "template_vars": {
+                    "TITLE": piece.title,
+                    "GENRE": piece.genre,
+                    "TYPE": piece.type,
+                    "LANGUAGE": piece.language,
+                    "STAGE": stage,
+                    "PIECE_ID": piece_id,
+                    "METRICS": metrics_context,
+                },
+            }
+        else:
+            eval_system = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Be critical and precise. "
+                f"Respond with a JSON block containing 'decision' and 'critique'."
+            )
+            return {
+                "piece_id": piece_id,
+                "stage": stage,
+                "agent_set": self.agent_set,
+                "loop_count": loop_count,
+                "max_loops": agent_cfg.max_loops,
+                "is_content_stage": False,
+                "model": agent_cfg.model,
+                "api_base": agent_cfg.api_base,
+                "temperature": agent_cfg.temperature,
+                "max_tokens": agent_cfg.max_tokens,
+                "single_call": {
+                    "system": eval_system,
+                    "user": prompt,
+                    "char_count": len(prompt),
+                },
+                "input_content_char_count": len(input_content),
+                "template_vars": {
+                    "TITLE": piece.title,
+                    "GENRE": piece.genre,
+                    "TYPE": piece.type,
+                    "LANGUAGE": piece.language,
+                    "STAGE": stage,
+                    "PIECE_ID": piece_id,
+                    "METRICS": metrics_context,
+                },
+            }
+
     def run_stage(self, piece_id: str, stage: str, output_dir: Path | None = None) -> AgentDecision:
         """Execute a pipeline stage.
 
@@ -116,6 +243,7 @@ class StageRunner:
         prompt = prompt.replace("{{PIECE_ID}}", piece_id)
         prompt = prompt.replace("{{TITLE}}", piece.title)
         prompt = prompt.replace("{{GENRE}}", piece.genre)
+        prompt = prompt.replace("{{TYPE}}", piece.type)
         prompt = prompt.replace("{{LANGUAGE}}", piece.language)
 
         # Inject text metrics from input stages

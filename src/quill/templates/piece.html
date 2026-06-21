@@ -67,6 +67,19 @@
     <button class="btn" id="export-gdocs-btn" onclick="exportGDocs()" style="margin-left:12px" title="Export to Google Docs">
         📄 Export to GDocs
     </button>
+    <button class="btn" id="generate-audio-btn" onclick="generateAudio()" style="margin-left:12px" title="Generate audio version">
+        🔊 Audio
+    </button>
+    <div style="margin-left:12px;display:flex;align-items:center;gap:4px">
+        <button class="btn" id="comic-btn" onclick="generateComic()" style="background:var(--accent);color:#fff" title="Generate comic adaptation">
+            🎨 Comic
+        </button>
+        <select id="comic-style" style="padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+            <option value="manga">Manga</option>
+            <option value="western">Western</option>
+            <option value="noir">Noir</option>
+        </select>
+    </div>
 </div>
 
 <div id="agent-result" style="display:none" class="section">
@@ -97,6 +110,15 @@
             #stage-content ul, #stage-content ol { padding-left: 1.5em; margin: 0.4em 0; }
         </style>
     </div>
+</div>
+
+<!-- Audio versions -->
+<div class="section" id="audio-section" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">🔊 Audio Versions</h3>
+        <button class="btn" onclick="loadAudioFiles()">↻ Refresh</button>
+    </div>
+    <div id="audio-files" style="margin-top:12px"></div>
 </div>
 
 <!-- Metadata -->
@@ -354,6 +376,94 @@ async function exportGDocs() {
 
     btn.disabled = false;
     btn.textContent = '📄 Export to GDocs';
+}
+
+async function generateComic() {
+    const btn = document.getElementById('comic-btn');
+    const styleSelect = document.getElementById('comic-style');
+    const style = styleSelect ? styleSelect.value : 'manga';
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating...';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/comic`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ stage: CURRENT_STAGE, style: style })
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            toast(`Comic failed: ${data.error}`, 'error');
+        } else {
+            toast(`Comic generated (${style} style)!`, 'success');
+            window.open(`${SCRIPT_ROOT}${data.viewer_url}`, '_blank');
+        }
+    } catch (e) {
+        toast(`Comic error: ${e.message}`, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🎨 Comic';
+}
+
+// Load audio files on page load
+document.addEventListener('DOMContentLoaded', loadAudioFiles);
+
+async function loadAudioFiles() {
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/audio`);
+        const data = await resp.json();
+        const section = document.getElementById('audio-section');
+        const container = document.getElementById('audio-files');
+
+        if (data.files && data.files.length > 0) {
+            section.style.display = 'block';
+            container.innerHTML = data.files.map(f => `
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:6px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px">
+                    <span style="font-size:16px">🎵</span>
+                    <div style="flex:1">
+                        <div style="font-size:13px;font-weight:500">${f.filename}</div>
+                        <div style="font-size:11px;color:var(--text-muted)">${(f.size_bytes / 1024).toFixed(0)} KB · ${f.created}</div>
+                    </div>
+                    <a href="${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/audio/${f.filename}" download class="btn" style="font-size:12px;padding:4px 10px">⬇ Download</a>
+                </div>
+            `).join('');
+        } else {
+            section.style.display = 'none';
+        }
+    } catch (e) {
+        // Silently ignore — audio section just stays hidden
+    }
+}
+
+async function generateAudio() {
+    const btn = document.getElementById('generate-audio-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating...';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/audio`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ stage: CURRENT_STAGE })
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            toast(`Audio failed: ${data.error}`, 'error');
+        } else {
+            const sizeKB = (data.size_bytes / 1024).toFixed(0);
+            toast(`Audio generated! ${data.filename} (${sizeKB} KB, ${data.voice})`, 'success');
+            loadAudioFiles();
+        }
+    } catch (e) {
+        toast(`Audio error: ${e.message}`, 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔊 Audio';
 }
 </script>
 {% endblock %}

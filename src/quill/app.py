@@ -8,18 +8,22 @@ Endpoints:
     POST /api/pieces/<id>/advance      — Advance to next stage
     POST /api/pieces/<id>/reject       — Revert to a previous stage
     GET  /api/pipeline                 — Pipeline stage definitions
+    POST /api/pieces/<id>/audio        — Generate audio version
+    GET  /api/pieces/<id>/audio        — List audio files
+    GET  /api/pieces/<id>/audio/<file> — Download audio file
+    GET  /api/audio/voices             — List available TTS voices
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 import yaml
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request, render_template, redirect, url_for
-
+from flask import Flask, jsonify, request, render_template, redirect, url_for, send_from_directory
 from pathlib import Path
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -167,6 +171,100 @@ def pieces_create():
     return jsonify({"id": piece.id, "title": piece.title, "stage": piece.current_stage, "path": str(path)}), 201
 
 
+@app.route("/api/pieces/import", methods=["POST"])
+def pieces_import():
+    """Import a piece, optionally at a mid-progress stage.
+
+    JSON body:
+        title (required): Piece title.
+        current_stage: Stage to import at (default: "brief").
+        genre, type, audience, tone, language, target_length, constraints: Optional metadata.
+        body: Content for the current stage (optional).
+        stages: Dict of {stage_name: content} to create multiple stage files (optional).
+                Each entry creates output/<id>/<stage>.md with frontmatter.
+        agent_set: Agent set to use (optional).
+
+    Missing metadata fields default to empty strings. The piece integrates
+    seamlessly with the existing work management flow — it can be advanced,
+    rejected, and run through agents like any other piece.
+    """
+    data = request.get_json(silent=True) or {}
+
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Missing 'title'"}), 400
+
+    # Generate ID from title
+    piece_id = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60]
+    if not piece_id:
+        piece_id = f"piece-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+
+    # Check for duplicate
+    if get_piece(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' already exists"}), 409
+
+    current_stage = data.get("current_stage", "brief").strip()
+    if current_stage not in pipeline.stage_order:
+        return jsonify({
+            "error": f"Unknown stage '{current_stage}'",
+            "valid_stages": pipeline.stage_order,
+        }), 400
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    piece = Piece(
+        id=piece_id,
+        title=title,
+        genre=data.get("genre", ""),
+        type=data.get("type", ""),
+        audience=data.get("audience", ""),
+        tone=data.get("tone", ""),
+        language=data.get("language", ""),
+        target_length=data.get("target_length", ""),
+        constraints=data.get("constraints", []) or [],
+        current_stage=current_stage,
+        created=data.get("created", now),
+        updated=now,
+        agent_set=data.get("agent_set", ""),
+        body=data.get("body", ""),
+    )
+
+    # Save the piece (creates directory + meta.yaml + current stage file)
+    piece.save()
+
+    # If stages dict provided, write additional stage files
+    stages_data = data.get("stages") or {}
+    for stage_name, stage_content in stages_data.items():
+        if stage_name not in pipeline.stage_order:
+            continue  # skip unknown stages silently
+        if not stage_content:
+            continue  # skip empty stages
+
+        stage_file = piece.stage_dir() / f"{stage_name}.md"
+        if stage_file.exists() and stage_name == current_stage:
+            continue  # already saved by piece.save()
+
+        frontmatter = piece.to_frontmatter()
+        frontmatter["current_stage"] = stage_name
+        fm = yaml.dump(
+            frontmatter,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        )
+        stage_file.write_text(f"---\n{fm}---\n\n{stage_content}", encoding="utf-8")
+
+    logger.info("Imported piece '%s' at stage '%s' (%d stage files)",
+                title, current_stage, len(stages_data) + 1)
+
+    return jsonify({
+        "id": piece.id,
+        "title": piece.title,
+        "stage": piece.current_stage,
+        "path": str(piece.save()),
+        "stages_imported": [current_stage] + [s for s in stages_data if s in pipeline.stage_order],
+    }), 201
+
+
 @app.route("/api/pieces/<piece_id>")
 def pieces_get(piece_id: str):
     """Get piece detail."""
@@ -176,12 +274,31 @@ def pieces_get(piece_id: str):
 
     d = piece.to_dict()
     d["progress"] = pipeline.progress(piece.current_stage)
-    d["body"] = piece.body
 
     # Include metrics for current stage
     from .metrics import maybe_recompute
     stage_file = piece.stage_dir() / f"{piece.current_stage}.md"
     d["metrics"] = maybe_recompute(stage_file)
+
+    # Read body from stage file when piece.body is empty
+    body = piece.body
+    if not body and stage_file.exists():
+        text = stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        body = text[m.end():] if m else text
+    if not body:
+        # Fallback: find the latest stage file with content
+        for sf in sorted(piece.stage_dir().glob("*.md"), reverse=True):
+            try:
+                text = sf.read_text(encoding="utf-8")
+                m = _FRONTMATTER_RE.match(text)
+                body = text[m.end():] if m else text
+                if body.strip():
+                    break
+            except Exception:
+                continue
+    d["body"] = body
+    d["body_length"] = len(body)
 
     return jsonify(d)
 
@@ -719,6 +836,188 @@ def pieces_export_google_docs(piece_id: str):
         return jsonify({"error": f"Export failed: {e}"}), 500
 
 
+# ---------------------------------------------------------------------------
+# Comic generation
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pieces/<piece_id>/comic", methods=["POST"])
+def pieces_comic(piece_id: str):
+    """Generate a comic adaptation of a piece.
+
+    JSON body:
+        stage: Which stage to use (default: current stage).
+        style: Comic style — "manga", "western", or "noir" (default: "manga").
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage", piece.current_stage)
+    style = data.get("style", "manga")
+
+    if style not in ("manga", "western", "noir"):
+        return jsonify({"error": f"Invalid style '{style}'. Use: manga, western, noir"}), 400
+
+    try:
+        from .comic import generate_comic_html, save_comic_html
+        html = generate_comic_html(piece, stage=stage, style=style)
+        output_path = save_comic_html(piece, html)
+        return jsonify({
+            "piece_id": piece_id,
+            "stage": stage,
+            "style": style,
+            "path": str(output_path),
+            "viewer_url": f"/pieces/{piece_id}/comic",
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except ConnectionError as e:
+        return jsonify({"error": f"LLM error: {e}"}), 502
+    except Exception as e:
+        logger.exception("Comic generation failed")
+        return jsonify({"error": f"Comic generation failed: {e}"}), 500
+
+
+@app.route("/pieces/<piece_id>/comic")
+def dashboard_comic(piece_id: str):
+    """View generated comic for a piece."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return render_template("dashboard.html"), 404
+
+    comic_file = piece.stage_dir() / "comic" / "comic.html"
+    if not comic_file.exists():
+        return render_template("dashboard.html"), 404
+
+    return comic_file.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Audio generation (TTS)
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/pieces/<piece_id>/audio", methods=["POST"])
+def pieces_audio_generate(piece_id: str):
+    """Generate an audio version of a piece using text-to-speech.
+
+    JSON body (all optional):
+        stage: Which stage to read (default: current stage).
+        voice: edge-tts voice ID (default: auto from piece language).
+        rate: Speech rate, e.g. "+10%", "-20%" (default: "+0%").
+        pitch: Pitch adjustment, e.g. "+5Hz" (default: "+0Hz").
+        volume: Volume adjustment, e.g. "+0%" (default: "+0%").
+        filename: Output filename (default: "<stage>_<timestamp>.mp3").
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage", piece.current_stage)
+
+    # Load the stage content
+    stage_file = piece.stage_dir() / f"{stage}.md"
+    if not stage_file.exists():
+        return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
+
+    text = stage_file.read_text(encoding="utf-8")
+    m = _FRONTMATTER_RE.match(text)
+    body = text[m.end():] if m else text
+
+    if not body.strip():
+        return jsonify({"error": f"Stage '{stage}' has no content"}), 400
+
+    # Audio options from request
+    from .audio import AudioOptions, generate_audio
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = data.get("filename", f"{stage}_{ts}.mp3")
+
+    options = AudioOptions(
+        voice=data.get("voice", ""),
+        rate=data.get("rate", "+0%"),
+        pitch=data.get("pitch", "+0Hz"),
+        volume=data.get("volume", "+0%"),
+        language=data.get("language", piece.language),
+    )
+
+    try:
+        result = generate_audio(
+            text=body,
+            output_dir=piece.stage_dir() / "audio",
+            filename=filename,
+            options=options,
+        )
+        return jsonify({
+            "piece_id": piece_id,
+            "stage": stage,
+            "filename": result.filename,
+            "voice": result.voice,
+            "size_bytes": result.size_bytes,
+            "path": result.path,
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pieces/<piece_id>/audio")
+def pieces_audio_list(piece_id: str):
+    """List all generated audio files for a piece."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    from .audio import list_audio_files
+
+    files = list_audio_files(piece.stage_dir())
+    return jsonify({"piece_id": piece_id, "files": files, "count": len(files)})
+
+
+@app.route("/api/pieces/<piece_id>/audio/<filename>")
+def pieces_audio_download(piece_id: str, filename: str):
+    """Download a generated audio file."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    audio_dir = piece.stage_dir() / "audio"
+    if not audio_dir.exists():
+        return jsonify({"error": "No audio files found"}), 404
+
+    file_path = audio_dir / filename
+    if not file_path.exists():
+        return jsonify({"error": f"File '{filename}' not found"}), 404
+
+    return send_from_directory(str(audio_dir), filename, as_attachment=True)
+
+
+@app.route("/api/audio/voices")
+def audio_voices():
+    """List available TTS voices, optionally filtered by language.
+
+    Query params:
+        language: Language code filter (e.g., 'en', 'bg', 'de').
+    """
+    from .audio import list_voices, VOICE_PRESETS
+
+    language = request.args.get("language", "")
+
+    # Return presets if no language specified (faster, curated list)
+    if not language:
+        return jsonify({"presets": VOICE_PRESETS})
+
+    try:
+        voices = asyncio.run(list_voices(language))
+        return jsonify({"language": language, "voices": voices})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def main():
     """Run the server."""
     app.run(host="0.0.0.0", port=8325, debug=False)
@@ -726,4 +1025,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-from flask import Flask, jsonify, request, render_template, redirect, url_for, redirect

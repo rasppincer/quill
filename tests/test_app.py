@@ -262,6 +262,50 @@ class TestAgentAPI:
         for s in data["agent_sets"]:
             assert "model" not in s
 
+    def test_agents_for_stage_excludes_flavor_without_prompt(self, client):
+        """non-fiction missing draft.prompt.md must not appear for draft stage."""
+        resp = client.get("/api/agents/for-stage/draft")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        names = [s["name"] for s in data["agent_sets"]]
+        assert "fiction" in names
+        assert "non-fiction" not in names
+
+    def test_agents_for_stage_excludes_flavor_without_outline(self, client):
+        """non-fiction missing outline.prompt.md must not appear for outline stage."""
+        resp = client.get("/api/agents/for-stage/outline")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        names = [s["name"] for s in data["agent_sets"]]
+        assert "fiction" in names
+        assert "non-fiction" not in names
+
+    def test_agents_for_stage_includes_all_when_all_have_prompt(self, client):
+        """Stage where all flavors have a prompt returns all three."""
+        resp = client.get("/api/agents/for-stage/review")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        names = [s["name"] for s in data["agent_sets"]]
+        assert "default" in names
+        assert "fiction" in names
+        assert "non-fiction" in names
+
+    def test_agents_for_stage_empty_for_stage_without_any_prompts(self, client):
+        """Stage that no flavor has prompts for returns empty list."""
+        resp = client.get("/api/agents/for-stage/nonexistent-stage")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["agent_sets"] == []
+
+    def test_agents_for_stage_response_shape(self, client):
+        """Response includes stage name and agent_sets with name + description."""
+        resp = client.get("/api/agents/for-stage/review")
+        data = resp.get_json()
+        assert data["stage"] == "review"
+        for s in data["agent_sets"]:
+            assert "name" in s
+            assert "description" in s
+
     def test_get_prompt(self, client):
         resp = client.get("/api/agents/default/review/prompt")
         assert resp.status_code == 200

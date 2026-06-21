@@ -149,12 +149,18 @@ class StageRunner:
                     error=str(e), stage=stage,
                 )
 
+            # Persist generated content immediately (survives loop_back)
+            self._write_output(piece, stage, generated)
+
             # Second call: evaluate the generated content
             decision = self._evaluate_output(
                 client, stage, piece, generated, pipeline, input_content
             )
             decision.body = generated
             decision.output = generated
+
+            # Persist evaluation result to separate file
+            self._write_decision(piece, stage, decision)
         else:
             # Feedback stages: single call with JSON decision expected
             eval_system = (
@@ -178,22 +184,21 @@ class StageRunner:
         # Execute decision
         if decision.decision == "loop_back":
             self.set_loop_count(piece, stage, loop_count + 1)
-            # Write critique to stage file (so next pass can use it)
-            self._write_critique(piece, stage, decision.critique)
+            # For feedback stages, write critique to decision file
+            if not is_content_stage:
+                self._write_decision(piece, stage, decision)
+            # Content stages already wrote both output and decision above
             logger.info("Stage '%s' loop_back (loop %d/%d)",
                        stage, loop_count + 1, agent_cfg.max_loops)
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
-            # Content-producing stages write the body (revised text, humanized text, etc.)
-            # Feedback stages write the critique, stripped of JSON formatting
-            content_stages = {"outline", "draft", "revise", "humanize", "polish"}
-            if stage in content_stages and decision.body:
-                self._write_output(piece, stage, decision.body)
-            else:
+            # Content stages: output already written above, just clean up decision file
+            # Feedback stages: write critique as the stage output
+            if not is_content_stage:
                 self._write_output(piece, stage, self._format_feedback(decision.critique))
             # Compute text metrics for content stages
-            if stage in content_stages:
+            if is_content_stage:
                 self._compute_metrics(piece, stage)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
@@ -322,7 +327,7 @@ class StageRunner:
                         m = _FRONTMATTER_RE.match(text)
                         inputs.append(f"=== {prev_stage}.md ===\n{text[m.end():] if m else text}")
 
-        # If looping, also read the current stage's existing content (critique)
+        # If looping, also read the current stage's existing content and decision
         current_file = stage_dir / f"{stage}.md"
         if current_file.exists():
             text = current_file.read_text(encoding="utf-8")
@@ -330,6 +335,11 @@ class StageRunner:
             body = text[m.end():] if m else text
             if body.strip():
                 inputs.append(f"=== {stage}.md (previous attempt) ===\n{body}")
+
+        decision_file = stage_dir / f"{stage}.decision.md"
+        if decision_file.exists():
+            text = decision_file.read_text(encoding="utf-8")
+            inputs.append(f"=== {stage}.decision.md (evaluation feedback) ===\n{text}")
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 
@@ -350,6 +360,16 @@ class StageRunner:
         output_file = piece.stage_dir() / f"{stage}.md"
         output_file.write_text(critique, encoding="utf-8")
         logger.info("Wrote critique to %s", output_file)
+
+    def _write_decision(self, piece: Piece, stage: str, decision: "AgentDecision"):
+        """Write evaluation decision to a separate .decision.md file."""
+        decision_file = piece.stage_dir() / f"{stage}.decision.md"
+        content = (
+            f"## Decision: {decision.decision}\n\n"
+            f"## Critique\n{decision.critique}\n"
+        )
+        decision_file.write_text(content, encoding="utf-8")
+        logger.info("Wrote decision to %s", decision_file)
 
     def _compute_metrics(self, piece: Piece, stage: str):
         """Compute and save text metrics for a stage's output file."""

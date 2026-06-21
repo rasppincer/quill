@@ -62,6 +62,54 @@ def tmp_agents(tmp_path):
         encoding="utf-8",
     )
 
+    # Fiction agent set — has all stages
+    fiction_dir = agents_dir / "fiction"
+    fiction_dir.mkdir()
+    fiction_cfg = {
+        "description": "Fiction agents",
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "max_loops": 3,
+        "trigger": "on_advance",
+        "stages": {
+            "outline": {"name": "Outline Agent", "temperature": 0.6},
+            "draft": {"name": "Draft Agent", "temperature": 0.7},
+            "review": {"name": "Review Agent", "temperature": 0.5},
+            "revise": {"name": "Revise Agent", "temperature": 0.6},
+        },
+    }
+    (fiction_dir / "config.yaml").write_text(
+        yaml.dump(fiction_cfg, default_flow_style=False), encoding="utf-8"
+    )
+    for stage in ("outline", "draft", "review", "revise"):
+        (fiction_dir / f"{stage}.prompt.md").write_text(
+            f"# {stage.title()} Agent\n\n{{{{CONTENT}}}}\n",
+            encoding="utf-8",
+        )
+
+    # Non-fiction agent set — missing outline and draft (the bug we fixed)
+    nonfiction_dir = agents_dir / "non-fiction"
+    nonfiction_dir.mkdir()
+    nonfiction_cfg = {
+        "description": "Non-fiction agents",
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "max_loops": 3,
+        "trigger": "on_advance",
+        "stages": {
+            "review": {"name": "Review Agent", "temperature": 0.5},
+            "revise": {"name": "Revise Agent", "temperature": 0.6},
+        },
+    }
+    (nonfiction_dir / "config.yaml").write_text(
+        yaml.dump(nonfiction_cfg, default_flow_style=False), encoding="utf-8"
+    )
+    for stage in ("review", "revise"):
+        (nonfiction_dir / f"{stage}.prompt.md").write_text(
+            f"# {stage.title()} Agent\n\n{{{{CONTENT}}}}\n",
+            encoding="utf-8",
+        )
+
     return agents_dir
 
 

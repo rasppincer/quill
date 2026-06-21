@@ -47,12 +47,14 @@ Polish can bounce back to validate for iterative refinement. Each pass tightens 
 
 All stages (outline through polish) are **agent-driven**. The chain can run from brief→done fully automated. Each stage has a prompt template and an LLM agent that uses a **two-call approach**:
 
-1. **Generate call** — reads the previous stage's output and produces the content for the current stage (e.g., outline from brief, draft from outline, review from draft)
-2. **Evaluate call** — a separate LLM call returns a structured JSON decision: `advance` or `loop_back`, plus summary and critique
+1. **Generate call** — reads the previous stage's output and produces the content for the current stage (e.g., outline from brief, draft from outline, review from draft). The generated text is written to `{stage}.md` immediately.
+2. **Evaluate call** — a separate LLM call evaluates the generated content and returns a structured JSON decision: `advance` or `loop_back`, plus critique. The evaluation is written to `{stage}.decision.md`.
 3. **Decides** — advance to next stage, or loop back to redo the current stage
 4. **Loops** up to `max_loops` times per stage (default: 3)
 
-This two-call design eliminates the risk of LLM-generated content accidentally triggering loop_back decisions from instructional text.
+On **loop_back**, the next iteration receives both the previous generated text (`{stage}.md`) and the evaluation feedback (`{stage}.decision.md`), so the agent can see what it wrote and what was wrong with it.
+
+This two-file design eliminates the risk of losing generated content on loop_back and prevents LLM-generated content from accidentally triggering decisions via instructional text.
 
 The user is only involved at the publish/scrap decision. Everything else is autonomous.
 
@@ -62,19 +64,16 @@ Agents are **swappable** — different agent sets for different genres or qualit
 
 ```
 quill/agents/
-└── default/
-    ├── config.yaml              ← model, api_key, max_loops, trigger mode
-    ├── outline.prompt.md        ← outline agent prompt
-    ├── draft.prompt.md          ← draft agent prompt
-    ├── review.prompt.md         ← review agent prompt
-    ├── revise.prompt.md         ← revise agent prompt
-    ├── humanize.prompt.md       ← humanize agent prompt
-    ├── validate.prompt.md       ← validate agent prompt
-    └── polish.prompt.md         ← polish agent prompt
+├── default/                ← Generic — works for any genre
+│   ├── config.yaml
+│   └── *.prompt.md
+├── fiction/                ← Narrative-focused (stories, creative writing)
+│   ├── config.yaml
+│   └── *.prompt.md
+└── non-fiction/            ← Argument-focused (blogs, essays, analysis)
+    ├── config.yaml
+    └── *.prompt.md
 ```
-
-- **Default set** — general-purpose writing critique
-- **Fiction set** — narrative-focused prompts for stories and creative writing
 
 Different pieces can use different agent sets. The prompt templates are fully editable via the dashboard.
 
@@ -111,9 +110,12 @@ quill/
 │       ├── meta.yaml    ← Source of truth (current_stage, metadata)
 │       ├── brief.md     ← Brief content
 │       ├── outline.md   ← Structure, arcs, pacing map
+│       ├── outline.decision.md  ← Evaluation of outline
 │       ├── draft.md     ← The raw prose
+│       ├── draft.decision.md    ← Evaluation of draft
 │       ├── review.md    ← Reviewer annotations
 │       ├── revise.md    ← Revised per review feedback
+│       ├── revise.decision.md   ← Evaluation of revision
 │       ├── humanize.md  ← De-AI'd version
 │       ├── validate.md  ← Fact-checked version
 │       ├── polish.md    ← Final line edits
@@ -161,7 +163,8 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 - Pieces are directories with `meta.yaml` + per-stage `.md` files
 - `meta.yaml` is the single source of truth for metadata and current stage
-- Stage files contain only content (no YAML frontmatter)
+- Content stages produce two files: `{stage}.md` (generated text) and `{stage}.decision.md` (evaluation)
+- Feedback stages produce one file: `{stage}.md` (critique, clean markdown)
 - The API is pure JSON — dashboard templates are rendered by Flask
 - Works standalone (port 8325) or via nginx (`/quill/`)
 - ProxyFix handles `X-Forwarded-Prefix` for correct URL generation behind nginx
@@ -170,7 +173,7 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 ## Testing
 
-**219 pytest tests + 13 behave BDD scenarios** — all passing.
+**233 pytest tests + 16 behave BDD scenarios** — all passing.
 
 ### Pytest
 

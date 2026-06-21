@@ -9,6 +9,16 @@ max_loops: 3
 trigger: "on_advance"  # on_advance | auto
 
 stages:
+  outline:
+    name: "Outline Agent"
+    description: "Creates structured outline from brief with thesis and evidence hooks"
+    temperature: 0.6
+
+  draft:
+    name: "Draft Agent"
+    description: "Produces full evidence-backed draft from outline"
+    temperature: 0.7
+
   review:
     name: "Review Agent"
     description: "Reads draft and produces structural/quality critique"

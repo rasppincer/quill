@@ -287,8 +287,10 @@ def pieces_get(piece_id: str):
         m = _FRONTMATTER_RE.match(text)
         body = text[m.end():] if m else text
     if not body:
-        # Fallback: find the latest stage file with content
+        # Fallback: find the latest stage file with content (skip .decision.md)
         for sf in sorted(piece.stage_dir().glob("*.md"), reverse=True):
+            if sf.name.endswith(".decision.md"):
+                continue
             try:
                 text = sf.read_text(encoding="utf-8")
                 m = _FRONTMATTER_RE.match(text)

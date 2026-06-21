@@ -387,3 +387,27 @@ def step_no_json_decision(context):
     content = read_stage_file(context.piece_id, "review")
     assert '"decision":' not in content, "review.md contains JSON decision block"
     assert '"decision" :' not in content, "review.md contains JSON decision block"
+
+
+# ---------------------------------------------------------------------------
+# For-stage filtering steps
+# ---------------------------------------------------------------------------
+
+
+@when('I query agents for stage "{stage}"')
+def step_query_agents_for_stage(context, stage):
+    api(context, "get", f"/api/agents/for-stage/{stage}")
+
+
+@then('the response includes "{name}"')
+def step_response_includes_flavor(context, name):
+    assert context.response_json is not None, "No response JSON"
+    names = [s["name"] for s in context.response_json.get("agent_sets", [])]
+    assert name in names, f"Expected '{name}' in agent sets, got: {names}"
+
+
+@then("the for-stage response has empty agent_sets")
+def step_for_stage_empty(context):
+    assert context.response_json is not None, "No response JSON"
+    agent_sets = context.response_json.get("agent_sets", [])
+    assert agent_sets == [], f"Expected empty agent_sets, got: {agent_sets}"

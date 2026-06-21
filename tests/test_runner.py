@@ -372,3 +372,144 @@ class TestFeedbackOutputFormat:
         assert '"decision"' not in content
         # Should contain the clean critique text
         assert "Good structure" in content
+
+
+# ---------------------------------------------------------------------------
+# Two-file output (content stages)
+# ---------------------------------------------------------------------------
+
+
+class TestTwoFileOutput:
+    """Content stages write .md (generated text) + .decision.md (evaluation)."""
+
+    @patch("quill.runner.LLMClient")
+    def test_content_stage_writes_decision_file(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stage writes both stage.md and stage.decision.md."""
+        from quill.piece import load_piece
+
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = [
+            "The revised draft is much stronger now.",  # generate
+            _mock_llm_response(decision="advance", critique="Much improved."),  # evaluate
+        ]
+        mock_llm_cls.return_value = mock_client
+
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        piece = load_piece(sample_piece_with_review)
+        piece.current_stage = "revise"
+        piece.save()
+
+        result = runner.run_stage("test-piece", "revise", output_dir=tmp_output)
+
+        assert result.decision == "advance"
+
+        # Stage file has generated text
+        revise_file = sample_piece_with_review / "revise.md"
+        assert revise_file.exists()
+        assert "revised draft" in revise_file.read_text()
+
+        # Decision file has evaluation
+        decision_file = sample_piece_with_review / "revise.decision.md"
+        assert decision_file.exists()
+        decision_content = decision_file.read_text()
+        assert "Decision: advance" in decision_content
+        assert "Much improved" in decision_content
+
+    @patch("quill.runner.LLMClient")
+    def test_loop_back_preserves_generated_text(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """On loop_back, stage.md retains the generated text (not critique)."""
+        from quill.piece import load_piece
+
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = [
+            "First attempt at revision.",  # generate
+            _mock_llm_response(decision="loop_back", critique="Needs more depth."),  # evaluate
+        ]
+        mock_llm_cls.return_value = mock_client
+
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        piece = load_piece(sample_piece_with_review)
+        piece.current_stage = "revise"
+        piece.save()
+
+        result = runner.run_stage("test-piece", "revise", output_dir=tmp_output)
+
+        assert result.decision == "loop_back"
+
+        # Stage file still has the generated text
+        revise_file = sample_piece_with_review / "revise.md"
+        assert "First attempt" in revise_file.read_text()
+
+        # Decision file has the critique
+        decision_file = sample_piece_with_review / "revise.decision.md"
+        assert "Needs more depth" in decision_file.read_text()
+
+    @patch("quill.runner.LLMClient")
+    def test_decision_file_not_in_body_fallback(self, mock_llm_cls, runner, tmp_output, monkeypatch):
+        """Piece detail should not use .decision.md as fallback body."""
+        from quill.piece import load_piece
+        from quill.app import app as flask_app
+
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        # Create a piece at draft stage with only a decision file (no draft.md)
+        piece_dir = tmp_output / "decision-only"
+        piece_dir.mkdir()
+        meta = {
+            "id": "decision-only", "title": "Decision Test",
+            "current_stage": "draft", "genre": "fiction",
+            "created": "2026-01-01", "updated": "2026-01-01",
+        }
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
+        (piece_dir / "draft.decision.md").write_text("## Decision: advance\n\n## Critique\nLooks good.\n")
+        # A brief.md with actual content so the fallback has something to find
+        (piece_dir / "brief.md").write_text("The brief content for the piece.")
+
+        flask_app.config["TESTING"] = True
+        with flask_app.test_client() as client:
+            resp = client.get("/api/pieces/decision-only")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            # Body should come from brief.md, not draft.decision.md
+            assert "brief content" in data["body"]
+            assert "Decision: advance" not in data["body"]
+
+    def test_write_decision_format(self, runner, sample_piece):
+        """_write_decision creates a well-structured .decision.md file."""
+        from quill.piece import load_piece
+
+        piece = load_piece(sample_piece)
+        decision = AgentDecision(
+            decision="loop_back",
+            critique="Opening is weak. Need a stronger hook.",
+            output="",
+        )
+        runner._write_decision(piece, "draft", decision)
+
+        decision_file = sample_piece / "draft.decision.md"
+        assert decision_file.exists()
+        content = decision_file.read_text()
+        assert "Decision: loop_back" in content
+        assert "Opening is weak" in content
+        assert "## Critique" in content
+
+    def test_read_inputs_includes_decision_file(self, runner, tmp_output):
+        """_read_inputs includes .decision.md when it exists (loop context)."""
+        from quill.piece import load_piece, Piece
+
+        d = tmp_output / "loop-piece"
+        d.mkdir()
+        meta = {"id": "loop-piece", "title": "T", "current_stage": "draft"}
+        (d / "meta.yaml").write_text(yaml.dump(meta))
+        (d / "brief.md").write_text("The brief.")
+        (d / "draft.md").write_text("Previous draft attempt here.")
+        (d / "draft.decision.md").write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
+
+        piece = load_piece(d)
+        inputs = runner._read_inputs(piece, "draft", None)
+
+        assert "Previous draft attempt" in inputs
+        assert "Needs more evidence" in inputs
+        assert "evaluation feedback" in inputs

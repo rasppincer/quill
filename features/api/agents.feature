@@ -38,3 +38,19 @@ Feature: Agent pipeline
     When I run the agent for stage "review" with agent set "fiction"
     Then the review.md does not contain "```json"
     And the review.md does not contain JSON decision block
+
+  Scenario: Non-fiction flavor appears for draft stage after prompt added
+    When I query agents for stage "draft"
+    Then the response includes "non-fiction"
+    And the response includes "fiction"
+    And the response includes "default"
+
+  Scenario: Non-fiction flavor appears for outline stage after prompt added
+    When I query agents for stage "outline"
+    Then the response includes "non-fiction"
+    And the response includes "fiction"
+    And the response includes "default"
+
+  Scenario: For-stage returns empty for nonexistent stage
+    When I query agents for stage "nonexistent-stage"
+    Then the for-stage response has empty agent_sets

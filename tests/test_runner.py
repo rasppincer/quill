@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import yaml
 
-from quill.runner import StageRunner, _DECISION_SEPARATOR
+from quill.runner import StageRunner
 from quill.agent import AgentDecision
 
 
@@ -355,12 +355,10 @@ class TestFeedbackOutputFormat:
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
         mock_client = MagicMock()
-        # Single call: content + separator + JSON decision
-        sep = "======= dad40ab6-2d44-4c2c-af5d-8e8644f60b95 ======="
+        # Simulate LLM returning JSON-wrapped response for a feedback stage
         mock_client.chat.return_value = (
-            f'The draft needs a stronger opening.\n\n'
-            f'{sep}\n'
-            f'{{"decision": "advance", "critique": "Good structure overall."}}'
+            'The draft needs a stronger opening.\n\n'
+            '```json\n{"decision": "advance", "critique": "Good structure overall."}\n```'
         )
         mock_llm_cls.return_value = mock_client
 
@@ -369,12 +367,11 @@ class TestFeedbackOutputFormat:
         assert result.decision == "advance"
         review_file = sample_piece / "review.md"
         content = review_file.read_text()
-        # Should NOT contain JSON or separator
+        # Should NOT contain JSON formatting
         assert "```" not in content
         assert '"decision"' not in content
-        assert "dad40ab6" not in content
-        # Should contain the clean content text
-        assert "stronger opening" in content
+        # Should contain the clean critique text
+        assert "Good structure" in content
 
 
 # ---------------------------------------------------------------------------
@@ -399,18 +396,19 @@ class TestTwoFileOutput:
         assert result["single_call"]["char_count"] > 0
         assert result["template_vars"]["TITLE"] == "Test Piece"
 
-    def test_compose_prompt_content_stage_single_call(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """Content stage compose_prompt returns single_call with separator."""
+    def test_compose_prompt_content_stage_two_calls(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stage compose_prompt returns both generate and evaluate prompts."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
         result = runner.compose_prompt("test-piece", "revise", output_dir=tmp_output)
 
         assert "error" not in result
         assert result["is_content_stage"] is True
-        assert "single_call" in result
-        assert "dad40ab6" in result["separator"]
-        assert result["single_call"]["char_count"] > 0
-        assert "IMPORTANT" in result["single_call"]["system"]
+        assert "generate" in result
+        assert "evaluate" in result
+        assert "Do NOT include any JSON" in result["generate"]["system"]
+        assert result["generate"]["char_count"] > 0
+        assert result["evaluate"]["char_count"] > 0
 
     def test_compose_prompt_nonexistent_piece(self, runner, tmp_output):
         """compose_prompt returns error for missing piece."""
@@ -424,7 +422,10 @@ class TestTwoFileOutput:
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        mock_client.chat.return_value = "The revised draft is much stronger now.\n\n" + _DECISION_SEPARATOR + "\n" + '{"decision": "advance", "critique": "Much improved."}'
+        mock_client.chat.side_effect = [
+            "The revised draft is much stronger now.",  # generate
+            _mock_llm_response(decision="advance", critique="Much improved."),  # evaluate
+        ]
         mock_llm_cls.return_value = mock_client
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
@@ -455,7 +456,10 @@ class TestTwoFileOutput:
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        mock_client.chat.return_value = "First attempt at revision.\n\n" + _DECISION_SEPARATOR + "\n" + '{"decision": "loop_back", "critique": "Needs more depth."}'
+        mock_client.chat.side_effect = [
+            "First attempt at revision.",  # generate
+            _mock_llm_response(decision="loop_back", critique="Needs more depth."),  # evaluate
+        ]
         mock_llm_cls.return_value = mock_client
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)

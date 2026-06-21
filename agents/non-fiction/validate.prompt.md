@@ -13,6 +13,8 @@ Check for factual accuracy and claim integrity:
 6. **Claim verification** — Are bold claims supported? Are there logical fallacies (straw man, false dichotomy, appeal to authority)?
 7. **Language quality** — Natural prose for {{LANGUAGE}}? No translation artifacts?
 
+{{METRICS}}
+
 {{CONTENT}}
 
 For each issue found, quote the passage and explain the problem.

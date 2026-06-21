@@ -20,7 +20,7 @@ Scan for these AI patterns and remove them:
 
 ## Output Format
 
-Write the COMPLETE humanized text first (full rewrite). Then, at the very end, add a JSON decision block with your AI-ness score.
+Write the COMPLETE humanized text first (the full story/article, rewritten). Then, at the very end, add a JSON decision block with your AI-ness score.
 
 Example:
 

@@ -3,7 +3,7 @@
 You are revising a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 
-## Original Text
+## Draft (original)
 {{CONTENT}}
 
 ## Review Feedback
@@ -14,7 +14,7 @@ Rules:
 - Preserve the author's voice and style
 - Don't pad — substance over word count
 - Keep the structure unless the review specifically requests restructuring
-- Output the COMPLETE revised text, not a diff or summary
+- Output the COMPLETE revised text (the full story/article), not a diff or summary
 
 ## Output Format
 
@@ -29,7 +29,7 @@ Example:
 ```json
 {
     "decision": "advance",
-    "critique": "Applied 3 changes: restructured section 2, clarified argument in paragraph 4, trimmed 200 words of repetition."
+    "critique": "Applied 3 changes: fixed pacing in paragraph 2, resolved logic gap at the climax, trimmed 200 words of repetition."
 }
 ```
 

@@ -1,6 +1,37 @@
-# Prompt Templates — Versioning & Management
+# Prompt Templates — Flavors & Versioning
 
-Prompt templates are the instructions each agent stage uses to process your content. They live as plain markdown files, versioned by git alongside the rest of the codebase.
+Prompt templates are the instructions each agent stage uses to process your content. They're organized into **flavors** — collections of prompts tuned for specific genres or types. All flavors are versioned by git alongside the rest of the codebase.
+
+## Flavors
+
+A flavor is a directory under `agents/` containing a `config.yaml` and prompt templates for each stage. Three flavors ship by default:
+
+| Flavor | Use case | Description |
+|--------|----------|-------------|
+| `default` | Any genre | Generic prompts that work for any type of content |
+| `fiction` | Stories, novels, flash fiction | Narrative-focused: pacing, character, plot, world-building |
+| `non-fiction` | Blog posts, essays, articles | Argument-focused: evidence, structure, SEO, audience |
+
+Pieces reference their flavor via `agent_set` in `meta.yaml`. The piece detail page lets you pick a different flavor before running an agent.
+
+### Creating a New Flavor
+
+**Dashboard:** Navigate to ⚙ Agents → click **+ New Flavor** → enter name, description, choose which flavor to clone from.
+
+**API:**
+```bash
+curl -X POST http://localhost:8325/api/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "sci-fi", "description": "Hard sci-fi agents", "clone_from": "fiction"}'
+```
+
+**Manual:**
+```bash
+cp -r ~/projects/quill/agents/default ~/projects/quill/agents/my-flavor
+# Edit config.yaml and *.prompt.md files
+```
+
+New flavors appear automatically in the dashboard and piece detail dropdown.
 
 ## File Layout
 

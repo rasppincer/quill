@@ -4,15 +4,17 @@ You are reviewing a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 Stage: {{STAGE}}
 
-Read the draft below and produce a thorough critique. Focus on:
-1. **Pacing** — does the story breathe? Too rushed? Too slow?
-2. **Logic** — do events follow? Plot holes? Missing links?
-3. **Character consistency** — does the protagonist sound the same throughout?
-4. **Completeness** — are all beats hit? Anything missing?
-5. **Redundancy** — repeated scenes, arguments, or phrases?
-6. **Ending** — does it land? Is it earned?
+Read the text below and produce a thorough critique. Focus on:
+1. **Structure** — is the organization logical? Does each section build on the previous?
+2. **Completeness** — are all key points covered? Anything missing or underdeveloped?
+3. **Clarity** — is the argument/narrative easy to follow? Any confusing passages?
+4. **Redundancy** — repeated points, arguments, or phrases that should be trimmed?
+5. **Opening** — does it hook the reader immediately? No slow warm-up?
+6. **Ending** — is it satisfying and complete? Does it deliver on the opening's promise?
 
-Be specific. Reference line numbers or quote passages when flagging issues.
+{{METRICS}}
+
+Be specific. Quote passages when flagging issues.
 
 {{CONTENT}}
 
@@ -25,5 +27,5 @@ Respond with a JSON block:
 ```
 
 Decision guide:
-- "advance" if the draft is structurally sound with only minor issues
-- "loop_back" if there are significant pacing, logic, or consistency problems
+- "advance" if the text is structurally sound with only minor issues
+- "loop_back" if there are significant structural, clarity, or completeness problems

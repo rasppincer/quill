@@ -357,6 +357,60 @@ def agents_list():
     return jsonify({"sets": sets, "stage_order": stage_order})
 
 
+@app.route("/api/agents", methods=["POST"])
+def agents_create():
+    """Create a new flavor (agent set).
+
+    JSON body:
+        name (required): Flavor name (lowercase, hyphens).
+        description: Flavor description.
+        clone_from: Clone prompts from this flavor (default: "default").
+    """
+    from .agent import AGENTS_DIR
+    import shutil
+
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip().lower()
+    description = data.get("description", "").strip()
+    clone_from = data.get("clone_from", "default").strip()
+
+    if not name:
+        return jsonify({"error": "Missing 'name'"}), 400
+
+    # Validate name (alphanumeric + hyphens only)
+    import re
+    if not re.match(r"^[a-z0-9][a-z0-9\-]*$", name):
+        return jsonify({"error": "Name must be lowercase alphanumeric with hyphens"}), 400
+
+    target_dir = AGENTS_DIR / name
+    if target_dir.exists():
+        return jsonify({"error": f"Flavor '{name}' already exists"}), 409
+
+    source_dir = AGENTS_DIR / clone_from
+    if not source_dir.exists():
+        return jsonify({"error": f"Source flavor '{clone_from}' not found"}), 404
+
+    # Copy the source flavor
+    shutil.copytree(source_dir, target_dir)
+
+    # Update description in config.yaml
+    config_file = target_dir / "config.yaml"
+    if config_file.exists():
+        cfg = yaml.safe_load(config_file.read_text()) or {}
+        cfg["description"] = description or f"Custom flavor: {name}"
+        config_file.write_text(
+            yaml.dump(cfg, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+
+    return jsonify({
+        "status": "created",
+        "name": name,
+        "description": description,
+        "cloned_from": clone_from,
+    }), 201
+
+
 @app.route("/api/model", methods=["GET"])
 def model_get():
     """Get global model configuration."""

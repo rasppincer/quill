@@ -3,14 +3,16 @@
 You are validating a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 
-Check for domain accuracy, timeline consistency, and internal logic:
+Check for accuracy, consistency, and quality:
 
-1. **Domain accuracy** — Are real-world references correct? (institutions, places, dates, people)
-2. **Timeline consistency** — Do dates/events follow logically? No contradictions?
-3. **Math/numbers** — Do calculations add up? Percentages, prices, distances?
-4. **Character consistency** — Names, relationships, motivations stay consistent?
-5. **Internal logic** — Events don't contradict each other?
+1. **Factual accuracy** — Are real-world references correct? (institutions, places, dates, people, statistics)
+2. **Internal consistency** — Do claims, terms, and definitions stay consistent throughout?
+3. **Logic** — Do arguments follow logically? Any non-sequiturs or contradictions?
+4. **Math/numbers** — Do calculations add up? Percentages, comparisons, figures?
+5. **Citations** — Are sources referenced correctly? URLs, attributions, quotes?
 6. **Language quality** — Natural prose for {{LANGUAGE}}? No translation artifacts?
+
+{{METRICS}}
 
 {{CONTENT}}
 
@@ -27,4 +29,4 @@ Respond with a JSON block:
 
 Decision guide:
 - "advance" if no factual errors or contradictions found
-- "loop_back" if there are factual errors, timeline contradictions, or math mistakes
+- "loop_back" if there are factual errors, logical contradictions, or calculation mistakes

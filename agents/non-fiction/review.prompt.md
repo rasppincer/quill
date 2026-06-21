@@ -17,6 +17,8 @@ Read the draft below and produce a thorough critique. Focus on:
 
 Be specific. Reference line numbers or quote passages when flagging issues.
 
+{{METRICS}}
+
 {{CONTENT}}
 
 Respond with a JSON block:

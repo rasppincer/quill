@@ -55,7 +55,11 @@
 </div>
 
 <div id="agent-detail" style="display:none">
-    <h3 id="set-name"></h3>
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
+        <div class="label" style="margin-bottom:0">Editing flavor:</div>
+        <select id="flavor-selector" onchange="window.showSet(this.value)" style="min-width:200px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+        </select>
+    </div>
     <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
 
     <div class="meta-grid" style="margin-bottom:20px">
@@ -100,15 +104,25 @@
     window.loadSets = function() {
         fetchJson(BASE).then(function(data) {
             var container = document.getElementById('agent-sets');
+            var selector = document.getElementById('flavor-selector');
             if (!data.sets || data.sets.length === 0) {
                 container.innerHTML = '<div class="meta-item"><div class="value" style="color:var(--text-muted)">No agent sets found. Create one in agents/</div></div>';
                 return;
             }
+            // Populate the dropdown selector
+            selector.innerHTML = '';
+            data.sets.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = s.name;
+                opt.textContent = s.name + ' — ' + (s.description || s.stages.length + ' stages');
+                selector.appendChild(opt);
+            });
+            // Populate the card grid
             var html = '';
             data.sets.forEach(function(s) {
-                html += '<div class="meta-item" style="cursor:pointer" onclick="window.showSet(\'' + s.name + '\')">';
+                html += '<div class="meta-item" style="cursor:pointer;transition:border-color 0.15s" onmouseenter="this.style.borderColor=\'var(--accent-blue)\'" onmouseleave="this.style.borderColor=\'var(--border)\'" onclick="window.showSet(\'' + s.name + '\')">';
                 html += '<div class="label">' + esc(s.name) + '</div>';
-                html += '<div class="value">' + s.stages.length + ' stages</div>';
+                html += '<div class="value">' + s.stages.length + ' stages <span style="color:var(--text-muted);font-size:11px">→</span></div>';
                 html += '</div>';
             });
             container.innerHTML = html;
@@ -120,10 +134,13 @@
 
     window.showSet = function(name) {
         currentSet = name;
+        // Sync the dropdown selector
+        var selector = document.getElementById('flavor-selector');
+        if (selector) selector.value = name;
+
         fetchJson(BASE + '/' + name).then(function(data) {
             document.getElementById('agent-detail').style.display = 'block';
             document.getElementById('prompt-editor').style.display = 'none';
-            document.getElementById('set-name').textContent = name;
             document.getElementById('set-desc').textContent = (data.config && data.config.description) || '';
             document.getElementById('set-max-loops').textContent = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
             document.getElementById('set-trigger').textContent = (data.config && data.config.trigger) || 'on_advance';

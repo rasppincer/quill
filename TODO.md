@@ -82,6 +82,11 @@
 - [x] **Loop guardrails** — Metric degradation detection across loop iterations. Saves baseline snapshot on first loop, compares on subsequent loops. Forces advance if word count drops >30%, readability shifts >15pts, vocab diversity drops >10%, or passive voice increases >10pp.
 - [ ] **Prompt git-history in dashboard** — Show git diffs of `.prompt.md` files in the Agents tab so writers can rollback templates without leaving the UI.
 
+## Phase 8 — Codebase Health
+
+- [ ] **OOP refactor of runner.py** — runner.py is 1000+ lines. Split into focused classes: `PromptBuilder` (template rendering, context building, date injection), `RunManager` (already partially extracted — thread pool, event queues, run state), `StageExecutor` (run_stage, run_chain, decision handling), `MetricsService` (compute, load, guardrail comparison), `RunLogger` (JSONL logging). Each class gets its own file under `src/quill/runner/`.
+- [ ] **Spike: expose system prompt to user** — System prompt includes date context, genre/type instructions, JSON decision format. Worth surfacing in the Run Log or debug panel? Would help users understand why the LLM responds a certain way. Spike to assess value vs. complexity.
+
 ## Backlog
 
 - [x] Google Docs connector — push finished pieces to Google Docs (API auth, formatting, link sharing)

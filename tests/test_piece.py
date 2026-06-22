@@ -85,6 +85,55 @@ class TestLoadPiece:
 # ---------------------------------------------------------------------------
 # Piece saving
 # ---------------------------------------------------------------------------
+# Content cleaning
+# ---------------------------------------------------------------------------
+
+
+class TestCleanContent:
+    """Test mechanical content cleanup."""
+
+    def test_em_dash_replaced(self):
+        assert Piece._clean_content("foo \u2014 bar") == "foo  -  bar"
+
+    def test_en_dash_replaced(self):
+        assert Piece._clean_content("foo \u2013 bar") == "foo  -  bar"
+
+    def test_smart_single_quotes_replaced(self):
+        assert Piece._clean_content("\u2018hello\u2019") == "'hello'"
+
+    def test_smart_double_quotes_replaced(self):
+        assert Piece._clean_content("\u201chello\u201d") == '"hello"'
+
+    def test_nbsp_replaced(self):
+        assert Piece._clean_content("foo\u00a0bar") == "foo bar"
+
+    def test_regular_text_unchanged(self):
+        text = "This is normal text with 'quotes' and \"double quotes\"."
+        assert Piece._clean_content(text) == text
+
+    def test_combined_cleaning(self):
+        text = "He said \u201chello \u2014 it\u2019s fine\u201d"
+        result = Piece._clean_content(text)
+        assert "\u2014" not in result
+        assert "\u2019" not in result
+        assert "\u201c" not in result
+        assert "\u201d" not in result
+        assert '"' in result
+        assert "'" in result
+
+    def test_write_output_cleans_content(self, tmp_path):
+        """write_output applies _clean_content before writing."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        p = Piece(id="clean-test", title="Test", genre="fiction", current_stage="draft")
+        p.save(output_dir)
+        p.write_output("draft", "He said \u201chello\u201d \u2014 fine.")
+        content = (output_dir / "clean-test" / _stage_filename("draft")).read_text()
+        assert "\u2014" not in content
+        assert "\u201c" not in content
+
+
+# ---------------------------------------------------------------------------
 
 
 class TestSavePiece:

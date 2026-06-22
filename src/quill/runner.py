@@ -33,6 +33,7 @@ from .agent import AgentConfig, AgentDecision, load_agent_config, parse_agent_re
 from .llm import LLMClient
 from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
 from .run_logger import RunLogger
+from .metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +234,17 @@ class StageRunner:
     def __init__(self, agent_set: str = "default"):
         self.agent_set = agent_set
         self.run_logger = RunLogger()
+        self.metrics_svc = MetricsService()
+
+    def _resolve_input_stages(self, stage: str, pipeline) -> list[str]:
+        """Resolve input stage names for a given stage."""
+        if stage in self._STAGE_INPUTS:
+            return [f.replace(".md", "") for f in self._STAGE_INPUTS[stage]]
+        stage_order = pipeline.stage_order
+        if stage in stage_order:
+            idx = stage_order.index(stage)
+            return [stage_order[idx - 1]] if idx > 0 else []
+        return []
 
     def _build_render_context(
         self, piece: "Piece", stage: str, input_content: str, metrics_context: str,
@@ -281,87 +293,8 @@ class StageRunner:
         """Prepend date context to a system prompt."""
         return f"{system_prompt}\n\n{cls._date_context()}"
 
-    def _check_loop_guardrail(self, piece: Piece, stage: str, loop_count: int) -> str:
-        """Check if metrics are degrading across loop iterations.
 
-        Returns a description of the degradation if guardrail triggers,
-        or empty string if metrics are stable/improving.
 
-        Compares current {stage}.metrics.yaml with the snapshot saved
-        before the first loop (stored as {stage}.guardrail-metrics.yaml).
-        """
-        from .metrics import load_metrics
-        stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
-
-        # Load current metrics
-        current = load_metrics(stage_file)
-        if not current:
-            return ""
-
-        # Load baseline (snapshot from before first loop)
-        baseline_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-        if not baseline_file.exists():
-            return ""
-        baseline = yaml.safe_load(baseline_file.read_text()) or {}
-        if not baseline:
-            return ""
-
-        issues = []
-
-        # Word count drop > 30%
-        curr_wc = current.get("word_count", 0)
-        base_wc = baseline.get("word_count", 0)
-        if base_wc > 0 and curr_wc > 0:
-            drop = (base_wc - curr_wc) / base_wc
-            if drop > 0.30:
-                issues.append(f"word count dropped {drop:.0%} ({base_wc} → {curr_wc})")
-
-        # Flesch ease shift > 15 points (readability regression)
-        curr_flesch = current.get("flesch_ease", 50)
-        base_flesch = baseline.get("flesch_ease", 50)
-        shift = abs(curr_flesch - base_flesch)
-        if shift > 15:
-            direction = "harder" if curr_flesch < base_flesch else "easier"
-            issues.append(f"readability shifted {shift:.0f} pts ({direction})")
-
-        # Vocabulary diversity drop > 10%
-        curr_ttr = current.get("type_token_ratio", 0.5)
-        base_ttr = baseline.get("type_token_ratio", 0.5)
-        if base_ttr > 0 and curr_ttr > 0:
-            ttr_drop = (base_ttr - curr_ttr) / base_ttr
-            if ttr_drop > 0.10:
-                issues.append(f"vocabulary diversity dropped {ttr_drop:.0%}")
-
-        # Passive voice increase > 10 percentage points
-        curr_pv = current.get("passive_voice_pct", 0)
-        base_pv = baseline.get("passive_voice_pct", 0)
-        if curr_pv - base_pv > 10:
-            issues.append(f"passive voice increased {curr_pv - base_pv:.0f}pp")
-
-        return "; ".join(issues)
-
-    def _save_guardrail_snapshot(self, piece: Piece, stage: str):
-        """Save current metrics as baseline for loop guardrail comparison."""
-        from .metrics import load_metrics
-        stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
-        current = load_metrics(stage_file)
-        if current:
-            snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-            snapshot_file.write_text(
-                yaml.dump(current, default_flow_style=False),
-                encoding="utf-8",
-            )
-            logger.info("Saved guardrail snapshot for %s", stage)
-
-    def _cleanup_guardrail_snapshot(self, piece: Piece, stage: str):
-        """Remove guardrail snapshot after successful advance."""
-        stage_dir = piece.stage_dir()
-        snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-        if snapshot_file.exists():
-            snapshot_file.unlink()
-            logger.info("Cleaned up guardrail snapshot for %s", stage)
 
     def get_loop_count(self, piece: Piece, stage: str) -> int:
         """Get the current loop count for a stage."""
@@ -407,7 +340,7 @@ class StageRunner:
 
         loop_count = self.get_loop_count(piece, stage)
         input_content = self._read_inputs(piece, stage, pipeline, loop_count)
-        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        metrics_context = self.metrics_svc.build_context(piece, stage, pipeline, self._resolve_input_stages(stage, pipeline))
 
         ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
         prompt = _render_prompt(agent_cfg.prompt_template, ctx)
@@ -579,7 +512,7 @@ class StageRunner:
 
         # Fill prompt template
         from .metrics import load_metrics
-        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        metrics_context = self.metrics_svc.build_context(piece, stage, pipeline, self._resolve_input_stages(stage, pipeline))
         loop_count = self.get_loop_count(piece, stage)
         ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
         prompt = _render_prompt(agent_cfg.prompt_template, ctx)
@@ -667,7 +600,7 @@ class StageRunner:
 
         # Loop guardrail: check for metric degradation across iterations
         if decision.decision == "loop_back" and loop_count > 0:
-            guardrail = self._check_loop_guardrail(piece, stage, loop_count)
+            guardrail = self.metrics_svc.check_guardrail(piece, stage, loop_count)
             if guardrail:
                 decision.decision = "advance"
                 decision.critique = (
@@ -682,7 +615,7 @@ class StageRunner:
                 })
         elif decision.decision == "loop_back" and loop_count == 0:
             # Save baseline metrics snapshot for future guardrail comparisons
-            self._save_guardrail_snapshot(piece, stage)
+            self.metrics_svc.save_guardrail_snapshot(piece, stage)
 
         # Execute decision
         if decision.decision == "loop_back":
@@ -701,14 +634,14 @@ class StageRunner:
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
-            self._cleanup_guardrail_snapshot(piece, stage)
+            self.metrics_svc.cleanup_guardrail_snapshot(piece, stage)
             # Content stages: output already written above, just clean up decision file
             # Feedback stages: write critique as the stage output
             if not is_content_stage:
                 self._write_output(piece, stage, self._format_feedback(decision.critique))
             # Compute text metrics for content stages
             if is_content_stage:
-                self._compute_metrics(piece, stage)
+                self.metrics_svc.compute(piece, stage)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
                 self._advance_meta(piece, stage_def.next)
@@ -915,63 +848,7 @@ class StageRunner:
         decision_file.write_text(content, encoding="utf-8")
         logger.info("Wrote decision to %s", decision_file)
 
-    def _compute_metrics(self, piece: Piece, stage: str):
-        """Compute and save text metrics for a stage's output file."""
-        from .metrics import compute_and_save
-        stage_file = piece.stage_dir() / _stage_filename(stage)
-        if stage_file.exists():
-            try:
-                metrics = compute_and_save(stage_file)
-                logger.info("Metrics for %s/%s: flesch=%.1f, words=%d",
-                           piece.id, stage, metrics["flesch_ease"], metrics["word_count"])
-            except Exception as e:
-                logger.warning("Failed to compute metrics for %s/%s: %s",
-                              piece.id, stage, e)
 
-    def _build_metrics_context(self, piece: Piece, stage: str, pipeline) -> str:
-        """Build a metrics context string for the agent prompt.
-
-        Loads metrics from the input stages and formats them as a readable block.
-        """
-        from .metrics import load_metrics
-
-        stage_dir = piece.stage_dir()
-        lines = []
-
-        # Get input stage names
-        if stage in self._STAGE_INPUTS:
-            input_stages = [f.replace(".md", "") for f in self._STAGE_INPUTS[stage]]
-        else:
-            stage_order = pipeline.stage_order
-            if stage in stage_order:
-                idx = stage_order.index(stage)
-                input_stages = [stage_order[idx - 1]] if idx > 0 else []
-            else:
-                input_stages = []
-
-        for input_stage in input_stages:
-            stage_file = stage_dir / _stage_filename(input_stage)
-            m = load_metrics(stage_file) if stage_file.exists() else None
-            if m:
-                lines.append(f"--- {input_stage} metrics ---")
-                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
-                lines.append(f"  Flesch-Kincaid Grade: {m.get('flesch_kincaid', 'n/a')}")
-                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
-                lines.append(f"  Avg sentence length: {m.get('avg_sentence_length', 'n/a')} words")
-                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
-                lines.append(f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%")
-
-        # Also include current stage metrics if looping
-        current_stage_file = stage_dir / _stage_filename(stage)
-        if current_stage_file.exists():
-            m = load_metrics(current_stage_file)
-            if m:
-                lines.append(f"--- {stage} metrics (current) ---")
-                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
-                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
-                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
-
-        return "\n".join(lines) if lines else "(no metrics available)"
 
     def _evaluate_output(
         self, client: "LLMClient", stage: str, piece: "Piece",

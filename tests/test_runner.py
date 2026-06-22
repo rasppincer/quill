@@ -488,7 +488,7 @@ class TestLoopGuardrails:
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         piece = load_piece(sample_piece)
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert result == ""
 
     def test_guardrail_triggers_on_word_count_drop(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -509,7 +509,7 @@ class TestLoopGuardrails:
         current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
         current_file.write_text(yaml.dump(current))
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert "word count dropped" in result
 
     def test_guardrail_no_trigger_when_stable(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -528,7 +528,7 @@ class TestLoopGuardrails:
         current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
         current_file.write_text(yaml.dump(current))
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert result == ""
 
     def test_snapshot_save_and_cleanup(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -544,12 +544,12 @@ class TestLoopGuardrails:
         (stage_dir / _stage_filename("review", ".metrics.yaml")).write_text(yaml.dump(current))
 
         # Save snapshot
-        runner._save_guardrail_snapshot(piece, "review")
+        runner.metrics_svc.save_guardrail_snapshot(piece, "review")
         snapshot = stage_dir / _stage_filename("review", ".guardrail-metrics.yaml")
         assert snapshot.exists()
 
         # Cleanup
-        runner._cleanup_guardrail_snapshot(piece, "review")
+        runner.metrics_svc.cleanup_guardrail_snapshot(piece, "review")
         assert not snapshot.exists()
 
 

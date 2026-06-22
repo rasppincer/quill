@@ -45,9 +45,10 @@ def create_piece_via_api(context, title, genre="fiction", **extra):
 
 def write_stage_file(piece_id, stage, content, with_frontmatter=False, title=None):
     """Write content to a stage file directly on disk."""
+    from quill.piece import _stage_filename
     stage_dir = OUTPUT_DIR / piece_id
     stage_dir.mkdir(parents=True, exist_ok=True)
-    path = stage_dir / f"{stage}.md"
+    path = stage_dir / _stage_filename(stage)
     if with_frontmatter:
         meta_path = stage_dir / "meta.yaml"
         if meta_path.exists():
@@ -81,7 +82,8 @@ def read_meta(piece_id):
 
 def read_stage_file(piece_id, stage):
     """Read raw content of a stage file."""
-    path = OUTPUT_DIR / piece_id / f"{stage}.md"
+    from quill.piece import _stage_filename
+    path = OUTPUT_DIR / piece_id / _stage_filename(stage)
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
@@ -387,6 +389,124 @@ def step_no_json_decision(context):
     content = read_stage_file(context.piece_id, "review")
     assert '"decision":' not in content, "review.md contains JSON decision block"
     assert '"decision" :' not in content, "review.md contains JSON decision block"
+
+
+# ---------------------------------------------------------------------------
+# LLM integration steps
+# ---------------------------------------------------------------------------
+
+
+@when("I request the available models")
+def step_request_models(context):
+    api(context, "get", "/api/models")
+
+
+@then("the response has status {status:d}")
+def step_check_status(context, status):
+    assert context.response is not None, "No response"
+    assert context.response.status_code == status, (
+        f"Expected status {status}, got {context.response.status_code}: "
+        f"{context.response.text[:300]}"
+    )
+
+
+@then("the response contains a non-empty models list")
+def step_models_nonempty(context):
+    data = context.response_json
+    assert "models" in data, f"No 'models' key in response: {data}"
+    assert len(data["models"]) > 0, f"Models list is empty: {data}"
+
+
+@then("the response contains a decision")
+def step_has_decision(context):
+    data = context.response_json
+    assert data is not None, "No response JSON"
+    assert "decision" in data, f"No 'decision' in response: {data}"
+    assert data["decision"] in ("advance", "loop_back", "error"), (
+        f"Unexpected decision: {data['decision']}"
+    )
+
+
+@then("the response contains a critique")
+def step_has_critique(context):
+    data = context.response_json
+    assert data is not None, "No response JSON"
+    assert "critique" in data, f"No 'critique' in response: {data}"
+    assert len(data.get("critique", "")) > 0, "Critique is empty"
+
+
+@then("the review.md file exists and has content")
+def step_review_file_has_content(context):
+    content = read_stage_file(context.piece_id, "review")
+    assert len(content.strip()) > 0, "review.md is empty or doesn't exist"
+
+
+@when("I start an async agent run for stage \"{stage}\" with agent set \"{agent_set}\"")
+def step_start_async_run(context, stage, agent_set):
+    import requests
+    url = f"{context.api_base}/api/pieces/{context.piece_id}/run-async"
+    resp = requests.post(url, json={"stage": stage, "agent_set": agent_set})
+    context.response = resp
+    try:
+        context.response_json = resp.json()
+    except Exception:
+        context.response_json = None
+    if resp.status_code == 200 and context.response_json:
+        context.run_id = context.response_json.get("run_id")
+
+
+@then("the response contains a run_id")
+def step_has_run_id(context):
+    data = context.response_json
+    assert data is not None, "No response JSON"
+    assert "run_id" in data, f"No 'run_id' in response: {data}"
+    assert len(data["run_id"]) > 0, "run_id is empty"
+
+
+@when("I wait for the async run to complete")
+def step_wait_async_run(context):
+    import requests
+    import time
+    assert hasattr(context, "run_id") and context.run_id, "No run_id to poll"
+
+    # Poll the SSE endpoint with a timeout
+    url = f"{context.api_base}/api/pieces/{context.piece_id}/runs/{context.run_id}/events"
+    start = time.time()
+    timeout = 120  # 2 minutes max for LLM call
+    context.sse_events = []
+
+    try:
+        resp = requests.get(url, stream=True, timeout=timeout)
+        for line in resp.iter_lines(decode_unicode=True):
+            if time.time() - start > timeout:
+                context.error = f"SSE timed out after {timeout}s"
+                break
+            if line and line.startswith("event:"):
+                event_type = line.split(":", 1)[1].strip()
+                context.sse_events.append(event_type)
+                if event_type in ("run_complete", "error"):
+                    break
+    except Exception as e:
+        context.error = f"SSE connection error: {e}"
+
+
+@then("the run log contains entries")
+def step_run_log_has_entries(context):
+    import requests
+    url = f"{context.api_base}/api/pieces/{context.piece_id}/run-log"
+    resp = requests.get(url)
+    data = resp.json()
+    assert data["count"] > 0, f"Run log is empty. SSE events: {getattr(context, 'sse_events', [])}"
+    if hasattr(context, "error") and context.error:
+        assert False, context.error
+
+
+@then("the draft.md file has content longer than {min_chars:d} chars")
+def step_draft_content_length(context, min_chars):
+    content = read_stage_file(context.piece_id, "draft")
+    assert len(content.strip()) > min_chars, (
+        f"draft.md content is {len(content.strip())} chars, expected > {min_chars}"
+    )
 
 
 # ---------------------------------------------------------------------------

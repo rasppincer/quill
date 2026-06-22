@@ -165,8 +165,11 @@ GET  /api/agents                    — list all agent sets
 GET  /api/agents/<set>              — agent set config + prompts
 GET  /api/agents/<set>/<stage>/prompt  — read prompt template
 PUT  /api/agents/<set>/<stage>/prompt  — update prompt template
-POST /api/pieces/<id>/run           — run agent on current stage
-POST /api/pieces/<id>/run {"chain": true}  — run all remaining stages
+POST /api/pieces/<id>/run           — run agent (sync, blocks until done)
+POST /api/pieces/<id>/run {"chain": true}  — run all remaining stages (sync)
+POST /api/pieces/<id>/run-async     — run agent (async, returns run_id)
+GET  /api/pieces/<id>/runs/<run_id>/events — SSE live progress stream
+GET  /api/pieces/<id>/prompt/<stage> — debug: show composed prompt
 ```
 
 ## Dashboard
@@ -180,11 +183,15 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 ## Conventions
 
-- Pieces are directories with `meta.yaml` + per-stage `.md` files
+- Pieces are directories with `meta.yaml` + per-stage files
 - `meta.yaml` is the single source of truth for metadata and current stage
 - Content stages produce two files: `{stage}.md` (generated text) and `{stage}.decision.md` (evaluation)
 - Feedback stages produce one file: `{stage}.md` (critique, clean markdown)
-- The API is pure JSON — dashboard templates are rendered by Flask
+- Output files prefixed with stage number: `01_brief.md`, `03_draft.md`, `09_done.md`
+- Prompt templates use Jinja2 syntax with `{% if is_looping %}` conditionals
+- Debug: `debug_prompts: true` in model.yaml dumps actual prompts to files at runtime
+- Structured output: `structured_output: true` in model.yaml requests JSON from provider
+- Async: `POST /run-async` + SSE at `/runs/<id>/events` for non-blocking execution
 - Works standalone (port 8325) or via nginx (`/quill/`)
 - ProxyFix handles `X-Forwarded-Prefix` for correct URL generation behind nginx
 - Agent loop history tracked in `meta.yaml` under `loop_history`
@@ -192,7 +199,7 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 ## Testing
 
-**233 pytest tests + 16 behave BDD scenarios** — all passing.
+**272 pytest tests + 16 behave BDD scenarios** — all passing.
 
 ### Pytest
 

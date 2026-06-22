@@ -37,6 +37,15 @@
 - [x] Global model config (agents/model.yaml) — decoupled from agent sets
 - [x] Model selector on Agents tab (fetches models from LLM server)
 - [x] Agent flavor selector on piece detail (dropdown, filtered by stage)
+- [x] Two-call approach — generate → evaluate, separate files ({stage}.md + {stage}.decision.md)
+- [x] Configurable evaluate prompts per flavor (evaluate.prompt.md)
+- [x] Jinja2 prompt templates — `{% if is_looping %}` conditionals, `_render_prompt()` with fallback
+- [x] Two-file output — generated text and evaluation stored separately
+- [x] Prefixed output filenames — 01_brief.md through 09_done.md, sorted by execution order
+- [x] Debug prompt dump — `debug_prompts: true` writes actual prompts to files at runtime
+- [x] Template variables — {{loop_count}}, {{is_looping}}, {{max_loops}} for loop-aware prompts
+- [x] Debug prompt endpoint — GET /api/pieces/<id>/prompt/<stage> shows composed prompts
+- [x] Metrics flow — removed from generate prompt, added to evaluate prompt for data-driven decisions
 
 ## Phase 5 — Polish
 
@@ -58,15 +67,15 @@
 
 ## Phase 6 — Quality
 
-- [x] Backend unit tests (139 tests, pytest, 0.7s)
+- [x] Backend unit tests (272 tests, pytest, 2.2s)
 - [ ] Dashboard E2E tests (Playwright) — piece detail, agent selector, flavor management, stage content viewer
 
 ## Phase 7 — Architecture (from DESIGN_REPORT.md)
 
 ### High Priority
-- [ ] **Content stripping safety** — `_strip_json_block()` in agent.py uses regex that could delete JSON code examples in API tutorials or programming blog posts. Needs context-aware stripping.
-- [ ] **Structured JSON outputs** — Use OpenAI structured outputs / Anthropic tool use / Pydantic schemas for decision routing instead of regex parsing. Eliminates false positives from heuristic fallback.
-- [ ] **Async execution worker** — Flask blocks on LLM calls (seconds/minutes). Use thread pool or background job runner. Expose SSE at `/api/pieces/<id>/logs` for live dashboard output.
+- [x] **Content stripping safety** — `_strip_json_block()` now only strips trailing JSON decision blocks using `rfind`. JSON code examples in content preserved.
+- [x] **Structured JSON outputs** — `response_format: {"type": "json_object"}` support via `structured_output: true` in model.yaml. Falls back to regex parsing.
+- [x] **Async execution worker** — RunManager with ThreadPoolExecutor(2), SSE at `/runs/<id>/events`, live log panel in dashboard.
 
 ### Low Priority
 - [ ] **Move stage inputs to pipeline config** — `_STAGE_INPUTS` in runner.py is hardcoded Python. Move to `workflows/default.yaml` so custom stages (Research, SEO) get proper input routing without code changes.

@@ -7,7 +7,8 @@ from unittest.mock import patch, MagicMock
 
 import yaml
 
-from quill.runner import StageRunner, _render_prompt
+from quill.runner import StageRunner
+from quill.prompt_builder import render_prompt
 from quill.piece import _stage_filename
 from quill.agent import AgentDecision
 
@@ -387,14 +388,14 @@ class TestRenderPrompt:
         """Basic {{VAR}} replacement works."""
         template = "Title: {{TITLE}}, Genre: {{GENRE}}"
         ctx = {"TITLE": "My Post", "GENRE": "fiction"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert result == "Title: My Post, Genre: fiction"
 
     def test_jinja2_conditional_true(self):
         """Jinja2 conditionals render when condition is true."""
         template = "Write content.{% if is_looping %}\nPrevious attempt:\n{{CONTENT}}{% endif %}"
         ctx = {"is_looping": True, "CONTENT": "Old draft here."}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Previous attempt" in result
         assert "Old draft" in result
 
@@ -402,7 +403,7 @@ class TestRenderPrompt:
         """Conditional block excluded when condition is false."""
         template = "Write content.{% if is_looping %}\nPrevious:\n{{CONTENT}}{% endif %}"
         ctx = {"is_looping": False, "CONTENT": "Old draft."}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Previous" not in result
         assert "Write content" in result
 
@@ -410,7 +411,7 @@ class TestRenderPrompt:
         """Falls back to .replace() when template has invalid Jinja2."""
         template = "Code: {x = 5} and title: {{TITLE}}"
         ctx = {"TITLE": "Test"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Test" in result
 
     def test_multiline_content_no_corruption(self):
@@ -418,7 +419,7 @@ class TestRenderPrompt:
         template = "## Input\n{{CONTENT}}\n## Stage: {{STAGE}}"
         content = "# Heading\n\n```python\ndef foo():\n    return {1: 2}\n```\n\n*bold* **italic**"
         ctx = {"CONTENT": content, "STAGE": "draft"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "# Heading" in result
         assert "def foo" in result
         assert "Stage: draft" in result
@@ -427,7 +428,7 @@ class TestRenderPrompt:
         """Undefined template vars are silently ignored."""
         template = "Title: {{TITLE}}, Missing: {{MISSING_VAR}}"
         ctx = {"TITLE": "Test"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Title: Test" in result
 
 

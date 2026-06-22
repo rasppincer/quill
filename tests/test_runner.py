@@ -7,7 +7,8 @@ from unittest.mock import patch, MagicMock
 
 import yaml
 
-from quill.runner import StageRunner, _render_prompt
+from quill.runner import StageRunner
+from quill.prompt_builder import render_prompt
 from quill.piece import _stage_filename
 from quill.agent import AgentDecision
 
@@ -387,14 +388,14 @@ class TestRenderPrompt:
         """Basic {{VAR}} replacement works."""
         template = "Title: {{TITLE}}, Genre: {{GENRE}}"
         ctx = {"TITLE": "My Post", "GENRE": "fiction"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert result == "Title: My Post, Genre: fiction"
 
     def test_jinja2_conditional_true(self):
         """Jinja2 conditionals render when condition is true."""
         template = "Write content.{% if is_looping %}\nPrevious attempt:\n{{CONTENT}}{% endif %}"
         ctx = {"is_looping": True, "CONTENT": "Old draft here."}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Previous attempt" in result
         assert "Old draft" in result
 
@@ -402,7 +403,7 @@ class TestRenderPrompt:
         """Conditional block excluded when condition is false."""
         template = "Write content.{% if is_looping %}\nPrevious:\n{{CONTENT}}{% endif %}"
         ctx = {"is_looping": False, "CONTENT": "Old draft."}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Previous" not in result
         assert "Write content" in result
 
@@ -410,7 +411,7 @@ class TestRenderPrompt:
         """Falls back to .replace() when template has invalid Jinja2."""
         template = "Code: {x = 5} and title: {{TITLE}}"
         ctx = {"TITLE": "Test"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Test" in result
 
     def test_multiline_content_no_corruption(self):
@@ -418,7 +419,7 @@ class TestRenderPrompt:
         template = "## Input\n{{CONTENT}}\n## Stage: {{STAGE}}"
         content = "# Heading\n\n```python\ndef foo():\n    return {1: 2}\n```\n\n*bold* **italic**"
         ctx = {"CONTENT": content, "STAGE": "draft"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "# Heading" in result
         assert "def foo" in result
         assert "Stage: draft" in result
@@ -427,7 +428,7 @@ class TestRenderPrompt:
         """Undefined template vars are silently ignored."""
         template = "Title: {{TITLE}}, Missing: {{MISSING_VAR}}"
         ctx = {"TITLE": "Test"}
-        result = _render_prompt(template, ctx)
+        result = render_prompt(template, ctx)
         assert "Title: Test" in result
 
 
@@ -488,7 +489,7 @@ class TestLoopGuardrails:
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         piece = load_piece(sample_piece)
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert result == ""
 
     def test_guardrail_triggers_on_word_count_drop(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -509,7 +510,7 @@ class TestLoopGuardrails:
         current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
         current_file.write_text(yaml.dump(current))
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert "word count dropped" in result
 
     def test_guardrail_no_trigger_when_stable(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -528,7 +529,7 @@ class TestLoopGuardrails:
         current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
         current_file.write_text(yaml.dump(current))
 
-        result = runner._check_loop_guardrail(piece, "review", 1)
+        result = runner.metrics_svc.check_guardrail(piece, "review", 1)
         assert result == ""
 
     def test_snapshot_save_and_cleanup(self, runner, sample_piece, tmp_output, monkeypatch):
@@ -544,12 +545,12 @@ class TestLoopGuardrails:
         (stage_dir / _stage_filename("review", ".metrics.yaml")).write_text(yaml.dump(current))
 
         # Save snapshot
-        runner._save_guardrail_snapshot(piece, "review")
+        runner.metrics_svc.save_guardrail_snapshot(piece, "review")
         snapshot = stage_dir / _stage_filename("review", ".guardrail-metrics.yaml")
         assert snapshot.exists()
 
         # Cleanup
-        runner._cleanup_guardrail_snapshot(piece, "review")
+        runner.metrics_svc.cleanup_guardrail_snapshot(piece, "review")
         assert not snapshot.exists()
 
 
@@ -569,7 +570,7 @@ class TestRunLog:
         monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._log_run_entry(piece, "review", "agent", "system prompt", "user prompt", {
+        runner.run_logger.log(piece, "review", "agent", "system prompt", "user prompt", {
             "decision": "advance", "critique": "Good work.",
         })
 
@@ -590,9 +591,9 @@ class TestRunLog:
         monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._log_run_entry(piece, "review", "agent", "sys1", "user1")
-        runner._log_run_entry(piece, "review", "agent", "sys2", "user2", {"decision": "loop_back"})
-        runner._log_run_entry(piece, "draft", "generate", "sys3", "user3")
+        runner.run_logger.log(piece, "review", "agent", "sys1", "user1")
+        runner.run_logger.log(piece, "review", "agent", "sys2", "user2", {"decision": "loop_back"})
+        runner.run_logger.log(piece, "draft", "generate", "sys3", "user3")
 
         log_file = sample_piece / "run-log.jsonl"
         entries = [json.loads(line) for line in log_file.read_text().strip().split("\n")]

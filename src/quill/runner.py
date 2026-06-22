@@ -32,198 +32,13 @@ import yaml
 from .agent import AgentConfig, AgentDecision, load_agent_config, parse_agent_response
 from .llm import LLMClient
 from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
+from .run_logger import RunLogger
+from .run_manager import RunManager
+from .metrics_service import MetricsService
+from .prompt_builder import PromptBuilder, render_prompt
 
 logger = logging.getLogger(__name__)
 
-
-class RunManager:
-    """Singleton manager for async agent runs with SSE event streaming.
-
-    Uses a ThreadPoolExecutor(max_workers=2) to run StageRunner in background
-    threads. Each run gets an in-memory event queue that SSE endpoints can
-    subscribe to.
-    """
-
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    inst = super().__new__(cls)
-                    inst._executor = ThreadPoolExecutor(max_workers=2)
-                    inst._runs = {}  # run_id -> run info dict
-                    inst._run_lock = threading.Lock()
-                    cls._instance = inst
-        return cls._instance
-
-    def start_run(
-        self,
-        piece_id: str,
-        stage: str | None = None,
-        agent_set: str = "default",
-        chain: bool = False,
-    ) -> str:
-        """Start a background run and return the run_id.
-
-        Args:
-            piece_id: The piece to run on.
-            stage: Stage to run (default: piece's current stage).
-            agent_set: Agent set to use.
-            chain: If True, run all remaining stages.
-
-        Returns:
-            run_id string for SSE subscription.
-        """
-        self._cleanup_old_runs()
-
-        run_id = uuid.uuid4().hex[:12]
-        event_queue: queue.Queue = queue.Queue()
-
-        with self._run_lock:
-            self._runs[run_id] = {
-                "queue": event_queue,
-                "status": "running",
-                "result": None,
-                "piece_id": piece_id,
-                "stage": stage,
-                "agent_set": agent_set,
-                "chain": chain,
-                "started_at": time.time(),
-            }
-
-        self._executor.submit(
-            self._execute_run, run_id, piece_id, stage, agent_set, chain, event_queue,
-        )
-        return run_id
-
-    def get_run(self, run_id: str) -> dict | None:
-        """Get run info by id."""
-        with self._run_lock:
-            return self._runs.get(run_id)
-
-    def get_events(self, run_id: str):
-        """Generator that yields SSE-formatted event strings.
-
-        Blocks until the run completes (sentinel None in queue).
-        Yields lines like:
-            event: stage_start
-            data: {"stage": "review", ...}
-
-        Handles client disconnect by catching GeneratorExit.
-        """
-        with self._run_lock:
-            run = self._runs.get(run_id)
-        if not run:
-            yield f"event: error\ndata: {__import__('json').dumps({'error': 'Run not found'})}\n\n"
-            return
-
-        q = run["queue"]
-        try:
-            while True:
-                try:
-                    event = q.get(timeout=300)  # 5 min timeout
-                except queue.Empty:
-                    # Heartbeat to keep connection alive
-                    yield ": heartbeat\n\n"
-                    continue
-
-                if event is None:
-                    # Sentinel: run is complete
-                    with self._run_lock:
-                        run_info = self._runs.get(run_id, {})
-                    yield f"event: run_complete\ndata: {__import__('json').dumps({'status': run_info.get('status', 'unknown'), 'result': run_info.get('result')})}\n\n"
-                    return
-
-                event_type = event.get("type", "message")
-                data = event.get("data", {})
-                yield f"event: {event_type}\ndata: {__import__('json').dumps(data)}\n\n"
-        except GeneratorExit:
-            # Client disconnected — stop consuming
-            return
-
-    def _execute_run(self, run_id, piece_id, stage, agent_set, chain, event_queue):
-        """Background worker that runs StageRunner and emits events."""
-        import json as _json
-
-        try:
-            runner = StageRunner(agent_set=agent_set)
-
-            if chain:
-                results = runner.run_chain(
-                    piece_id, from_stage=stage, event_queue=event_queue,
-                )
-                result_data = {
-                    "chain": True,
-                    "results": [
-                        {
-                            "stage": r.stage,
-                            "decision": r.decision,
-                            "critique": r.critique[:500] + "..." if len(r.critique) > 500 else r.critique,
-                            "loop_count": r.loop_count,
-                            "error": r.error,
-                        }
-                        for r in results
-                    ],
-                }
-            else:
-                result = runner.run_stage(
-                    piece_id, stage or "", event_queue=event_queue,
-                )
-                result_data = {
-                    "stage": result.stage,
-                    "decision": result.decision,
-                    "critique": result.critique,
-                    "loop_count": result.loop_count,
-                    "error": result.error,
-                }
-
-            with self._run_lock:
-                self._runs[run_id]["status"] = "complete"
-                self._runs[run_id]["result"] = result_data
-
-        except Exception as exc:
-            logger.exception("Run %s failed", run_id)
-            with self._run_lock:
-                self._runs[run_id]["status"] = "error"
-                self._runs[run_id]["result"] = {"error": str(exc)}
-            event_queue.put({"type": "error", "data": {"error": str(exc)}})
-
-        finally:
-            # Signal completion
-            event_queue.put(None)
-
-    def _cleanup_old_runs(self):
-        """Remove runs older than 5 minutes (thread-safe)."""
-        cutoff = time.time() - 300
-        with self._run_lock:
-            expired = [
-                rid for rid, info in self._runs.items()
-                if info["started_at"] < cutoff
-            ]
-            for rid in expired:
-                del self._runs[rid]
-
-
-def _render_prompt(template: str, context: dict) -> str:
-    """Render a prompt template with Jinja2, falling back to .replace().
-
-    Jinja2 enables conditionals ({% if %}), loops, and filters.
-    Falls back to simple string replacement if the template contains
-    syntax that breaks Jinja2 (e.g., code examples with { }).
-    """
-    try:
-        t = jinja2.Environment(
-            undefined=jinja2.Undefined  # silently ignore undefined vars
-        ).from_string(template)
-        return t.render(**context)
-    except jinja2.TemplateSyntaxError:
-        # Fallback: manual .replace() for templates with non-Jinja2 braces
-        result = template
-        for key, value in context.items():
-            result = result.replace("{{" + key + "}}", str(value))
-        return result
 
 
 class StageRunner:
@@ -231,6 +46,29 @@ class StageRunner:
 
     def __init__(self, agent_set: str = "default"):
         self.agent_set = agent_set
+        self.run_logger = RunLogger()
+        self.metrics_svc = MetricsService()
+        self.prompt_builder = PromptBuilder()
+
+    def get_loop_count(self, piece: Piece, stage: str) -> int:
+        """Get the current loop count for a stage."""
+        meta_path = piece.stage_dir() / "meta.yaml"
+        if not meta_path.exists():
+            return 0
+        meta = yaml.safe_load(meta_path.read_text()) or {}
+        return meta.get("loops", {}).get(stage, 0)
+
+    def set_loop_count(self, piece: Piece, stage: str, count: int):
+        """Update the loop count for a stage in meta.yaml."""
+        meta_path = piece.stage_dir() / "meta.yaml"
+        meta = yaml.safe_load(meta_path.read_text()) or {}
+        if "loops" not in meta:
+            meta["loops"] = {}
+        meta["loops"][stage] = count
+        meta_path.write_text(
+            yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
 
     def _build_render_context(
         self, piece: "Piece", stage: str, input_content: str, metrics_context: str,
@@ -255,172 +93,7 @@ class StageRunner:
             ctx.update(extra)
         return ctx
 
-    def _log_run_entry(
-        self, piece: "Piece", stage: str, call_type: str,
-        system: str, user: str, result: dict | None = None,
-    ):
-        """Append a run log entry to run-log.jsonl in the piece directory.
 
-        Args:
-            piece: The piece being processed.
-            stage: Current stage name.
-            call_type: "generate", "evaluate", or "agent" (single-call feedback).
-            system: System prompt sent to LLM.
-            user: User prompt sent to LLM (with all variables filled).
-            result: Optional dict with decision, critique, elapsed, etc.
-        """
-        from .agent import load_model_config
-        cfg = load_model_config()
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "stage": stage,
-            "call": call_type,
-            "model": cfg.get("model", ""),
-            "system_chars": len(system),
-            "user_chars": len(user),
-        }
-        if result:
-            entry.update(result)
-
-        log_file = piece.stage_dir() / "run-log.jsonl"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        logger.info("Run log entry: %s/%s (%s)", piece.id, stage, call_type)
-
-    @staticmethod
-    def _get_structured_output_format() -> dict | None:
-        """Return response_format dict if structured_output is enabled in config."""
-        from .agent import load_model_config
-        cfg = load_model_config()
-        if cfg.get("structured_output"):
-            return {"type": "json_object"}
-        return None
-
-    @staticmethod
-    def _date_context() -> str:
-        """Return a date context string to inject into system prompts."""
-        now = datetime.now()
-        return (
-            f"IMPORTANT: Today is {now.strftime('%d %B %Y')}. "
-            f"Your training data may be older. "
-            f"Execute all tasks knowing the current date is {now.strftime('%d %B %Y')}."
-        )
-
-    @classmethod
-    def _with_date(cls, system_prompt: str) -> str:
-        """Prepend date context to a system prompt."""
-        return f"{system_prompt}\n\n{cls._date_context()}"
-
-    def _check_loop_guardrail(self, piece: Piece, stage: str, loop_count: int) -> str:
-        """Check if metrics are degrading across loop iterations.
-
-        Returns a description of the degradation if guardrail triggers,
-        or empty string if metrics are stable/improving.
-
-        Compares current {stage}.metrics.yaml with the snapshot saved
-        before the first loop (stored as {stage}.guardrail-metrics.yaml).
-        """
-        from .metrics import load_metrics
-        stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
-
-        # Load current metrics
-        current = load_metrics(stage_file)
-        if not current:
-            return ""
-
-        # Load baseline (snapshot from before first loop)
-        baseline_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-        if not baseline_file.exists():
-            return ""
-        baseline = yaml.safe_load(baseline_file.read_text()) or {}
-        if not baseline:
-            return ""
-
-        issues = []
-
-        # Word count drop > 30%
-        curr_wc = current.get("word_count", 0)
-        base_wc = baseline.get("word_count", 0)
-        if base_wc > 0 and curr_wc > 0:
-            drop = (base_wc - curr_wc) / base_wc
-            if drop > 0.30:
-                issues.append(f"word count dropped {drop:.0%} ({base_wc} → {curr_wc})")
-
-        # Flesch ease shift > 15 points (readability regression)
-        curr_flesch = current.get("flesch_ease", 50)
-        base_flesch = baseline.get("flesch_ease", 50)
-        shift = abs(curr_flesch - base_flesch)
-        if shift > 15:
-            direction = "harder" if curr_flesch < base_flesch else "easier"
-            issues.append(f"readability shifted {shift:.0f} pts ({direction})")
-
-        # Vocabulary diversity drop > 10%
-        curr_ttr = current.get("type_token_ratio", 0.5)
-        base_ttr = baseline.get("type_token_ratio", 0.5)
-        if base_ttr > 0 and curr_ttr > 0:
-            ttr_drop = (base_ttr - curr_ttr) / base_ttr
-            if ttr_drop > 0.10:
-                issues.append(f"vocabulary diversity dropped {ttr_drop:.0%}")
-
-        # Passive voice increase > 10 percentage points
-        curr_pv = current.get("passive_voice_pct", 0)
-        base_pv = baseline.get("passive_voice_pct", 0)
-        if curr_pv - base_pv > 10:
-            issues.append(f"passive voice increased {curr_pv - base_pv:.0f}pp")
-
-        return "; ".join(issues)
-
-    def _save_guardrail_snapshot(self, piece: Piece, stage: str):
-        """Save current metrics as baseline for loop guardrail comparison."""
-        from .metrics import load_metrics
-        stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
-        current = load_metrics(stage_file)
-        if current:
-            snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-            snapshot_file.write_text(
-                yaml.dump(current, default_flow_style=False),
-                encoding="utf-8",
-            )
-            logger.info("Saved guardrail snapshot for %s", stage)
-
-    def _cleanup_guardrail_snapshot(self, piece: Piece, stage: str):
-        """Remove guardrail snapshot after successful advance."""
-        stage_dir = piece.stage_dir()
-        snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
-        if snapshot_file.exists():
-            snapshot_file.unlink()
-            logger.info("Cleaned up guardrail snapshot for %s", stage)
-
-    def get_loop_count(self, piece: Piece, stage: str) -> int:
-        """Get the current loop count for a stage."""
-        meta_path = piece.stage_dir() / "meta.yaml"
-        if not meta_path.exists():
-            return 0
-        meta = yaml.safe_load(meta_path.read_text()) or {}
-        return meta.get("loops", {}).get(stage, 0)
-
-    def set_loop_count(self, piece: Piece, stage: str, count: int):
-        """Update the loop count for a stage in meta.yaml."""
-        meta_path = piece.stage_dir() / "meta.yaml"
-        meta = yaml.safe_load(meta_path.read_text()) or {}
-        if "loops" not in meta:
-            meta["loops"] = {}
-        meta["loops"][stage] = count
-        meta_path.write_text(
-            yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
-
-    def compose_prompt(self, piece_id: str, stage: str, output_dir: Path | None = None) -> dict:
-        """Assemble the full prompt for a stage without calling the LLM.
-
-        Returns a dict with the system prompt, user prompt, and metadata
-        so you can inspect exactly what would be sent.
-        """
-        from .pipeline import load_pipeline
-        pipeline = load_pipeline("default")
         stage_def = pipeline.get_stage(stage)
 
         from .piece import DEFAULT_OUTPUT_DIR
@@ -437,29 +110,29 @@ class StageRunner:
 
         loop_count = self.get_loop_count(piece, stage)
         input_content = self._read_inputs(piece, stage, pipeline, loop_count)
-        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        metrics_context = self.metrics_svc.build_context(piece, stage, pipeline, PromptBuilder.resolve_input_stages(stage, pipeline, self._STAGE_INPUTS))
 
-        ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
-        prompt = _render_prompt(agent_cfg.prompt_template, ctx)
+        ctx = self.prompt_builder.build_context(piece, stage, input_content, metrics_context, loop_count)
+        prompt = render_prompt(agent_cfg.prompt_template, ctx)
 
         content_stages = {"outline", "draft", "revise", "humanize", "polish"}
         is_content_stage = stage in content_stages
 
         if is_content_stage:
-            gen_system = self._with_date(
+            gen_system = PromptBuilder.with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
             # Build the evaluate prompt from template (no LLM call)
-            eval_template = self._load_evaluate_template(self.agent_set)
+            eval_template = PromptBuilder.load_evaluate_template(self.agent_set)
             if eval_template:
-                eval_ctx = self._build_render_context(
+                eval_ctx = self.prompt_builder.build_context(
                     piece, stage, input_content, "", loop_count,
                     extra={"GENERATED": "<not yet generated — will be filled at runtime>",
                            "INPUT_CONTENT": input_content},
                 )
-                eval_prompt = _render_prompt(eval_template, eval_ctx)
+                eval_prompt = render_prompt(eval_template, eval_ctx)
             else:
                 eval_prompt = (
                     f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
@@ -470,7 +143,7 @@ class StageRunner:
                     f"Evaluate the generated {stage} output.\n\n"
                     f"Be strict but fair. Only loop_back if there are real, fixable problems."
                 )
-            eval_system = self._with_date(
+            eval_system = PromptBuilder.with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
@@ -511,7 +184,7 @@ class StageRunner:
                 },
             }
         else:
-            eval_system = self._with_date(
+            eval_system = PromptBuilder.with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
@@ -546,6 +219,141 @@ class StageRunner:
                     "max_loops": agent_cfg.max_loops,
                 },
             }
+
+    def compose_prompt(self, piece_id: str, stage: str, output_dir: Path | None = None) -> dict:
+        """Assemble the full prompt for a stage without calling the LLM.
+
+        Returns a dict with the system prompt, user prompt, and metadata
+        so you can inspect exactly what would be sent.
+        """
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+        stage_def = pipeline.get_stage(stage)
+
+        from .piece import DEFAULT_OUTPUT_DIR
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        piece_dir = base / piece_id
+        if not piece_dir.exists():
+            return {"error": f"Piece '{piece_id}' not found"}
+
+        piece = load_piece(piece_dir)
+
+        agent_cfg = load_agent_config(self.agent_set, stage)
+        if not agent_cfg or not agent_cfg.prompt_template:
+            return {"error": f"No agent config for stage '{stage}' in set '{self.agent_set}'"}
+
+        loop_count = self.get_loop_count(piece, stage)
+        input_content = self._read_inputs(piece, stage, pipeline, loop_count)
+        metrics_context = self.metrics_svc.build_context(piece, stage, pipeline, PromptBuilder.resolve_input_stages(stage, pipeline, self._STAGE_INPUTS))
+
+        ctx = self.prompt_builder.build_context(piece, stage, input_content, metrics_context, loop_count)
+        prompt = render_prompt(agent_cfg.prompt_template, ctx)
+
+        content_stages = {"outline", "draft", "revise", "humanize", "polish"}
+        is_content_stage = stage in content_stages
+
+        if is_content_stage:
+            gen_system = PromptBuilder.with_date(
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Produce high-quality content. "
+                f"Do NOT include any JSON or decision blocks — just write the content."
+            )
+            # Build the evaluate prompt from template (no LLM call)
+            eval_template = PromptBuilder.load_evaluate_template(self.agent_set)
+            if eval_template:
+                eval_ctx = self.prompt_builder.build_context(
+                    piece, stage, input_content, "", loop_count,
+                    extra={"GENERATED": "<not yet generated — will be filled at runtime>",
+                           "INPUT_CONTENT": input_content},
+                )
+                eval_prompt = render_prompt(eval_template, eval_ctx)
+            else:
+                eval_prompt = (
+                    f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
+                    f"## Stage: {stage}\n\n"
+                    f"## Input given to the {stage} agent:\n{input_content}\n\n"
+                    f"## Generated {stage} output:\n<not yet generated>\n\n"
+                    f"## Task\n"
+                    f"Evaluate the generated {stage} output.\n\n"
+                    f"Be strict but fair. Only loop_back if there are real, fixable problems."
+                )
+            eval_system = PromptBuilder.with_date(
+                f"You are a quality evaluator. Respond with ONLY a JSON block "
+                f"containing 'decision' (advance or loop_back) and 'critique'."
+            )
+            return {
+                "piece_id": piece_id,
+                "stage": stage,
+                "agent_set": self.agent_set,
+                "loop_count": loop_count,
+                "max_loops": agent_cfg.max_loops,
+                "is_content_stage": True,
+                "model": agent_cfg.model,
+                "api_base": agent_cfg.api_base,
+                "temperature": agent_cfg.temperature,
+                "max_tokens": agent_cfg.max_tokens,
+                "generate": {
+                    "system": gen_system,
+                    "user": prompt,
+                    "char_count": len(prompt),
+                },
+                "evaluate": {
+                    "system": eval_system,
+                    "user": eval_prompt,
+                    "char_count": len(eval_prompt),
+                    "note": "The 'Generated output' section above shows '<not yet generated>' — the real evaluate prompt includes the actual generated text from the generate call.",
+                },
+                "input_content_char_count": len(input_content),
+                "template_vars": {
+                    "TITLE": piece.title,
+                    "GENRE": piece.genre,
+                    "TYPE": piece.type,
+                    "LANGUAGE": piece.language,
+                    "STAGE": stage,
+                    "PIECE_ID": piece_id,
+                    "METRICS": metrics_context,
+                    "loop_count": loop_count,
+                    "is_looping": loop_count > 0,
+                    "max_loops": agent_cfg.max_loops,
+                },
+            }
+        else:
+            eval_system = PromptBuilder.with_date(
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Be critical and precise. "
+                f"Respond with a JSON block containing 'decision' and 'critique'."
+            )
+            return {
+                "piece_id": piece_id,
+                "stage": stage,
+                "agent_set": self.agent_set,
+                "loop_count": loop_count,
+                "max_loops": agent_cfg.max_loops,
+                "is_content_stage": False,
+                "model": agent_cfg.model,
+                "api_base": agent_cfg.api_base,
+                "temperature": agent_cfg.temperature,
+                "max_tokens": agent_cfg.max_tokens,
+                "single_call": {
+                    "system": eval_system,
+                    "user": prompt,
+                    "char_count": len(prompt),
+                },
+                "input_content_char_count": len(input_content),
+                "template_vars": {
+                    "TITLE": piece.title,
+                    "GENRE": piece.genre,
+                    "TYPE": piece.type,
+                    "LANGUAGE": piece.language,
+                    "STAGE": stage,
+                    "PIECE_ID": piece_id,
+                    "METRICS": metrics_context,
+                    "loop_count": loop_count,
+                    "is_looping": loop_count > 0,
+                    "max_loops": agent_cfg.max_loops,
+                },
+            }
+
 
     def _emit(self, event_queue, event_type: str, data: dict):
         """Emit an event to the queue if provided."""
@@ -609,10 +417,10 @@ class StageRunner:
 
         # Fill prompt template
         from .metrics import load_metrics
-        metrics_context = self._build_metrics_context(piece, stage, pipeline)
+        metrics_context = self.metrics_svc.build_context(piece, stage, pipeline, PromptBuilder.resolve_input_stages(stage, pipeline, self._STAGE_INPUTS))
         loop_count = self.get_loop_count(piece, stage)
-        ctx = self._build_render_context(piece, stage, input_content, metrics_context, loop_count)
-        prompt = _render_prompt(agent_cfg.prompt_template, ctx)
+        ctx = self.prompt_builder.build_context(piece, stage, input_content, metrics_context, loop_count)
+        prompt = render_prompt(agent_cfg.prompt_template, ctx)
 
         client = LLMClient(
             api_base=agent_cfg.api_base,
@@ -634,12 +442,12 @@ class StageRunner:
 
         if is_content_stage:
             # Two-call approach: generate first, then evaluate
-            gen_system = self._with_date(
+            gen_system = PromptBuilder.with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
-            self._log_run_entry(piece, stage, "generate", gen_system, prompt)
+            self.run_logger.log(piece, stage, "generate", gen_system, prompt)
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "generate", "prompt_chars": len(prompt),
             })
@@ -669,13 +477,13 @@ class StageRunner:
             self._write_decision(piece, stage, decision)
         else:
             # Feedback stages: single call with JSON decision expected
-            eval_system = self._with_date(
+            eval_system = PromptBuilder.with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
             )
-            self._log_run_entry(piece, stage, "agent", eval_system, prompt)
-            response_format = self._get_structured_output_format()
+            self.run_logger.log(piece, stage, "agent", eval_system, prompt)
+            response_format = PromptBuilder.get_structured_output_format()
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "agent", "prompt_chars": len(prompt),
             })
@@ -688,7 +496,7 @@ class StageRunner:
                 )
             decision = parse_agent_response(response)
             decision.output = response
-            self._log_run_entry(piece, stage, "agent", eval_system, prompt, {
+            self.run_logger.log(piece, stage, "agent", eval_system, prompt, {
                 "decision": decision.decision, "critique": decision.critique[:500],
             })
 
@@ -697,7 +505,7 @@ class StageRunner:
 
         # Loop guardrail: check for metric degradation across iterations
         if decision.decision == "loop_back" and loop_count > 0:
-            guardrail = self._check_loop_guardrail(piece, stage, loop_count)
+            guardrail = self.metrics_svc.check_guardrail(piece, stage, loop_count)
             if guardrail:
                 decision.decision = "advance"
                 decision.critique = (
@@ -712,7 +520,7 @@ class StageRunner:
                 })
         elif decision.decision == "loop_back" and loop_count == 0:
             # Save baseline metrics snapshot for future guardrail comparisons
-            self._save_guardrail_snapshot(piece, stage)
+            self.metrics_svc.save_guardrail_snapshot(piece, stage)
 
         # Execute decision
         if decision.decision == "loop_back":
@@ -731,14 +539,14 @@ class StageRunner:
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
-            self._cleanup_guardrail_snapshot(piece, stage)
+            self.metrics_svc.cleanup_guardrail_snapshot(piece, stage)
             # Content stages: output already written above, just clean up decision file
             # Feedback stages: write critique as the stage output
             if not is_content_stage:
                 self._write_output(piece, stage, self._format_feedback(decision.critique))
             # Compute text metrics for content stages
             if is_content_stage:
-                self._compute_metrics(piece, stage)
+                self.metrics_svc.compute(piece, stage)
             # Advance meta.yaml to next stage
             if stage_def and stage_def.next:
                 self._advance_meta(piece, stage_def.next)
@@ -945,63 +753,7 @@ class StageRunner:
         decision_file.write_text(content, encoding="utf-8")
         logger.info("Wrote decision to %s", decision_file)
 
-    def _compute_metrics(self, piece: Piece, stage: str):
-        """Compute and save text metrics for a stage's output file."""
-        from .metrics import compute_and_save
-        stage_file = piece.stage_dir() / _stage_filename(stage)
-        if stage_file.exists():
-            try:
-                metrics = compute_and_save(stage_file)
-                logger.info("Metrics for %s/%s: flesch=%.1f, words=%d",
-                           piece.id, stage, metrics["flesch_ease"], metrics["word_count"])
-            except Exception as e:
-                logger.warning("Failed to compute metrics for %s/%s: %s",
-                              piece.id, stage, e)
 
-    def _build_metrics_context(self, piece: Piece, stage: str, pipeline) -> str:
-        """Build a metrics context string for the agent prompt.
-
-        Loads metrics from the input stages and formats them as a readable block.
-        """
-        from .metrics import load_metrics
-
-        stage_dir = piece.stage_dir()
-        lines = []
-
-        # Get input stage names
-        if stage in self._STAGE_INPUTS:
-            input_stages = [f.replace(".md", "") for f in self._STAGE_INPUTS[stage]]
-        else:
-            stage_order = pipeline.stage_order
-            if stage in stage_order:
-                idx = stage_order.index(stage)
-                input_stages = [stage_order[idx - 1]] if idx > 0 else []
-            else:
-                input_stages = []
-
-        for input_stage in input_stages:
-            stage_file = stage_dir / _stage_filename(input_stage)
-            m = load_metrics(stage_file) if stage_file.exists() else None
-            if m:
-                lines.append(f"--- {input_stage} metrics ---")
-                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
-                lines.append(f"  Flesch-Kincaid Grade: {m.get('flesch_kincaid', 'n/a')}")
-                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
-                lines.append(f"  Avg sentence length: {m.get('avg_sentence_length', 'n/a')} words")
-                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
-                lines.append(f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%")
-
-        # Also include current stage metrics if looping
-        current_stage_file = stage_dir / _stage_filename(stage)
-        if current_stage_file.exists():
-            m = load_metrics(current_stage_file)
-            if m:
-                lines.append(f"--- {stage} metrics (current) ---")
-                lines.append(f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}")
-                lines.append(f"  Word count: {m.get('word_count', 'n/a')}")
-                lines.append(f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%")
-
-        return "\n".join(lines) if lines else "(no metrics available)"
 
     def _evaluate_output(
         self, client: "LLMClient", stage: str, piece: "Piece",
@@ -1015,7 +767,7 @@ class StageRunner:
         the LLM with the full (untruncated) content.
         """
         # Load evaluate prompt template
-        eval_template = self._load_evaluate_template(agent_set)
+        eval_template = PromptBuilder.load_evaluate_template(agent_set)
 
         if eval_template:
             # Compute metrics on the generated text for the evaluator
@@ -1039,16 +791,16 @@ class StageRunner:
                 except Exception as e:
                     logger.warning("Failed to compute metrics for evaluate prompt: %s", e)
 
-            eval_ctx = self._build_render_context(
+            eval_ctx = self.prompt_builder.build_context(
                 piece, stage, input_content, metrics_str, 0,
                 extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
             )
-            prompt = _render_prompt(eval_template, eval_ctx)
-            eval_system = self._with_date(
+            prompt = render_prompt(eval_template, eval_ctx)
+            eval_system = PromptBuilder.with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
-            self._log_run_entry(piece, stage, "evaluate", eval_system, prompt)
+            self.run_logger.log(piece, stage, "evaluate", eval_system, prompt)
         else:
             # Fallback to hardcoded if no template exists
             logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
@@ -1065,30 +817,23 @@ class StageRunner:
                 f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
                 f"Be strict but fair. Only loop_back if there are real, fixable problems."
             )
-            eval_system = self._with_date(
+            eval_system = PromptBuilder.with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
 
-        response_format = self._get_structured_output_format()
+        response_format = PromptBuilder.get_structured_output_format()
         try:
             eval_response = client.chat(eval_system, prompt, response_format=response_format)
         except ConnectionError:
             return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
 
         result = parse_agent_response(eval_response)
-        self._log_run_entry(piece, stage, "evaluate", eval_system, prompt, {
+        self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
             "decision": result.decision, "critique": result.critique[:500],
         })
         return result
 
-    def _load_evaluate_template(self, agent_set: str) -> str | None:
-        """Load evaluate.prompt.md from an agent set directory."""
-        from .agent import AGENTS_DIR
-        template_file = AGENTS_DIR / agent_set / "evaluate.prompt.md"
-        if template_file.exists():
-            return template_file.read_text(encoding="utf-8")
-        return None
 
     def _advance_meta(self, piece: Piece, next_stage: str):
         """Update meta.yaml to point to the next stage."""

@@ -234,7 +234,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         const sets = data.agent_sets || [];
         select.innerHTML = '';
         if (sets.length === 0) {
-            select.innerHTML = '<option value="">No agents available</option>';
+            select.innerHTML = '<option value="">No agents for this stage</option>';
+            const btn = document.getElementById('run-agent-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.title = 'No agent prompts configured for this stage';
+            }
             return;
         }
         sets.forEach(s => {

@@ -3,18 +3,19 @@
 You are revising a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 
-## Original Text
+## Input
 {{CONTENT}}
 
-## Review Feedback
-The review agent found issues. Apply ALL feedback to produce a revised version.
+The input above contains the original text and the review feedback (look for the `review.md` section).
+Apply ALL feedback from the review to produce a revised version.
 
 Rules:
 - Apply every piece of feedback from the review
 - Preserve the author's voice and style
 - Don't pad — substance over word count
-- If the piece is under the target word count, expand rather than condense. Preserve or grow word count. Do not sacrifice content for brevity.
+- If the piece is under the target word count, expand rather than condense
 - Keep the structure unless the review specifically requests restructuring
+- If evidence or sources were flagged, add or correct them
 - Output the COMPLETE revised text, not a diff or summary
 
 ## Output Format

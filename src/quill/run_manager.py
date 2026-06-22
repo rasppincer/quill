@@ -178,14 +178,14 @@ class RunManager:
                 }
 
             with self._run_lock:
-                self._runs[run_id]["status"] = "complete"
-                self._runs[run_id]["result"] = result_data
+                if run_id in self._runs: self._runs[run_id]["status"] = "complete"
+                if run_id in self._runs: self._runs[run_id]["result"] = result_data
 
         except Exception as exc:
             logger.exception("Run %s failed", run_id)
             with self._run_lock:
-                self._runs[run_id]["status"] = "error"
-                self._runs[run_id]["result"] = {"error": str(exc)}
+                if run_id in self._runs: self._runs[run_id]["status"] = "error"
+                if run_id in self._runs: self._runs[run_id]["result"] = {"error": str(exc)}
             event_queue.put({"type": "error", "data": {"error": str(exc)}})
 
         finally:

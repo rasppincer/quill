@@ -79,7 +79,7 @@
 
 ### Low Priority
 - [ ] **Move stage inputs to pipeline config** — `_STAGE_INPUTS` in runner.py is hardcoded Python. Move to `workflows/default.yaml` so custom stages (Research, SEO) get proper input routing without code changes.
-- [ ] **Loop guardrails** — Semantic drift detection across loop iterations. Flag if vocabulary diversity or word counts oscillate wildly between loops instead of blind advance.
+- [x] **Loop guardrails** — Metric degradation detection across loop iterations. Saves baseline snapshot on first loop, compares on subsequent loops. Forces advance if word count drops >30%, readability shifts >15pts, vocab diversity drops >10%, or passive voice increases >10pp.
 - [ ] **Prompt git-history in dashboard** — Show git diffs of `.prompt.md` files in the Agents tab so writers can rollback templates without leaving the UI.
 
 ## Backlog

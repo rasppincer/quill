@@ -255,6 +255,10 @@ class Piece:
         content = content.replace("—", " - ")    # em dash → dash
         content = content.replace("–", " - ")     # en dash → dash
         content = content.replace("\u00a0", " ")  # non-breaking space → space
+        content = content.replace("\u2018", "'")  # left single quote
+        content = content.replace("\u2019", "'")  # right single quote / apostrophe
+        content = content.replace("\u201c", '"')  # left double quote
+        content = content.replace("\u201d", '"')  # right double quote
         return content
 
     def write_output(self, stage: str, content: str):

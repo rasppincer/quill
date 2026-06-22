@@ -18,7 +18,9 @@ class RunLogger:
 
     def __init__(self):
         from .agent import load_model_config
-        self._model = load_model_config().get("model", "")
+        cfg = load_model_config()
+        self._model = cfg.get("model", "")
+        self._debug = cfg.get("debug_prompts", False)
 
     def log(
         self,
@@ -29,16 +31,7 @@ class RunLogger:
         user: str,
         result: dict | None = None,
     ):
-        """Append a run log entry.
-
-        Args:
-            piece: The piece being processed.
-            stage: Current stage name.
-            call_type: "generate", "evaluate", or "agent".
-            system: System prompt sent to LLM.
-            user: User prompt sent to LLM.
-            result: Optional dict with decision, critique, elapsed, etc.
-        """
+        """Append a run log entry. If debug_prompts is on, also dump full prompts."""
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "stage": stage,
@@ -54,3 +47,20 @@ class RunLogger:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         logger.info("Run log entry: %s/%s (%s)", piece.id, stage, call_type)
+
+        if self._debug:
+            self._dump_prompt(piece, stage, call_type, system, user)
+
+    @staticmethod
+    def _dump_prompt(piece: "Piece", stage: str, call_type: str, system: str, user: str):
+        """Write full prompt to a debug file."""
+        from .piece import _stage_filename
+        debug_file = piece.stage_dir() / _stage_filename(stage, f".{call_type}-prompt.md")
+        content = (
+            f"# Debug: {call_type} prompt for {stage}\n"
+            f"# Piece: {piece.id}\n\n"
+            f"## System\n{system}\n\n"
+            f"## User\n{user}\n"
+        )
+        debug_file.write_text(content, encoding="utf-8")
+        logger.info("Debug prompt dumped to %s", debug_file)

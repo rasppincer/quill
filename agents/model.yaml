@@ -3,3 +3,4 @@ model: google/gemma-4-31b-qat
 temperature: 0.7
 max_tokens: 12288
 structured_output: false
+debug_prompts: true

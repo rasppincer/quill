@@ -475,6 +475,85 @@ class TestBuildRenderContext:
 
 
 # ---------------------------------------------------------------------------
+# Loop guardrails
+# ---------------------------------------------------------------------------
+
+
+class TestLoopGuardrails:
+    """Test metric degradation detection across loop iterations."""
+
+    def test_guardrail_no_baseline(self, runner, sample_piece, tmp_output, monkeypatch):
+        """No baseline snapshot → no guardrail trigger."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+
+        result = runner._check_loop_guardrail(piece, "review", 1)
+        assert result == ""
+
+    def test_guardrail_triggers_on_word_count_drop(self, runner, sample_piece, tmp_output, monkeypatch):
+        """Word count drop >30% triggers guardrail."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        stage_dir = sample_piece
+
+        # Save baseline with high word count
+        baseline = {"word_count": 1000, "flesch_ease": 50, "type_token_ratio": 0.5, "passive_voice_pct": 5}
+        baseline_file = stage_dir / _stage_filename("review", ".guardrail-metrics.yaml")
+        import yaml
+        baseline_file.write_text(yaml.dump(baseline))
+
+        # Write current metrics with much lower word count
+        current = {"word_count": 600, "flesch_ease": 50, "type_token_ratio": 0.5, "passive_voice_pct": 5}
+        current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
+        current_file.write_text(yaml.dump(current))
+
+        result = runner._check_loop_guardrail(piece, "review", 1)
+        assert "word count dropped" in result
+
+    def test_guardrail_no_trigger_when_stable(self, runner, sample_piece, tmp_output, monkeypatch):
+        """No trigger when metrics are stable."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        stage_dir = sample_piece
+
+        baseline = {"word_count": 1000, "flesch_ease": 50, "type_token_ratio": 0.5, "passive_voice_pct": 5}
+        baseline_file = stage_dir / _stage_filename("review", ".guardrail-metrics.yaml")
+        import yaml
+        baseline_file.write_text(yaml.dump(baseline))
+
+        current = {"word_count": 950, "flesch_ease": 48, "type_token_ratio": 0.48, "passive_voice_pct": 6}
+        current_file = stage_dir / _stage_filename("review", ".metrics.yaml")
+        current_file.write_text(yaml.dump(current))
+
+        result = runner._check_loop_guardrail(piece, "review", 1)
+        assert result == ""
+
+    def test_snapshot_save_and_cleanup(self, runner, sample_piece, tmp_output, monkeypatch):
+        """Snapshot is saved on first loop and cleaned up on advance."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        piece = load_piece(sample_piece)
+        stage_dir = sample_piece
+
+        # Write metrics so snapshot has something to save
+        import yaml
+        current = {"word_count": 500, "flesch_ease": 45}
+        (stage_dir / _stage_filename("review", ".metrics.yaml")).write_text(yaml.dump(current))
+
+        # Save snapshot
+        runner._save_guardrail_snapshot(piece, "review")
+        snapshot = stage_dir / _stage_filename("review", ".guardrail-metrics.yaml")
+        assert snapshot.exists()
+
+        # Cleanup
+        runner._cleanup_guardrail_snapshot(piece, "review")
+        assert not snapshot.exists()
+
+
+# ---------------------------------------------------------------------------
 # Debug prompt dump
 # ---------------------------------------------------------------------------
 

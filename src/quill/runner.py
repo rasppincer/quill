@@ -286,6 +286,88 @@ class StageRunner:
             return {"type": "json_object"}
         return None
 
+    def _check_loop_guardrail(self, piece: Piece, stage: str, loop_count: int) -> str:
+        """Check if metrics are degrading across loop iterations.
+
+        Returns a description of the degradation if guardrail triggers,
+        or empty string if metrics are stable/improving.
+
+        Compares current {stage}.metrics.yaml with the snapshot saved
+        before the first loop (stored as {stage}.guardrail-metrics.yaml).
+        """
+        from .metrics import load_metrics
+        stage_dir = piece.stage_dir()
+        stage_file = stage_dir / _stage_filename(stage)
+
+        # Load current metrics
+        current = load_metrics(stage_file)
+        if not current:
+            return ""
+
+        # Load baseline (snapshot from before first loop)
+        baseline_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
+        if not baseline_file.exists():
+            return ""
+        baseline = yaml.safe_load(baseline_file.read_text()) or {}
+        if not baseline:
+            return ""
+
+        issues = []
+
+        # Word count drop > 30%
+        curr_wc = current.get("word_count", 0)
+        base_wc = baseline.get("word_count", 0)
+        if base_wc > 0 and curr_wc > 0:
+            drop = (base_wc - curr_wc) / base_wc
+            if drop > 0.30:
+                issues.append(f"word count dropped {drop:.0%} ({base_wc} → {curr_wc})")
+
+        # Flesch ease shift > 15 points (readability regression)
+        curr_flesch = current.get("flesch_ease", 50)
+        base_flesch = baseline.get("flesch_ease", 50)
+        shift = abs(curr_flesch - base_flesch)
+        if shift > 15:
+            direction = "harder" if curr_flesch < base_flesch else "easier"
+            issues.append(f"readability shifted {shift:.0f} pts ({direction})")
+
+        # Vocabulary diversity drop > 10%
+        curr_ttr = current.get("type_token_ratio", 0.5)
+        base_ttr = baseline.get("type_token_ratio", 0.5)
+        if base_ttr > 0 and curr_ttr > 0:
+            ttr_drop = (base_ttr - curr_ttr) / base_ttr
+            if ttr_drop > 0.10:
+                issues.append(f"vocabulary diversity dropped {ttr_drop:.0%}")
+
+        # Passive voice increase > 10 percentage points
+        curr_pv = current.get("passive_voice_pct", 0)
+        base_pv = baseline.get("passive_voice_pct", 0)
+        if curr_pv - base_pv > 10:
+            issues.append(f"passive voice increased {curr_pv - base_pv:.0f}pp")
+
+        return "; ".join(issues)
+
+    def _save_guardrail_snapshot(self, piece: Piece, stage: str):
+        """Save current metrics as baseline for loop guardrail comparison."""
+        from .metrics import load_metrics
+        stage_dir = piece.stage_dir()
+        stage_file = stage_dir / _stage_filename(stage)
+        current = load_metrics(stage_file)
+        if current:
+            snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
+            snapshot_file.write_text(
+                yaml.dump(current, default_flow_style=False),
+                encoding="utf-8",
+            )
+            logger.info("Saved guardrail snapshot for %s", stage)
+
+    def _cleanup_guardrail_snapshot(self, piece: Piece, stage: str):
+        """Remove guardrail snapshot after successful advance."""
+        stage_dir = piece.stage_dir()
+        snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")
+        if snapshot_file.exists():
+            snapshot_file.unlink()
+            logger.info("Cleaned up guardrail snapshot for %s", stage)
+
     def get_loop_count(self, piece: Piece, stage: str) -> int:
         """Get the current loop count for a stage."""
         meta_path = piece.stage_dir() / "meta.yaml"
@@ -585,6 +667,25 @@ class StageRunner:
         decision.loop_count = loop_count
         decision.stage = stage
 
+        # Loop guardrail: check for metric degradation across iterations
+        if decision.decision == "loop_back" and loop_count > 0:
+            guardrail = self._check_loop_guardrail(piece, stage, loop_count)
+            if guardrail:
+                decision.decision = "advance"
+                decision.critique = (
+                    f"[Loop guardrail] Forcing advance after {loop_count} loops. "
+                    f"Metrics degraded: {guardrail}. "
+                    f"Original critique: {decision.critique}"
+                )
+                logger.warning("Loop guardrail triggered for '%s': %s", stage, guardrail)
+                self._emit(event_queue, "loop_guardrail", {
+                    "stage": stage, "loop_count": loop_count,
+                    "reason": guardrail, "forced_advance": True,
+                })
+        elif decision.decision == "loop_back" and loop_count == 0:
+            # Save baseline metrics snapshot for future guardrail comparisons
+            self._save_guardrail_snapshot(piece, stage)
+
         # Execute decision
         if decision.decision == "loop_back":
             self.set_loop_count(piece, stage, loop_count + 1)
@@ -602,6 +703,7 @@ class StageRunner:
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
+            self._cleanup_guardrail_snapshot(piece, stage)
             # Content stages: output already written above, just clean up decision file
             # Feedback stages: write critique as the stage output
             if not is_content_stage:

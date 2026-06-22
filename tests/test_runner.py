@@ -608,6 +608,79 @@ class TestRunLog:
 # ---------------------------------------------------------------------------
 
 
+class TestEvaluatePromptContent:
+    """Verify evaluate prompts include generated text, not just inputs."""
+
+    @patch("quill.runner.LLMClient")
+    def test_evaluate_prompt_includes_generated_text(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """The evaluate prompt must contain the generated text, not just inputs."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        mock_client = MagicMock()
+        mock_llm_cls.return_value = mock_client
+
+        mock_client.chat.side_effect = [
+            "The revised draft is much stronger now.",
+            '{"decision": "advance", "critique": "Well done."}',
+        ]
+
+        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
+
+        # Check the evaluate prompt (second call) includes generated text
+        calls = mock_client.chat.call_args_list
+        assert len(calls) == 2
+        eval_user_prompt = calls[1][0][1]  # second call, user prompt
+        assert "The revised draft is much stronger now" in eval_user_prompt, (
+            "Evaluate prompt must contain the generated text"
+        )
+
+    @patch("quill.runner.LLMClient")
+    def test_evaluate_prompt_includes_input_content(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """The evaluate prompt must contain the input content (draft + review)."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        mock_client = MagicMock()
+        mock_llm_cls.return_value = mock_client
+
+        mock_client.chat.side_effect = [
+            "Revised text here.",
+            '{"decision": "advance", "critique": "Good."}',
+        ]
+
+        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
+
+        calls = mock_client.chat.call_args_list
+        eval_user_prompt = calls[1][0][1]
+        # Should contain the input content markers
+        assert "draft" in eval_user_prompt.lower() or "outline" in eval_user_prompt.lower(), (
+            "Evaluate prompt must contain input content"
+        )
+
+    @patch("quill.runner.LLMClient")
+    def test_evaluate_prompt_has_both_sections(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Evaluate prompt has both Input and Generated sections clearly labeled."""
+        from quill.piece import load_piece
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        mock_client = MagicMock()
+        mock_llm_cls.return_value = mock_client
+
+        mock_client.chat.side_effect = [
+            "Generated revise content.",
+            '{"decision": "advance", "critique": "OK."}',
+        ]
+
+        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
+
+        calls = mock_client.chat.call_args_list
+        eval_user_prompt = calls[1][0][1]
+        # Check that both sections exist in the prompt
+        assert "Generated" in eval_user_prompt, "Evaluate prompt needs 'Generated' section"
+        assert "Input" in eval_user_prompt, "Evaluate prompt needs 'Input' section"
+
+
 class TestTwoFileOutput:
     """Content stages write .md (generated text) + .decision.md (evaluation)."""
 

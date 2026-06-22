@@ -214,6 +214,57 @@ class Piece:
         logger.info("Saved piece '%s' stage '%s' to %s", self.title, self.current_stage, path)
         return path
 
+    def get_loop_count(self, stage: str) -> int:
+        """Get the current loop count for a stage from meta.yaml."""
+        meta_path = self.stage_dir() / "meta.yaml"
+        if not meta_path.exists():
+            return 0
+        meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        return meta.get("loops", {}).get(stage, 0)
+
+    def set_loop_count(self, stage: str, count: int):
+        """Update the loop count for a stage in meta.yaml."""
+        meta_path = self.stage_dir() / "meta.yaml"
+        if meta_path.exists():
+            meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        else:
+            meta = {}
+        if "loops" not in meta:
+            meta["loops"] = {}
+        meta["loops"][stage] = count
+        meta_path.write_text(
+            yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+
+    def advance_to(self, next_stage: str):
+        """Update meta.yaml to point to the next stage."""
+        meta_path = self.stage_dir() / "meta.yaml"
+        meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        meta["current_stage"] = next_stage
+        meta["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        meta_path.write_text(
+            yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        logger.info("Advanced meta.yaml to stage '%s'", next_stage)
+
+    def write_output(self, stage: str, content: str):
+        """Write agent output to a stage file."""
+        output_file = self.stage_dir() / _stage_filename(stage)
+        output_file.write_text(content, encoding="utf-8")
+        logger.info("Wrote output to %s", output_file)
+
+    def write_decision(self, stage: str, decision_decision: str, decision_critique: str):
+        """Write evaluation decision to a separate .decision.md file."""
+        decision_file = self.stage_dir() / _stage_filename(stage, ".decision.md")
+        content = (
+            f"## Decision: {decision_decision}\n\n"
+            f"## Critique\n{decision_critique}\n"
+        )
+        decision_file.write_text(content, encoding="utf-8")
+        logger.info("Wrote decision to %s", decision_file)
+
     def to_dict(self) -> dict:
         """Export as API-friendly dict."""
         d = self.to_frontmatter()

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jinja2
 
 from .piece import _stage_filename
+
+if TYPE_CHECKING:
+    from .piece import Piece
 
 
 def render_prompt(template: str, context: dict) -> str:
@@ -72,6 +76,36 @@ class PromptBuilder:
     def with_date(cls, system_prompt: str) -> str:
         """Prepend date context to a system prompt."""
         return f"{system_prompt}\n\n{cls.date_context()}"
+
+    @classmethod
+    def system_prompt(cls, stage: str, piece: "Piece", call_type: str) -> str:
+        """Build a system prompt for a stage.
+
+        Args:
+            stage: Stage name (e.g. "review", "revise").
+            piece: The piece being processed.
+            call_type: One of "generate", "evaluate", or "feedback".
+        """
+        if call_type == "generate":
+            text = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Produce high-quality content. "
+                f"Do NOT include any JSON or decision blocks — just write the content."
+            )
+        elif call_type == "evaluate":
+            text = (
+                "You are a quality evaluator. Respond with ONLY a JSON block "
+                "containing 'decision' (advance or loop_back) and 'critique'."
+            )
+        elif call_type == "feedback":
+            text = (
+                f"You are a {stage} agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Be critical and precise. "
+                f"Respond with a JSON block containing 'decision' and 'critique'."
+            )
+        else:
+            raise ValueError(f"Unknown call_type: {call_type}")
+        return cls.with_date(text)
 
     @staticmethod
     def load_evaluate_template(agent_set: str) -> str | None:

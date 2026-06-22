@@ -67,8 +67,8 @@
 
 ## Phase 6 — Quality
 
-- [x] Backend unit tests (272 tests, pytest, 2.2s)
-- [ ] Dashboard E2E tests (Playwright) — piece detail, agent selector, flavor management, stage content viewer
+- [x] Backend unit tests (276 tests, pytest, 2.2s)
+- [x] Dashboard E2E tests (Playwright) — 28 tests: dashboard, piece detail, agents page, JS errors, API paths, interaction
 
 ## Phase 7 — Architecture (from DESIGN_REPORT.md)
 

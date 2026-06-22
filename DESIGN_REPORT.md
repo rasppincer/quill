@@ -1,137 +1,238 @@
-# Quill Architectural & Design Review
+# Quill Architectural Review
+
+*Reviewed: 2026-06-22*
 
 ## Executive Summary
 
-Quill is an elegant, modular writing workflow engine designed to orchestrate long-form content generation. By breaking down writing into atomic stages (Outline, Draft, Review, Revise, Humanize, Validate, Polish), the system avoids the limitations of single-prompt "dump 10K words" models and implements an iterative feedback loop.
+**Grade: B+**
 
-### Overall Architecture Rating: **B+**
-Quill's core structure is highly robust and clean. Storing piece history as separate markdown files inside a dedicated output folder acts as a local Git-like state manager. The decoupling of LLM API calls via a zero-dependency `urllib` client and the use of mechanical, offline metrics computation are outstanding design choices. 
+Quill is a well-engineered agentic writing pipeline with a clean two-call agent pattern, declarative workflow config, and solid observability. The ADR-003 refactoring extracted 5 focused service classes from a monolith, and the recent research stage addition demonstrates the pipeline's extensibility.
 
-However, there is a **significant mismatch** between the documented "two-call approach" (Actor-Critic) and the actual "single-call" separator-based implementation in the runner. Additionally, the application blocks Flask worker threads during long LLM execution runs, and pipeline-stage inputs are hardcoded in the Python code rather than defined in the workflow configurations.
-
----
-
-## 1. Architectural Highlights (What Quill Does Well)
-
-### 📂 Directory-per-Piece & File-Based State
-Storing each stage as an independent markdown file (e.g., [Piece Loader](file:///home/bob/projects/quill/src/quill/piece.py)) is a stellar decision. 
-* **Auditability**: Users can inspect the exact progression of a piece stage-by-stage.
-* **Loss Prevention**: If a step loops back or fails, previous drafts remain untouched.
-* **Compatibility**: Supporting legacy flat files alongside folders provides a smooth developer transition.
-
-### 📊 Zero-LLM Text Metrics Engine
-Decoupling readability scores (Flesch Ease, grade levels, passive voice %) from LLM calls (e.g., [Metrics Engine](file:///home/bob/projects/quill/src/quill/metrics.py)) is a brilliant performance and cost optimization.
-* Compares file modified-times (`mtime`) to run metrics incrementally.
-* Injects these metrics (`{{METRICS}}`) into subsequent prompt templates, creating a programmatic feedback loop that guides the model without costly token-overhead.
-
-### 🔌 Dependency-Free LLM Wrapper
-The chat completions client in [llm.py](file:///home/bob/projects/quill/src/quill/llm.py) uses Python's standard library `urllib` instead of third-party SDKs (like `openai` or `langchain`). This shields the codebase from dependency creep, version incompatibilities, and startup-time bloat.
-
-### 🎭 Swappable Agent Sets ("Flavors")
-Separating prompt templates into `agents/<flavor>/*.prompt.md` files allows for specialized instructions for fiction vs. non-fiction genres.
+However, `app.py` at 1183 lines is a god object, `CONTENT_STAGES` is hardcoded inconsistently in two files, the evaluate call silently advances on failure, and `ARCHITECTURE.md` is significantly outdated. The 300-line limit from ADR-003 is violated by 4 files.
 
 ---
 
-## 2. Inconsistencies & Architectural Flaws
+## What's Working Well
 
-### 🚨 Mismatch: Single-Call vs. Two-Call Approach
-* **The Claim**: Both the `README.md` and [docs/ARCHITECTURE.md](file:///home/bob/projects/quill/docs/ARCHITECTURE.md) state that stages use a **two-call approach**: one call to generate content, followed by a separate critique/decision call.
-* **The Reality**: The runner in [runner.py](file:///home/bob/projects/quill/src/quill/runner.py#L224-L245) issues **one single LLM call** instructing the agent to generate content, append a UUID separator (`======= dad40ab6-2d44-4c2c-af5d-8e8644f60b95 =======`), and then write a JSON decision block.
-* **Why it is a problem**:
-  1. **Self-Evaluation Bias**: LLMs are notoriously poor at grading their own work in the same output pass. The model's token generation locks it into a path, leading to bias where it almost always recommends `"advance"`.
-  2. **Parsing Fragility**: If the LLM omits the separator or truncates its response due to max token limits, the runner falls back to regex search patterns, which are prone to false positives.
-  3. **Context Length Limits**: For long-form text (e.g., generating a draft), appending a long evaluation critique increases the output token count, risking truncation.
+### 1. Two-Call Agent Pattern
 
-### ⏳ Thread-Blocking Execution
-* **The Issue**: When a user runs a full pipeline chain (`/api/pieces/<piece_id>/run` with `{"chain": true}`), the request blocks Flask's main thread while waiting for multiple synchronous HTTP calls to the LLM.
-* **Why it is a problem**: LLM generation takes seconds or minutes. Blocking worker threads can cause proxy timeouts (Nginx), unresponsive dashboards, and severe degradation if multiple users launch runs simultaneously.
+The generate→evaluate split is correctly implemented:
 
-### 🖇️ Tight Coupling of Stage Inputs in Python
-* **The Issue**: Stage dependencies are hardcoded directly in Python in [runner.py:L352-358](file:///home/bob/projects/quill/src/quill/runner.py#L352-L358):
-  ```python
-  _STAGE_INPUTS = {
-      "outline": ["brief.md"],
-      "draft": ["outline.md", "brief.md"],
-      "revise": ["draft.md", "review.md"],
-      "humanize": ["revise.md"],
-      "polish": ["humanize.md", "validate.md"],
-  }
-  ```
-* **Why it is a problem**: If a developer creates a custom workflow in `workflows/` (e.g., adding a "Research" or "SEO" stage), the runner will not know what input files to feed into those stages. The inputs should be declared in the workflow YAML configuration instead.
+- **Generate** (`runner.py:344-375`): LLM writes content → saved to `{stage}.md` immediately
+- **Evaluate** (`runner.py:682-756`): Separate LLM call critiques the saved content → `{stage}.decision.md`
 
-### 🗑️ Fragile Content Stripping
-* **The Issue**: [agent.py](file:///home/bob/projects/quill/src/quill/agent.py#L165-L173) cleans output files by stripping out JSON blocks with regex.
-* **Why it is a problem**: If a user is writing a piece that naturally contains JSON blocks (like an API tutorial or programming blog post), the cleaner might delete their narrative code examples thinking they are evaluation blocks.
+The evaluator receives the **full generated text** via `{{GENERATED}}` in the evaluate template, not a summary. Content is persisted before evaluation — if evaluate fails, the draft survives.
 
----
+Self-evaluation leak prevention is solid:
+- Generate prompt says "Do NOT include any JSON or decision blocks" (prompt_builder.py:93-94)
+- `_strip_json_block` (agent.py:182-213) only strips trailing JSON with `"decision"` key, preserving mid-content JSON examples
 
-## 3. Best Practices for Agentic Apps
+### 2. Declarative Pipeline Config
 
-When developing LLM-based autonomous applications, follow these industry-standard patterns:
+`workflows/default.yaml` defines stages, transitions, and input routing:
 
-```mermaid
-graph TD
-    A[User Brief] --> B[Actor Agent: Content Generator]
-    B -->|Generates Content| C[Write to File System]
-    C --> D[Critic Agent: Evaluator]
-    D -->|Flesch & Style Metrics| E[Metrics Engine]
-    E -->|Feedback & Data| D
-    D -->|JSON Decision| F{Advance or Loop?}
-    F -->|Advance| G[Next Stage]
-    F -->|Loop| B
+```yaml
+stage_inputs:
+  draft: [outline.md, brief.md, research.md]
+  revise: [draft.md, review.md]
+  polish: [humanize.md, validate.md]
 ```
 
-### I. The Actor-Critic (Generator-Evaluator) Split
-Never let the same model generation run write the content *and* evaluate it. Use a generator (Actor) to write, and then run a separate call with a reviewer prompt (Critic) to judge the output. This guarantees objective critique and mitigates self-evaluation bias.
+This is loaded by `Pipeline` and used by `StageRunner._read_inputs()`. Changing what a stage reads requires zero Python changes.
 
-### II. Declarative Pipeline DAGs
-Workflows should be completely decoupled from code. Inputs, outputs, rules, and validators for each stage should live in a configuration file (like `workflows/default.yaml`). The runner should parse the YAML to determine file dependencies dynamically.
+### 3. Loop Guardrails
 
-### III. Structured Outputs & Rigid Schemas
-Instead of letting the model write raw text and trying to parse it with regex, enforce structured JSON outputs (via OpenAI structured outputs, Anthropic Tool use, or Pydantic JSON schemas) for all routing decisions and feedback loops.
+`MetricsService.check_guardrail()` (metrics_service.py:88-137) detects metric degradation across loop iterations:
+- Word count drops >30%
+- Readability shifts >15 points
+- Vocabulary diversity drops >10%
+- Passive voice increases >10 percentage points
 
-### IV. Asynchronous Task Queues & Observability
-Autonomous loops should run in background tasks (using workers like Celery, RQ, or custom threads). The agent's step-by-step reasoning, raw prompts, and token counts should be stored in a run history log to facilitate debugging when loops get stuck.
+Saves a baseline snapshot on first loop, compares on subsequent loops. Forces advance if degradation detected. This is a sophisticated pattern that prevents runaway loops.
+
+### 4. Module Extraction (ADR-003)
+
+5 focused classes extracted from the monolithic runner:
+
+| Class | File | Lines | Responsibility |
+|-------|------|-------|----------------|
+| RunLogger | run_logger.py | 66 | JSONL append logging |
+| MetricsService | metrics_service.py | 159 | Loop guardrails + metrics |
+| PromptBuilder | prompt_builder.py | 138 | Template rendering + context |
+| RunManager | run_manager.py | 207 | Async executor + SSE |
+| Piece enrichment | piece.py | 416 | Data model + file I/O |
+
+Each has a single clear responsibility. Dependency direction is correct — leaf services know nothing about each other.
+
+### 5. Observability Stack
+
+- **Run logging**: Every LLM call appends a JSONL entry with timestamp, stage, call type, char counts
+- **SSE events**: Rich event stream (`stage_start`, `stage_llm_call`, `loop_guardrail`, `chain_complete`, etc.)
+- **Debug prompt endpoint**: `GET /api/pieces/<id>/prompt/<stage>` shows composed prompts without calling LLM
+- **Metrics tracking**: Per-stage readability stored as `.metrics.yaml`
+
+### 6. Error Handling (Mostly)
+
+| Scenario | Handling | Correct? |
+|----------|----------|----------|
+| LLM generate fails | `decision="error"` | ✓ |
+| SearXNG down | Returns `[]`, logs warning | ✓ |
+| Missing piece | Returns error decision | ✓ |
+| Max loops reached | Forces advance | ✓ |
+| Loop guardrail | Forces advance + logs | ✓ |
+| Malformed JSON | Heuristic fallback parser | ✓ |
 
 ---
 
-## 4. Recommendations for Improving Quill
+## What Needs Improvement
 
-### Short-Term Refactoring (High Impact, Low Effort)
+### P0 — Critical
 
-1. **Move Stage Inputs to Workflows**:
-   Update `workflows/default.yaml` to list stage inputs, making the pipeline fully customizable:
-   ```yaml
-   stages:
-     - key: draft
-       name: Draft
-       inputs:
-         - outline.md
-         - brief.md
-   ```
-   Modify `_read_inputs` in `runner.py` to load this list dynamically.
+#### 1. `app.py` is a God Object (1183 lines)
 
-2. **Standardize on Jinja2 for Prompts**:
-   Replace manual `.replace()` statements in prompt interpolation with `jinja2.Template`. This will allow prompt files to write conditional sections:
-   ```markdown
-   {% if loop_count > 0 %}
-   Your previous attempt was rejected. Critique feedback:
-   {{ critique }}
-   {% endif %}
-   ```
+Contains health/pipeline/pieces CRUD (467 lines), dashboard routes, agent CRUD + prompt management, debug endpoints, run/chain/async endpoints, Google Docs export, comic generation, audio endpoints, and model config. Should be split into Flask blueprints: `pieces_api.py`, `agents_api.py`, `dashboard.py`, `export_api.py`.
 
-3. **Separate Content & Decision Files**:
-   Actually implement the two-call approach documented in `ARCHITECTURE.md`.
-   * **Call 1**: Generates the content and saves to `{stage}.md`.
-   * **Call 2**: Takes `{stage}.md`, critiques it, and writes the JSON to `{stage}.decision.md`.
+#### 2. `CONTENT_STAGES` Hardcoded Inconsistently
 
-### Long-Term Enhancements (Scale & Quality)
+**runner.py:37:**
+```python
+CONTENT_STAGES = {"outline", "draft", "revise", "humanize", "polish"}
+```
 
-1. **Asynchronous Execution Worker**:
-   Integrate a thread pool executor or a background job runner in Flask to handle runner loops. Expose a WebSocket or Server-Sent Events (SSE) stream at `/api/pieces/<id>/logs` so the dashboard can render live console outputs during runs.
+**piece.py:62:**
+```python
+CONTENT_STAGES = {"draft", "revise", "humanize", "polish", "done"}
+```
 
-2. **Loop Guardrails**:
-   Add semantic drift detection in loop iterations. If the vocabulary diversity or word counts oscillate wildly between loops 1, 2, and 3, notify the user or raise a flag rather than forcing a blind advance.
+These are **different sets** — `piece.py` includes `done` and excludes `outline`. This controls whether a stage uses the two-call or single-call pattern. Adding a custom content stage requires editing Python in two places.
 
-3. **Prompt Git-History Viewer in UI**:
-   Since prompt files (`.prompt.md`) are stored inside the local repo, expose a dashboard route showing the git history diffs of prompts so writers can rollback templates via the dashboard.
+**Fix:** Add `mode: content | feedback` to workflow YAML stage definitions. Pipeline class exposes `is_content_stage(key)`. Remove both hardcoded sets.
+
+#### 3. Evaluate Failure Silently Advances
+
+`runner.py:745-750`:
+```python
+except ConnectionError:
+    return AgentDecision(
+        decision="advance",
+        critique="Evaluation call failed, advancing by default.",
+        output="",
+    )
+```
+
+If the LLM is down during evaluation, the piece advances anyway. This should return `decision="error"` (like the generate handler does) or at minimum log at WARNING level.
+
+#### 4. `ARCHITECTURE.md` is Outdated
+
+Claims 9 stages (actual: 10), shows `action: advance` (actual: `decision`), says `api_key: "[REDACTED]"` in config (actual: env var only), claims no frontmatter needed (actual: stage files have frontmatter). First doc newcomers read — it's wrong.
+
+### P1 — Important
+
+#### 5. `_STAGE_PREFIXES` Hardcoded in piece.py
+
+```python
+_STAGE_PREFIXES = {
+    "brief": "01", "outline": "02", "draft": "03",
+    "review": "04", "revise": "05", "humanize": "06",
+    "validate": "07", "polish": "08", "done": "09",
+}
+```
+
+Custom stages won't get numeric prefixes. Should be derived from `pipeline.stage_order`.
+
+#### 6. Zero Integration Tests Against a Real LLM
+
+Every LLM call is mocked. Prompt templates are never validated against a real model. JSON response format assumptions are never tested end-to-end. At minimum, one `@pytest.mark.slow` smoke test that hits the local LLM.
+
+#### 7. ADR-003 Line Limit Violations
+
+| File | Lines | Limit | Ratio |
+|------|-------|-------|-------|
+| app.py | 1183 | 300 | 3.9x |
+| runner.py | 756 | 300 | 2.5x |
+| comic.py | 627 | 300 | 2.1x |
+| piece.py | 416 | 300 | 1.4x |
+
+`comic.py` embeds ~250 lines of inline CSS/HTML — should be a Jinja2 template.
+
+#### 8. Research Stage Input Parsing is Fragile
+
+`runner.py:444-449` splits input content on `"=== "` prefix strings to extract brief/outline text. This couples research to `_read_inputs`'s exact output format. If the separator changes, research breaks silently.
+
+#### 9. No Config Caching
+
+`load_model_config()` reads and parses `model.yaml` on every call (agent.py:30-35). The pipeline is loaded once at module level (app.py:57) — no hot-reload on YAML changes.
+
+#### 10. `run_chain` Breaks on Any Error
+
+`runner.py:579`: `if result.error: break` — a single LLM timeout aborts the entire chain. Consider retry logic or configurable error policy (skip/abort/retry).
+
+### P2 — Nice to Have
+
+- **No log rotation** for `run-log.jsonl` — grows unboundedly
+- **No request tracing** — no correlation ID across a chain run
+- **No YAML schema validation** — typos in config keys silently fall back to defaults
+- **No context window budget checking** — long pieces could silently truncate
+- **`max_workers=2` hardcoded** in run_manager.py — should be configurable
+- **Deferred imports throughout app.py** — suggests circular import issues
+- **`_piece_locks` dict grows unboundedly** in run_manager.py — minor memory leak
+
+---
+
+## Best Practices for Agentic Apps
+
+### 1. Separate Generate and Evaluate — ✓ Quill does this
+
+The two-call approach prevents self-evaluation bias. Content is saved before evaluation. Keep it.
+
+### 2. Persist Intermediate Outputs — ✓ Quill does this
+
+Generated content is written to disk before evaluation. If evaluation fails, the draft survives. This is the right pattern for any multi-step LLM pipeline.
+
+### 3. Declarative Pipeline Config — ✓ Mostly done
+
+`workflows/default.yaml` with `stage_inputs` is good. Push further: make `CONTENT_STAGES` a pipeline property, not a Python constant. Make stage prefixes derivable from pipeline order.
+
+### 4. Loop Guardrails — ✓ Quill does this well
+
+Metrics-based degradation detection is sophisticated. More agentic apps should do this. The baseline snapshot + comparison pattern is reusable.
+
+### 5. Debug Transparency — ✓ Quill does this well
+
+Debug prompt endpoint and prompt dumping are excellent for LLM development. Users can see exactly what the model receives. This should be standard in all agentic apps.
+
+### 6. Observability from Day 1 — ✓ Mostly done
+
+JSONL run logging, SSE events, per-stage metrics. Missing: request tracing, token counting, cost estimation.
+
+### 7. Fail-Safe Defaults — ⚠ Partially
+
+Most error paths return error decisions. But evaluate failure silently advances — this violates the fail-safe principle.
+
+---
+
+## Prioritized Action Items
+
+### P0 — Fix Now
+
+1. **Split `app.py` into blueprints** — pieces, agents, dashboard, export, model config. Each <200 lines.
+2. **Make `CONTENT_STAGES` declarative** — add `mode: content | feedback` to pipeline YAML. Remove hardcoded sets from runner.py and piece.py.
+3. **Fix evaluate failure policy** — return `decision="error"` instead of silent advance.
+4. **Update `ARCHITECTURE.md`** — fix pipeline size, response format keys, file structure, env var docs.
+
+### P1 — Next Sprint
+
+5. **Derive `_STAGE_PREFIXES` from pipeline order** — remove hardcoded dict from piece.py.
+6. **Add one real LLM integration test** — `@pytest.mark.slow`, validates prompt rendering + JSON parsing.
+7. **Extract inline CSS from `comic.py`** — Jinja2 template, reduces to ~350 lines.
+8. **Add retry logic to `run_chain`** — configurable: abort/skip/retry for transient LLM failures.
+9. **Add config caching** — mtime check for `load_model_config()`.
+10. **Make `max_workers` configurable** — model.yaml or env var.
+
+### P2 — Backlog
+
+11. Log rotation for `run-log.jsonl`
+12. Request tracing (correlation ID per chain run)
+13. YAML schema validation (pydantic/marshmallow)
+14. Context window budget checking
+15. Clean up deferred imports in app.py

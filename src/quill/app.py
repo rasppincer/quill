@@ -372,6 +372,10 @@ def pieces_advance(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
+    from .runner import RunManager
+    if RunManager().is_piece_running(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
+
     next_stage = pipeline.next_stage(piece.current_stage)
     if not next_stage:
         return jsonify({"error": f"Piece is at final stage '{piece.current_stage}'"}), 400
@@ -424,6 +428,10 @@ def pieces_reject(piece_id: str):
     piece = get_piece(piece_id)
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    from .runner import RunManager
+    if RunManager().is_piece_running(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
 
     data = request.get_json(silent=True) or {}
     target = data.get("target", "").strip()
@@ -887,6 +895,9 @@ def pieces_run_async(piece_id: str):
         agent_set=agent_set,
         chain=chain,
     )
+
+    if run_id is None:
+        return jsonify({"error": f"Piece '{piece_id}' already has a running job"}), 409
 
     return jsonify({
         "run_id": run_id,

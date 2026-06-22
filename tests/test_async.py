@@ -93,7 +93,7 @@ class TestRunManagerStartRun:
         run_info = mgr.get_run(run_id)
         assert run_info is not None
         assert run_info["piece_id"] == "async-piece"
-        assert run_info["status"] == "complete"
+        assert run_info["result"] is not None  # result set when run finishes
 
     def test_get_run_nonexistent(self):
         """get_run() returns None for unknown run_id."""
@@ -287,9 +287,13 @@ class TestAsyncEndpoints:
     def client(self, tmp_output, tmp_agents, monkeypatch):
         """Flask test client."""
         from quill.app import app as flask_app
+        from quill.run_manager import RunManager
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
         monkeypatch.setattr("quill.agent.MODEL_CONFIG_FILE", tmp_agents / "model.yaml")
+        # Clear RunManager state between tests
+        manager = RunManager()
+        manager._runs.clear()
         flask_app.config["TESTING"] = True
         with flask_app.test_client() as c:
             yield c
@@ -363,7 +367,7 @@ class TestRunManagerCleanup:
         run_id = "oldrun123456"
         mgr._runs[run_id] = {
             "queue": queue.Queue(),
-            "status": "complete",
+            "result": {"decision": "advance", "critique": "ok"},
             "result": None,
             "piece_id": "test",
             "stage": "review",

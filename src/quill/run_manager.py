@@ -32,16 +32,33 @@ class RunManager:
                     inst._executor = ThreadPoolExecutor(max_workers=2)
                     inst._runs = {}  # run_id -> run info dict
                     inst._run_lock = threading.Lock()
+                    inst._piece_locks = {}  # piece_id -> threading.Lock
+                    inst._piece_locks_lock = threading.Lock()
                     cls._instance = inst
         return cls._instance
+
+    def _get_piece_lock(self, piece_id: str) -> threading.Lock:
+        """Get or create a lock for a specific piece."""
+        with self._piece_locks_lock:
+            if piece_id not in self._piece_locks:
+                self._piece_locks[piece_id] = threading.Lock()
+            return self._piece_locks[piece_id]
+
+    def is_piece_running(self, piece_id: str) -> bool:
+        """Check if a piece has a running async job."""
+        with self._run_lock:
+            for info in self._runs.values():
+                if info["piece_id"] == piece_id and info["status"] == "running":
+                    return True
+        return False
 
     def start_run(
         self,
         piece_id: str,
-        stage: str | None = None,
+        stage: str,
         agent_set: str = "default",
         chain: bool = False,
-    ) -> str:
+    ) -> str | None:
         """Start a background run and return the run_id.
 
         Args:
@@ -54,6 +71,9 @@ class RunManager:
             run_id string for SSE subscription.
         """
         self._cleanup_old_runs()
+
+        if self.is_piece_running(piece_id):
+            return None  # piece already has a running job
 
         run_id = uuid.uuid4().hex[:12]
         event_queue: queue.Queue = queue.Queue()
@@ -158,7 +178,6 @@ class RunManager:
                 }
 
             with self._run_lock:
-                self._runs[run_id]["status"] = "complete"
                 self._runs[run_id]["result"] = result_data
 
         except Exception as exc:
@@ -169,7 +188,10 @@ class RunManager:
             event_queue.put({"type": "error", "data": {"error": str(exc)}})
 
         finally:
-            # Signal completion
+            # Don't set status to "complete" here — let it stay "running" until
+            # the SSE sentinel (None) is consumed by the client. This prevents
+            # race conditions where the piece is still being processed by the
+            # frontend but the run is marked complete.
             event_queue.put(None)
 
     def _cleanup_old_runs(self):

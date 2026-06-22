@@ -510,6 +510,91 @@ def step_draft_content_length(context, min_chars):
 
 
 # ---------------------------------------------------------------------------
+# Concurrency and edge case steps
+# ---------------------------------------------------------------------------
+
+
+@then("the response contains error \"{msg}\"")
+def step_response_contains_error(context, msg):
+    data = context.response_json or {}
+    error = data.get("error", context.response.text if context.response else "")
+    assert msg in error, f"Expected '{msg}' in error, got: {error}"
+
+
+@when('I start an async run on piece "{piece_id}" for stage "{stage}" with agent set "{agent_set}"')
+def step_start_async_run_on_piece(context, piece_id, stage, agent_set):
+    import requests
+    url = f"{context.api_base}/api/pieces/{piece_id}/run-async"
+    resp = requests.post(url, json={"stage": stage, "agent_set": agent_set})
+    context.response = resp
+    try:
+        context.response_json = resp.json()
+    except Exception:
+        context.response_json = None
+    if resp.status_code == 200 and context.response_json:
+        context.run_id = context.response_json.get("run_id")
+
+
+@when("I attempt to advance the piece")
+def step_attempt_advance(context):
+    api(context, "post", f"/api/pieces/{context.piece_id}/advance")
+
+
+@when("I attempt to reject the piece to \"{target}\"")
+def step_attempt_reject(context, target):
+    api(context, "post", f"/api/pieces/{context.piece_id}/reject", json={"target": target})
+
+
+@when("I wait {n:d} seconds")
+def step_wait(context, n):
+    import time
+    time.sleep(n)
+
+
+@when("I fetch the run log for piece \"{piece_id}\"")
+def step_fetch_run_log(context, piece_id):
+    api(context, "get", f"/api/pieces/{piece_id}/run-log")
+
+
+@then("the run log has at least {n:d} entries")
+def step_run_log_min_entries(context, n):
+    data = context.response_json
+    assert data["count"] >= n, f"Expected at least {n} entries, got {data['count']}"
+
+
+@given("the piece has a simulated running job")
+def step_simulate_running_job(context):
+    """Inject a fake running job into RunManager to test concurrency guards."""
+    import requests
+    # Use the internal API to inject a running state
+    from quill.run_manager import RunManager
+    import uuid, time, queue
+    manager = RunManager()
+    run_id = uuid.uuid4().hex[:12]
+    with manager._run_lock:
+        manager._runs[run_id] = {
+            "queue": queue.Queue(),
+            "status": "running",
+            "result": None,
+            "piece_id": context.piece_id,
+            "stage": "draft",
+            "agent_set": "default",
+            "chain": False,
+            "started_at": time.time(),
+        }
+
+
+@given("the piece has draft.md content with em dashes")
+def step_write_draft_with_em_dashes(context):
+    content = "The old house\u2014abandoned for years\u2014stood at the end of the road. It was\u2014by all accounts\u2014haunted."
+    write_stage_file(context.piece_id, "draft", content)
+    write_stage_file(context.piece_id, "brief", f"---\nid: {context.piece_id}\ntitle: Em Dash Test\ncurrent_stage: draft\ngenre: fiction\n---\n\nA haunted house story.")
+
+
+@then("the review.md file does not contain em dashes")
+def step_no_em_dashes_in_review(context):
+    content = read_stage_file(context.piece_id, "review")
+    assert "\u2014" not in content, f"review.md contains em dash: {content[:200]}"
 # For-stage filtering steps
 # ---------------------------------------------------------------------------
 

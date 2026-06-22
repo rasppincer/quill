@@ -36,5 +36,7 @@ def before_scenario(context, scenario):
                                                    "reject-", "body-", "done-", "dupe-",
                                                    "chain-skip", "the-cognitive-",
                                                    "renamed-", "frontmatter-",
-                                                   "llm-")):
+                                                   "llm-", "concurrent-",
+                                                   "advance-during-", "reject-during-",
+                                                   "log-append-", "clean-test")):
                 shutil.rmtree(d, ignore_errors=True)

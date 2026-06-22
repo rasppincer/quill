@@ -249,10 +249,18 @@ class Piece:
         )
         logger.info("Advanced meta.yaml to stage '%s'", next_stage)
 
+    @staticmethod
+    def _clean_content(content: str) -> str:
+        """Mechanical cleanup of LLM output — deterministic, no LLM judgment."""
+        content = content.replace("—", " - ")    # em dash → dash
+        content = content.replace("–", " - ")     # en dash → dash
+        content = content.replace("\u00a0", " ")  # non-breaking space → space
+        return content
+
     def write_output(self, stage: str, content: str):
         """Write agent output to a stage file."""
         output_file = self.stage_dir() / _stage_filename(stage)
-        output_file.write_text(content, encoding="utf-8")
+        output_file.write_text(self._clean_content(content), encoding="utf-8")
         logger.info("Wrote output to %s", output_file)
 
     def write_decision(self, stage: str, decision_decision: str, decision_critique: str):

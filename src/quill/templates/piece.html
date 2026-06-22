@@ -206,6 +206,28 @@ const PIECE_AGENT_SET = {{ (piece.agent_set or '')|tojson }};
 document.addEventListener('DOMContentLoaded', async function() {
     const select = document.getElementById('agent-select');
     if (!select) return;
+
+    // Check if piece has a running job (survives page refresh)
+    try {
+        const pieceResp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
+        const pieceData = await pieceResp.json();
+        if (pieceData.running) {
+            const btn = document.getElementById('run-agent-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Running...';
+            }
+            const statusEl = document.getElementById('agent-status');
+            if (statusEl) {
+                statusEl.textContent = 'Agent running (refreshed page — run still in progress)';
+                statusEl.style.color = 'var(--accent-blue)';
+            }
+            document.getElementById('agent-result').style.display = 'block';
+            // Poll until run completes
+            pollRunStatus();
+        }
+    } catch (e) { /* ignore */ }
+
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/agents/for-stage/${CURRENT_STAGE}`);
         const data = await resp.json();
@@ -309,6 +331,34 @@ async function reject(target) {
     if (result) {
         toast(`Reverted to ${result.current_stage}`, 'info');
         setTimeout(() => location.reload(), 500);
+    }
+}
+
+// Poll for run completion after page refresh
+async function pollRunStatus() {
+    const btn = document.getElementById('run-agent-btn');
+    const statusEl = document.getElementById('agent-status');
+    const maxPolls = 120; // 120 * 2s = 4 minutes max
+    for (let i = 0; i < maxPolls; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+            const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
+            const data = await resp.json();
+            if (!data.running) {
+                // Run completed — reload to show new state
+                window.location.reload();
+                return;
+            }
+        } catch (e) { /* ignore */ }
+    }
+    // Timed out
+    if (statusEl) {
+        statusEl.textContent = 'Run timed out — refresh to check status';
+        statusEl.style.color = 'var(--accent-red)';
+    }
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = '▶ Run Agent';
     }
 }
 

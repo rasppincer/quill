@@ -302,6 +302,9 @@ def pieces_get(piece_id: str):
     d["body"] = body
     d["body_length"] = len(body)
 
+    from .runner import RunManager
+    d["running"] = RunManager().is_piece_running(piece_id)
+
     return jsonify(d)
 
 

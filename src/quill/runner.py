@@ -46,17 +46,6 @@ StageContext = namedtuple("StageContext", [
 class StageRunner:
     """Executes a pipeline stage using an LLM agent."""
 
-    # Stage-specific input requirements (override default "previous stage" logic).
-    # Content stages read from the PREVIOUS CONTENT stage, not the feedback
-    # stage before them.
-    _STAGE_INPUTS = {
-        "outline": ["brief.md"],
-        "draft": ["outline.md", "brief.md"],
-        "revise": ["draft.md", "review.md"],
-        "humanize": ["revise.md"],
-        "polish": ["humanize.md", "validate.md"],
-    }
-
     def __init__(self, agent_set: str = "default"):
         self.agent_set = agent_set
         self.run_logger = RunLogger()
@@ -126,7 +115,7 @@ class StageRunner:
         input_content = self._read_inputs(piece, stage, pipeline, loop_count)
         metrics_context = self.metrics_svc.build_context(
             piece, stage, pipeline,
-            PromptBuilder.resolve_input_stages(stage, pipeline, self._STAGE_INPUTS),
+            PromptBuilder.resolve_input_stages(stage, pipeline),
         )
         ctx = self.prompt_builder.build_context(
             piece, stage, input_content, metrics_context, loop_count,
@@ -252,6 +241,10 @@ class StageRunner:
         Returns:
             AgentDecision with the result.
         """
+        # Research is a special stage — no agent prompt, uses ResearchService
+        if stage == "research":
+            return self._run_research(piece_id, stage, output_dir, event_queue)
+
         try:
             sc = self._prepare_stage(piece_id, stage, output_dir)
         except ValueError as e:
@@ -404,6 +397,103 @@ class StageRunner:
         return decision
 
     # ------------------------------------------------------------------
+    # Research stage
+    # ------------------------------------------------------------------
+
+    def _run_research(
+        self, piece_id: str, stage: str, output_dir: Path | None = None,
+        event_queue=None,
+    ) -> AgentDecision:
+        """Execute the research stage: generate queries, search, save results."""
+        from .piece import DEFAULT_OUTPUT_DIR, load_piece
+        from .pipeline import load_pipeline
+        from .research_service import ResearchService
+
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        piece_dir = base / piece_id
+        if not piece_dir.exists():
+            return AgentDecision(
+                decision="error", critique="", output="",
+                error=f"Piece '{piece_id}' not found",
+            )
+
+        piece = load_piece(piece_dir)
+        pipeline = load_pipeline("default")
+
+        self._emit(event_queue, "stage_start", {
+            "stage": stage, "is_content_stage": False, "is_research": True,
+        })
+
+        # Read inputs (brief + outline)
+        input_content = self._read_inputs(piece, stage, pipeline)
+        stage_dir = piece.stage_dir()
+        research_file = stage_dir / "research.md"
+
+        # Check cache
+        svc = ResearchService()
+        if svc.is_fresh(research_file):
+            self._emit(event_queue, "research_cached", {
+                "stage": stage, "file": str(research_file),
+            })
+            return AgentDecision(
+                decision="advance", critique="Research cache hit.",
+                output="", stage=stage,
+            )
+
+        # Split inputs into brief and outline
+        brief_text, outline_text = "", ""
+        for block in input_content.split("=== "):
+            if block.startswith(_stage_filename("brief")):
+                brief_text = block.split("\n", 1)[-1] if "\n" in block else ""
+            elif block.startswith(_stage_filename("outline")):
+                outline_text = block.split("\n", 1)[-1] if "\n" in block else ""
+
+        # Load LLM client for query generation
+        from .agent import load_model_config
+        from .llm import LLMClient
+        model_cfg = load_model_config()
+        llm_client = LLMClient(
+            api_base=model_cfg.get("api_base", "https://api.openai.com/v1"),
+            api_key=model_cfg.get("api_key", ""),
+            model=model_cfg.get("model", "gpt-4o"),
+            temperature=0.3,
+            max_tokens=200,
+        )
+
+        svc = ResearchService(llm_client=llm_client)
+        result = svc.execute(
+            brief_text=brief_text,
+            outline_text=outline_text,
+            research_file=research_file,
+        )
+
+        if result.from_cache:
+            critique = "Research cache hit."
+        elif result.results:
+            research_file.write_text(result.markdown, encoding="utf-8")
+            critique = f"Found {len(result.results)} sources from {len(result.queries)} queries."
+            logger.info("Research complete: %s", critique)
+        else:
+            research_file.write_text(result.markdown, encoding="utf-8")
+            critique = "No research results found."
+            logger.warning("Research returned no results")
+
+        self._emit(event_queue, "research_complete", {
+            "stage": stage, "queries": len(result.queries),
+            "results": len(result.results), "cached": result.from_cache,
+        })
+
+        # Advance to next stage
+        stage_def = pipeline.get_stage(stage)
+        if stage_def and stage_def.next:
+            piece.advance_to(stage_def.next)
+
+        return AgentDecision(
+            decision="advance", critique=critique,
+            output=result.markdown[:500], stage=stage,
+        )
+
+    # ------------------------------------------------------------------
     # Chain execution
     # ------------------------------------------------------------------
 
@@ -446,6 +536,23 @@ class StageRunner:
         })
 
         while current and current != "done" and len(results) < max_stages:
+            # Research stage runs without an agent prompt
+            if current == "research":
+                from .agent import load_research_config
+                research_cfg = load_research_config(self.agent_set)
+                if not research_cfg.get("enabled"):
+                    logger.info("Research disabled for agent set '%s', skipping", self.agent_set)
+                    skipped_stages.append(current)
+                    stage_def = pipeline.get_stage(current)
+                    current = stage_def.next if stage_def else None
+                    continue
+                result = self._run_research(piece_id, current, output_dir, event_queue=event_queue)
+                results.append(result)
+                if result.decision == "advance":
+                    piece = load_piece(piece_dir)
+                    current = piece.current_stage
+                continue
+
             # Check if agent set has a prompt for this stage
             agent_cfg = load_agent_config(self.agent_set, current)
             if not agent_cfg or not agent_cfg.prompt_template:
@@ -515,8 +622,9 @@ class StageRunner:
         inputs: list[str] = []
 
         # Stage-specific inputs
-        if stage in self._STAGE_INPUTS:
-            for input_stage in self._STAGE_INPUTS[stage]:
+        stage_inputs = pipeline.stage_inputs if pipeline else {}
+        if stage in stage_inputs:
+            for input_stage in stage_inputs[stage]:
                 input_stage_name = input_stage.replace(".md", "")
                 fpath = stage_dir / _stage_filename(input_stage_name)
                 if fpath.exists():
@@ -525,7 +633,7 @@ class StageRunner:
                     inputs.append(f"=== {fpath.name} ===\n{text[m.end():] if m else text}")
         else:
             # Default: read previous stage's output
-            stage_order = pipeline.stage_order
+            stage_order = pipeline.stage_order if pipeline else []
             if stage in stage_order:
                 idx = stage_order.index(stage)
                 if idx > 0:

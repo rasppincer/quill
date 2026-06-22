@@ -117,8 +117,9 @@ class PromptBuilder:
         return None
 
     @staticmethod
-    def resolve_input_stages(stage: str, pipeline, stage_inputs: dict) -> list[str]:
+    def resolve_input_stages(stage: str, pipeline) -> list[str]:
         """Resolve input stage names for a given stage."""
+        stage_inputs = pipeline.stage_inputs if pipeline else {}
         if stage in stage_inputs:
             return [f.replace(".md", "") for f in stage_inputs[stage]]
         stage_order = pipeline.stage_order

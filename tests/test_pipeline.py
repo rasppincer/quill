@@ -150,10 +150,10 @@ class TestDefaultPipeline:
 
     def test_loads_default(self, pipeline):
         assert pipeline.name == "default"
-        assert len(pipeline.stages) == 9
+        assert len(pipeline.stages) == 10
 
     def test_stage_order(self, pipeline):
-        expected = ["brief", "outline", "draft", "review", "revise",
+        expected = ["brief", "outline", "research", "draft", "review", "revise",
                      "humanize", "validate", "polish", "done"]
         assert pipeline.stage_order == expected
 

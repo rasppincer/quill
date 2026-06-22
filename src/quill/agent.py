@@ -125,6 +125,23 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
     )
 
 
+def load_research_config(agent_set: str) -> dict:
+    """Load research configuration for an agent set.
+
+    Returns dict with 'enabled' (bool) and 'required' (bool).
+    Defaults to enabled=False if not configured.
+    """
+    config_file = AGENTS_DIR / agent_set / "config.yaml"
+    if not config_file.exists():
+        return {"enabled": False, "required": False}
+    cfg = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+    research = cfg.get("research", {})
+    return {
+        "enabled": research.get("enabled", False),
+        "required": research.get("required", False),
+    }
+
+
 def list_agent_sets() -> list[dict]:
     """List available agent sets."""
     sets = []

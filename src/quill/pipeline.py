@@ -40,6 +40,7 @@ class Pipeline:
     description: str = ""
     stages: dict[str, Stage] = field(default_factory=dict)
     stage_order: list[str] = field(default_factory=list)
+    stage_inputs: dict[str, list[str]] = field(default_factory=dict)
 
     def get_stage(self, key: str) -> Stage | None:
         """Get a stage by key."""
@@ -126,6 +127,7 @@ def load_pipeline(name: str = "default") -> Pipeline:
 
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
 
+    stage_inputs = data.get("stage_inputs", {})
     stages = {}
     stage_order = []
 
@@ -150,6 +152,7 @@ def load_pipeline(name: str = "default") -> Pipeline:
         description=data.get("description", ""),
         stages=stages,
         stage_order=stage_order,
+        stage_inputs=stage_inputs,
     )
 
     logger.info("Loaded pipeline '%s' with %d stages", pipeline.name, len(stages))

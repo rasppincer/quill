@@ -11,7 +11,31 @@ from quill.runner import StageRunner
 from quill.prompt_builder import render_prompt
 from quill.piece import _stage_filename
 from quill.agent import AgentDecision
+from quill.pipeline import Pipeline, Stage
 
+
+DEFAULT_STAGE_INPUTS = {
+    "outline": ["brief.md"],
+    "draft": ["outline.md", "brief.md"],
+    "revise": ["draft.md", "review.md"],
+    "humanize": ["revise.md"],
+    "polish": ["humanize.md", "validate.md"],
+}
+
+
+def _make_pipeline(stage_inputs=None):
+    """Build a minimal Pipeline with stage_inputs for testing."""
+    return Pipeline(
+        name="test",
+        stages={
+            s: Stage(key=s, name=s, next="done" if s == "polish" else None)
+            for s in ["brief", "outline", "draft", "review", "revise",
+                       "humanize", "validate", "polish", "done"]
+        },
+        stage_order=["brief", "outline", "draft", "review", "revise",
+                      "humanize", "validate", "polish", "done"],
+        stage_inputs=stage_inputs or DEFAULT_STAGE_INPUTS,
+    )
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -57,7 +81,7 @@ class TestReadInputs:
         from quill.piece import load_piece
         piece = load_piece(sample_piece_with_review)
 
-        inputs = runner._read_inputs(piece, "revise", None)
+        inputs = runner._read_inputs(piece, "revise", _make_pipeline())
         assert "draft content" in inputs
         assert "stronger opening" in inputs
 
@@ -71,7 +95,7 @@ class TestReadInputs:
         (d / _stage_filename("revise")).write_text("The revised text here.")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "humanize", None)
+        inputs = runner._read_inputs(piece, "humanize", _make_pipeline())
         assert "revised text" in inputs
 
     def test_unknown_stage_reads_previous(self, runner, sample_piece, tmp_output):
@@ -844,7 +868,7 @@ class TestTwoFileOutput:
         (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "draft", None, loop_count=1)
+        inputs = runner._read_inputs(piece, "draft", _make_pipeline(), loop_count=1)
 
         assert "Previous draft attempt" in inputs
         assert "Needs more evidence" in inputs
@@ -863,7 +887,7 @@ class TestTwoFileOutput:
         (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "draft", None, loop_count=0)
+        inputs = runner._read_inputs(piece, "draft", _make_pipeline(), loop_count=0)
 
         assert "Previous draft attempt" not in inputs
         assert "evaluation feedback" not in inputs

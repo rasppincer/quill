@@ -7,6 +7,9 @@ temperature: 0.7
 max_tokens: 12288
 max_loops: 3
 trigger: "on_advance"  # on_advance | auto
+research:
+  enabled: true
+  required: true  # non-fiction always researches
 
 stages:
   outline:
@@ -31,15 +34,15 @@ stages:
 
   humanize:
     name: "Humanize Agent"
-    description: "Strips AI patterns, scores human-ness"
-    temperature: 0.4
+    description: "Strips AI-isms, injects personality, natural voice"
+    temperature: 0.8
 
   validate:
     name: "Validate Agent"
-    description: "Checks factual accuracy, sources, statistics, and claims"
-    temperature: 0.2
+    description: "Domain-specific fact checking and consistency verification"
+    temperature: 0.3
 
   polish:
     name: "Polish Agent"
-    description: "Final line-level edits, readability scoring, SEO optimization"
-    temperature: 0.3
+    description: "Final line-level edits, title optimization"
+    temperature: 0.5

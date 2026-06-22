@@ -49,9 +49,9 @@
 
 ## Phase 5 — Polish
 
-- [ ] Trigger mode: run_chain on "Run Agent" — one click runs all remaining stages (review→done). User writes brief→outline→draft manually, then agent pipeline handles the rest.
-- [ ] Agent run history (per-piece run log in meta.yaml, toggle via config)
-- [ ] Agent set management via API (create/delete sets) — low priority
+- [x] Trigger mode: run_chain on "Run Agent" — one click runs all remaining stages (review→done). User writes brief→outline→draft manually, then agent pipeline handles the rest.
+- [x] Agent run history — RunLogger class, run-log.jsonl per piece, /api/pieces/<id>/run-log endpoint, UI toggle for visibility
+- [x] Agent set management via API — POST /api/agents (create), DELETE /api/agents/<name> (delete), clone_from support
 - [x] **Chain run error UX** — Chain now skips stages without agent prompts and continues to the next stage. Errors only if ALL remaining stages lack prompts.
 - [x] **Word count preservation in agent prompts** — Added "expand rather than condense" instructions to revise/humanize prompts in both default and fiction agent sets.
 - [x] **Outline/draft agent prompts** — Created outline.prompt.md and draft.prompt.md for both default and fiction agent sets, updated config.yaml files, added to runner content_stages + _STAGE_INPUTS.
@@ -78,14 +78,15 @@
 - [x] **Async execution worker** — RunManager with ThreadPoolExecutor(2), SSE at `/runs/<id>/events`, live log panel in dashboard.
 
 ### Low Priority
-- [ ] **Move stage inputs to pipeline config** — `_STAGE_INPUTS` in runner.py is hardcoded Python. Move to `workflows/default.yaml` so custom stages (Research, SEO) get proper input routing without code changes.
+- [x] **Move stage inputs to pipeline config** — `stage_inputs` now lives in `workflows/default.yaml` and is loaded by `Pipeline` class. `_STAGE_INPUTS` removed from runner.py. Custom workflows can define their own input routing without code changes.
 - [x] **Loop guardrails** — Metric degradation detection across loop iterations. Saves baseline snapshot on first loop, compares on subsequent loops. Forces advance if word count drops >30%, readability shifts >15pts, vocab diversity drops >10%, or passive voice increases >10pp.
-- [ ] **Prompt git-history in dashboard** — Show git diffs of `.prompt.md` files in the Agents tab so writers can rollback templates without leaving the UI.
+- ~~**Prompt git-history in dashboard**~~ — Killed. Git CLI covers this.
 
 ## Phase 8 — Codebase Health
 
-- [x] **OOP refactor of runner.py** — See docs/ADR-003-module-structure.md. Extracted 4 classes: RunLogger (56 lines), MetricsService (159), PromptBuilder (103), RunManager (184). runner.py: 1103 → 848 lines. Each class in its own file under src/quill/.
+- [x] **OOP refactor of runner.py** — See docs/ADR-003-module-structure.md. Extracted 5 classes: RunLogger (66), MetricsService (159), PromptBuilder (137), RunManager (207), Piece enrichment. runner.py: 1103 → 648 lines. Each class in its own file under src/quill/.
 - [ ] **Spike: expose system prompt to user** — System prompt includes date context, genre/type instructions, JSON decision format. Worth surfacing in the Run Log or debug panel? Spike to assess value vs. complexity.
+- [x] **Research stage** — New pipeline stage between outline and draft. Fetches reference material from SearXNG. LLM generates search queries from brief+outline, results saved as-is to research.md. Configurable per flavor: non-fiction (required), fiction/default (optional). 1-hour cache TTL. Files: search_client.py, research_service.py, _run_research() in runner.py.
 
 ## Backlog
 

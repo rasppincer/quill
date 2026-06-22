@@ -64,7 +64,7 @@ class TestPipelineAPI:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["name"] == "default"
-        assert len(data["stages"]) == 9
+        assert len(data["stages"]) == 10
 
 
 # ---------------------------------------------------------------------------

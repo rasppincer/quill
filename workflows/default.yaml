@@ -3,6 +3,25 @@
 name: default
 description: Multi-stage writing pipeline for long-form content
 
+stage_inputs:
+  outline:
+    - brief.md
+  research:
+    - outline.md
+    - brief.md
+  draft:
+    - outline.md
+    - brief.md
+    - research.md
+  revise:
+    - draft.md
+    - review.md
+  humanize:
+    - revise.md
+  polish:
+    - humanize.md
+    - validate.md
+
 stages:
   - key: brief
     name: Brief
@@ -25,6 +44,12 @@ stages:
       - pacing_notes
     next: draft
     can_reject_to: brief
+
+  - key: research
+    name: Research
+    description: Fetch reference material from the web
+    next: draft
+    can_reject_to: outline
 
   - key: draft
     name: Draft

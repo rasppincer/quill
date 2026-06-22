@@ -92,6 +92,15 @@
     <div id="agent-critique" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
 </div>
 
+<!-- Live log panel (SSE) -->
+<div id="live-log-panel" style="display:none" class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">📡 Live Run Log</h3>
+        <span id="live-log-status" style="font-size:12px;color:var(--text-muted)"></span>
+    </div>
+    <div id="live-log" style="margin-top:12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;line-height:1.8;max-height:500px;overflow-y:auto;font-family:monospace"></div>
+</div>
+
 <!-- Stage content viewer -->
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -303,19 +312,39 @@ async function runAgent() {
     const btn = document.getElementById('run-agent-btn');
     const resultDiv = document.getElementById('agent-result');
     const statusEl = document.getElementById('agent-status');
+    const logPanel = document.getElementById('live-log-panel');
+    const logDiv = document.getElementById('live-log');
+    const logStatus = document.getElementById('live-log-status');
 
     btn.disabled = true;
     btn.textContent = '⏳ Running...';
     resultDiv.style.display = 'block';
-    statusEl.textContent = 'Calling LLM...';
+    statusEl.textContent = 'Starting...';
     statusEl.style.color = 'var(--accent-blue)';
     document.getElementById('agent-decision').textContent = '—';
     document.getElementById('agent-loops').textContent = '—';
     document.getElementById('agent-critique').textContent = 'Waiting for response...';
 
+    // Show live log panel
+    logPanel.style.display = 'block';
+    logDiv.innerHTML = '';
+    logStatus.textContent = 'Connecting...';
+
+    function appendLog(html) {
+        const line = document.createElement('div');
+        line.innerHTML = html;
+        logDiv.appendChild(line);
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function ts() {
+        return new Date().toLocaleTimeString();
+    }
+
     try {
         const agentSet = document.getElementById('agent-select').value;
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run`, {
+        // Start async run
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ agent_set: agentSet })
@@ -326,29 +355,114 @@ async function runAgent() {
             statusEl.textContent = `Error: ${data.error}`;
             statusEl.style.color = 'var(--accent-red)';
             document.getElementById('agent-critique').textContent = data.error;
-        } else {
-            const decisionEl = document.getElementById('agent-decision');
-            decisionEl.textContent = data.decision;
-            decisionEl.style.color = data.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
-            document.getElementById('agent-loops').textContent = data.loop_count;
-            document.getElementById('agent-critique').textContent = data.critique || '(no critique)';
-            statusEl.textContent = 'Complete';
-            statusEl.style.color = 'var(--accent-green)';
-
-            if (data.decision === 'advance') {
-                toast('Agent decided: advance', 'success');
-                setTimeout(() => location.reload(), 1500);
-            } else if (data.decision === 'loop_back') {
-                toast('Agent decided: loop back', 'warning');
-            }
+            btn.disabled = false;
+            btn.textContent = '▶ Run Agent';
+            return;
         }
+
+        const runId = data.run_id;
+        statusEl.textContent = 'Running...';
+        logStatus.textContent = `run: ${runId}`;
+        appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-blue)">Run started</span> — ${data.stage} (run ${runId})`);
+
+        // Connect to SSE
+        const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/runs/${runId}/events`);
+
+        eventSource.addEventListener('stage_start', function(e) {
+            const d = JSON.parse(e.data);
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Stage start:</span> ${d.stage} (prompt: ${d.prompt_chars} chars, loop: ${d.loop_count})`);
+            statusEl.textContent = `Running: ${d.stage}...`;
+        });
+
+        eventSource.addEventListener('stage_llm_call', function(e) {
+            const d = JSON.parse(e.data);
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-blue)">LLM call:</span> ${d.call} for ${d.stage}`);
+            statusEl.textContent = `LLM ${d.call}: ${d.stage}...`;
+        });
+
+        eventSource.addEventListener('stage_complete', function(e) {
+            const d = JSON.parse(e.data);
+            const color = d.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:${color}">Stage complete:</span> ${d.stage} → ${d.decision}`);
+            document.getElementById('agent-decision').textContent = d.decision;
+            document.getElementById('agent-decision').style.color = color;
+            document.getElementById('agent-loops').textContent = d.loop_count;
+            document.getElementById('agent-critique').textContent = d.critique || '(no critique)';
+        });
+
+        eventSource.addEventListener('loop_start', function(e) {
+            const d = JSON.parse(e.data);
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Loop back:</span> ${d.stage} (loop ${d.loop_count}/${d.max_loops})`);
+            if (d.critique) {
+                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--text-secondary)">Critique: ${d.critique.substring(0, 200)}${d.critique.length > 200 ? '...' : ''}</span>`);
+            }
+        });
+
+        eventSource.addEventListener('chain_start', function(e) {
+            const d = JSON.parse(e.data);
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Chain started</span> from ${d.from_stage} (${d.agent_set})`);
+        });
+
+        eventSource.addEventListener('chain_stage_complete', function(e) {
+            const d = JSON.parse(e.data);
+            const color = d.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:${color}">Chain stage ${d.completed}:</span> ${d.stage} → ${d.decision}`);
+        });
+
+        eventSource.addEventListener('chain_complete', function(e) {
+            const d = JSON.parse(e.data);
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Chain complete</span> — ${d.total_stages} stages`);
+        });
+
+        eventSource.addEventListener('error', function(e) {
+            if (eventSource.readyState === EventSource.CLOSED) return;
+            try {
+                const d = JSON.parse(e.data);
+                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Error:</span> ${d.error}`);
+            } catch(ex) {
+                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">SSE connection error</span>`);
+            }
+        });
+
+        eventSource.addEventListener('run_complete', function(e) {
+            const d = JSON.parse(e.data);
+            eventSource.close();
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">✓ Run complete</span> (${d.status})`);
+            logStatus.textContent = `Done (${d.status})`;
+
+            const result = d.result || {};
+            if (result.error) {
+                statusEl.textContent = `Error: ${result.error}`;
+                statusEl.style.color = 'var(--accent-red)';
+            } else {
+                const decision = result.decision || (result.results && result.results.length > 0 ? result.results[result.results.length - 1].decision : '?');
+                statusEl.textContent = 'Complete';
+                statusEl.style.color = 'var(--accent-green)';
+                if (decision === 'advance') {
+                    toast('Agent decided: advance', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else if (decision === 'loop_back') {
+                    toast('Agent decided: loop back', 'warning');
+                }
+            }
+
+            btn.disabled = false;
+            btn.textContent = '▶ Run Agent';
+        });
+
+        // Handle SSE connection errors (transport level)
+        eventSource.onerror = function() {
+            if (eventSource.readyState === EventSource.CLOSED) return;
+            // Will auto-reconnect, but if it's been a while, show status
+        };
+
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
         statusEl.style.color = 'var(--accent-red)';
+        appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Error: ${e.message}</span>`);
+        btn.disabled = false;
+        btn.textContent = '▶ Run Agent';
     }
-
-    btn.disabled = false;
-    btn.textContent = '▶ Run Agent';
 }
 
 async function exportGDocs() {

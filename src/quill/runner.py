@@ -17,8 +17,13 @@ Loop tracking is stored in meta.yaml under `loops`:
 from __future__ import annotations
 
 import logging
+import queue
+import threading
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import jinja2
 import yaml
@@ -28,6 +33,176 @@ from .llm import LLMClient
 from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
 
 logger = logging.getLogger(__name__)
+
+
+class RunManager:
+    """Singleton manager for async agent runs with SSE event streaming.
+
+    Uses a ThreadPoolExecutor(max_workers=2) to run StageRunner in background
+    threads. Each run gets an in-memory event queue that SSE endpoints can
+    subscribe to.
+    """
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    inst = super().__new__(cls)
+                    inst._executor = ThreadPoolExecutor(max_workers=2)
+                    inst._runs = {}  # run_id -> run info dict
+                    inst._run_lock = threading.Lock()
+                    cls._instance = inst
+        return cls._instance
+
+    def start_run(
+        self,
+        piece_id: str,
+        stage: str | None = None,
+        agent_set: str = "default",
+        chain: bool = False,
+    ) -> str:
+        """Start a background run and return the run_id.
+
+        Args:
+            piece_id: The piece to run on.
+            stage: Stage to run (default: piece's current stage).
+            agent_set: Agent set to use.
+            chain: If True, run all remaining stages.
+
+        Returns:
+            run_id string for SSE subscription.
+        """
+        self._cleanup_old_runs()
+
+        run_id = uuid.uuid4().hex[:12]
+        event_queue: queue.Queue = queue.Queue()
+
+        with self._run_lock:
+            self._runs[run_id] = {
+                "queue": event_queue,
+                "status": "running",
+                "result": None,
+                "piece_id": piece_id,
+                "stage": stage,
+                "agent_set": agent_set,
+                "chain": chain,
+                "started_at": time.time(),
+            }
+
+        self._executor.submit(
+            self._execute_run, run_id, piece_id, stage, agent_set, chain, event_queue,
+        )
+        return run_id
+
+    def get_run(self, run_id: str) -> dict | None:
+        """Get run info by id."""
+        with self._run_lock:
+            return self._runs.get(run_id)
+
+    def get_events(self, run_id: str):
+        """Generator that yields SSE-formatted event strings.
+
+        Blocks until the run completes (sentinel None in queue).
+        Yields lines like:
+            event: stage_start
+            data: {"stage": "review", ...}
+
+        Handles client disconnect by catching GeneratorExit.
+        """
+        with self._run_lock:
+            run = self._runs.get(run_id)
+        if not run:
+            yield f"event: error\ndata: {__import__('json').dumps({'error': 'Run not found'})}\n\n"
+            return
+
+        q = run["queue"]
+        try:
+            while True:
+                try:
+                    event = q.get(timeout=300)  # 5 min timeout
+                except queue.Empty:
+                    # Heartbeat to keep connection alive
+                    yield ": heartbeat\n\n"
+                    continue
+
+                if event is None:
+                    # Sentinel: run is complete
+                    with self._run_lock:
+                        run_info = self._runs.get(run_id, {})
+                    yield f"event: run_complete\ndata: {__import__('json').dumps({'status': run_info.get('status', 'unknown'), 'result': run_info.get('result')})}\n\n"
+                    return
+
+                event_type = event.get("type", "message")
+                data = event.get("data", {})
+                yield f"event: {event_type}\ndata: {__import__('json').dumps(data)}\n\n"
+        except GeneratorExit:
+            # Client disconnected — stop consuming
+            return
+
+    def _execute_run(self, run_id, piece_id, stage, agent_set, chain, event_queue):
+        """Background worker that runs StageRunner and emits events."""
+        import json as _json
+
+        try:
+            runner = StageRunner(agent_set=agent_set)
+
+            if chain:
+                results = runner.run_chain(
+                    piece_id, from_stage=stage, event_queue=event_queue,
+                )
+                result_data = {
+                    "chain": True,
+                    "results": [
+                        {
+                            "stage": r.stage,
+                            "decision": r.decision,
+                            "critique": r.critique[:500] + "..." if len(r.critique) > 500 else r.critique,
+                            "loop_count": r.loop_count,
+                            "error": r.error,
+                        }
+                        for r in results
+                    ],
+                }
+            else:
+                result = runner.run_stage(
+                    piece_id, stage or "", event_queue=event_queue,
+                )
+                result_data = {
+                    "stage": result.stage,
+                    "decision": result.decision,
+                    "critique": result.critique,
+                    "loop_count": result.loop_count,
+                    "error": result.error,
+                }
+
+            with self._run_lock:
+                self._runs[run_id]["status"] = "complete"
+                self._runs[run_id]["result"] = result_data
+
+        except Exception as exc:
+            logger.exception("Run %s failed", run_id)
+            with self._run_lock:
+                self._runs[run_id]["status"] = "error"
+                self._runs[run_id]["result"] = {"error": str(exc)}
+            event_queue.put({"type": "error", "data": {"error": str(exc)}})
+
+        finally:
+            # Signal completion
+            event_queue.put(None)
+
+    def _cleanup_old_runs(self):
+        """Remove runs older than 5 minutes (thread-safe)."""
+        cutoff = time.time() - 300
+        with self._run_lock:
+            expired = [
+                rid for rid, info in self._runs.items()
+                if info["started_at"] < cutoff
+            ]
+            for rid in expired:
+                del self._runs[rid]
 
 
 def _render_prompt(template: str, context: dict) -> str:
@@ -265,7 +440,12 @@ class StageRunner:
                 },
             }
 
-    def run_stage(self, piece_id: str, stage: str, output_dir: Path | None = None) -> AgentDecision:
+    def _emit(self, event_queue, event_type: str, data: dict):
+        """Emit an event to the queue if provided."""
+        if event_queue is not None:
+            event_queue.put({"type": event_type, "data": data})
+
+    def run_stage(self, piece_id: str, stage: str, output_dir: Path | None = None, event_queue=None) -> AgentDecision:
         """Execute a pipeline stage.
 
         Args:
@@ -338,6 +518,13 @@ class StageRunner:
         content_stages = {"outline", "draft", "revise", "humanize", "polish"}
         is_content_stage = stage in content_stages
 
+        self._emit(event_queue, "stage_start", {
+            "stage": stage,
+            "is_content_stage": is_content_stage,
+            "prompt_chars": len(prompt),
+            "loop_count": loop_count,
+        })
+
         if is_content_stage:
             # Two-call approach: generate first, then evaluate
             gen_system = (
@@ -346,6 +533,9 @@ class StageRunner:
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
             self._dump_debug_prompt(piece, stage, "generate", gen_system, prompt)
+            self._emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": "generate", "prompt_chars": len(prompt),
+            })
             try:
                 generated = client.chat(gen_system, prompt)
             except ConnectionError as e:
@@ -358,6 +548,9 @@ class StageRunner:
             self._write_output(piece, stage, generated)
 
             # Second call: evaluate the generated content
+            self._emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": "evaluate", "output_chars": len(generated),
+            })
             decision = self._evaluate_output(
                 client, stage, piece, generated, pipeline, input_content,
                 agent_set=self.agent_set,
@@ -376,6 +569,9 @@ class StageRunner:
             )
             self._dump_debug_prompt(piece, stage, "agent", eval_system, prompt)
             response_format = self._get_structured_output_format()
+            self._emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": "agent", "prompt_chars": len(prompt),
+            })
             try:
                 response = client.chat(eval_system, prompt, response_format=response_format)
             except ConnectionError as e:
@@ -398,6 +594,11 @@ class StageRunner:
             # Content stages already wrote both output and decision above
             logger.info("Stage '%s' loop_back (loop %d/%d)",
                        stage, loop_count + 1, agent_cfg.max_loops)
+            self._emit(event_queue, "loop_start", {
+                "stage": stage, "loop_count": loop_count + 1,
+                "max_loops": agent_cfg.max_loops,
+                "critique": decision.critique[:300],
+            })
         elif decision.decision == "advance":
             # Reset loop count for this stage
             self.set_loop_count(piece, stage, 0)
@@ -417,16 +618,25 @@ class StageRunner:
             logger.warning("Stage '%s' returned unknown decision: '%s'",
                           stage, decision.decision)
 
+        self._emit(event_queue, "stage_complete", {
+            "stage": stage,
+            "decision": decision.decision,
+            "critique": decision.critique[:500],
+            "loop_count": loop_count,
+            "error": decision.error,
+        })
+
         return decision
 
     def run_chain(self, piece_id: str, from_stage: str | None = None,
-                  output_dir: Path | None = None) -> list[AgentDecision]:
+                  output_dir: Path | None = None, event_queue=None) -> list[AgentDecision]:
         """Run a chain of stages from the current stage to done.
 
         Args:
             piece_id: The piece ID to process.
             from_stage: Start from this stage (default: current stage).
             output_dir: Override output directory.
+            event_queue: Optional queue for SSE event emission.
 
         Returns:
             List of AgentDecision results for each stage run.
@@ -449,6 +659,12 @@ class StageRunner:
         max_stages = 20  # safety limit
         skipped_stages = []
 
+        self._emit(event_queue, "chain_start", {
+            "piece_id": piece_id,
+            "from_stage": current,
+            "agent_set": self.agent_set,
+        })
+
         while current and current != "done" and len(results) < max_stages:
             # Check if agent set has a prompt for this stage
             agent_cfg = load_agent_config(self.agent_set, current)
@@ -466,8 +682,15 @@ class StageRunner:
                 else:
                     break
 
-            result = self.run_stage(piece_id, current, output_dir)
+            result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue)
             results.append(result)
+
+            self._emit(event_queue, "chain_stage_complete", {
+                "stage": result.stage,
+                "decision": result.decision,
+                "completed": len(results),
+                "error": result.error,
+            })
 
             if result.error:
                 break
@@ -483,6 +706,11 @@ class StageRunner:
 
         # If no stages ran and we only skipped, return an error
         if not results and skipped_stages:
+            self._emit(event_queue, "chain_complete", {
+                "total_stages": 0,
+                "skipped": skipped_stages,
+                "error": True,
+            })
             return [AgentDecision(
                 decision="error", critique="", output="",
                 error=(
@@ -492,6 +720,11 @@ class StageRunner:
                 ),
             )]
 
+        self._emit(event_queue, "chain_complete", {
+            "total_stages": len(results),
+            "skipped": skipped_stages,
+            "last_decision": results[-1].decision if results else None,
+        })
         return results
 
     # Stage-specific input requirements (override default "previous stage" logic)

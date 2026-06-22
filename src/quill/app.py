@@ -23,7 +23,7 @@ import re
 import yaml
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request, render_template, redirect, url_for, send_from_directory
+from flask import Flask, jsonify, request, render_template, redirect, url_for, send_from_directory, Response, stream_with_context
 from pathlib import Path
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -815,6 +815,76 @@ def pieces_run(piece_id: str):
             "loop_count": result.loop_count,
             "error": result.error,
         })
+
+
+@app.route("/api/pieces/<piece_id>/run-async", methods=["POST"])
+def pieces_run_async(piece_id: str):
+    """Start an async agent run with SSE progress streaming.
+
+    JSON body:
+        stage: Stage to run (default: current stage).
+        agent_set: Agent set to use (default: "default").
+        chain: If true, run all remaining stages.
+
+    Returns:
+        {"run_id": "...", "piece_id": "...", "stage": "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage")
+    chain = data.get("chain", False)
+
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    agent_set = data.get("agent_set") or piece.agent_set or "default"
+
+    from .runner import RunManager
+    manager = RunManager()
+    run_id = manager.start_run(
+        piece_id=piece_id,
+        stage=stage or piece.current_stage,
+        agent_set=agent_set,
+        chain=chain,
+    )
+
+    return jsonify({
+        "run_id": run_id,
+        "piece_id": piece_id,
+        "stage": stage or piece.current_stage,
+    })
+
+
+@app.route("/api/pieces/<piece_id>/runs/<run_id>/events")
+def pieces_run_events(piece_id: str, run_id: str):
+    """SSE endpoint for live run progress.
+
+    Streams Server-Sent Events until the run completes.
+    Event types: stage_start, stage_llm_call, stage_complete,
+                 loop_start, chain_start, chain_stage_complete,
+                 chain_complete, run_complete, error.
+    """
+    from .runner import RunManager
+    manager = RunManager()
+
+    run = manager.get_run(run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+    if run["piece_id"] != piece_id:
+        return jsonify({"error": "Run does not belong to this piece"}), 404
+
+    def generate():
+        for event_str in manager.get_events(run_id):
+            yield event_str
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 

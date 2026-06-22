@@ -296,6 +296,21 @@ class StageRunner:
             return {"type": "json_object"}
         return None
 
+    @staticmethod
+    def _date_context() -> str:
+        """Return a date context string to inject into system prompts."""
+        now = datetime.now()
+        return (
+            f"IMPORTANT: Today is {now.strftime('%d %B %Y')}. "
+            f"Your training data may be older. "
+            f"Execute all tasks knowing the current date is {now.strftime('%d %B %Y')}."
+        )
+
+    @classmethod
+    def _with_date(cls, system_prompt: str) -> str:
+        """Prepend date context to a system prompt."""
+        return f"{system_prompt}\n\n{cls._date_context()}"
+
     def _check_loop_guardrail(self, piece: Piece, stage: str, loop_count: int) -> str:
         """Check if metrics are degrading across loop iterations.
 
@@ -431,7 +446,7 @@ class StageRunner:
         is_content_stage = stage in content_stages
 
         if is_content_stage:
-            gen_system = (
+            gen_system = self._with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
@@ -455,7 +470,7 @@ class StageRunner:
                     f"Evaluate the generated {stage} output.\n\n"
                     f"Be strict but fair. Only loop_back if there are real, fixable problems."
                 )
-            eval_system = (
+            eval_system = self._with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
@@ -496,7 +511,7 @@ class StageRunner:
                 },
             }
         else:
-            eval_system = (
+            eval_system = self._with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
@@ -619,7 +634,7 @@ class StageRunner:
 
         if is_content_stage:
             # Two-call approach: generate first, then evaluate
-            gen_system = (
+            gen_system = self._with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
@@ -654,7 +669,7 @@ class StageRunner:
             self._write_decision(piece, stage, decision)
         else:
             # Feedback stages: single call with JSON decision expected
-            eval_system = (
+            eval_system = self._with_date(
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
@@ -1029,7 +1044,7 @@ class StageRunner:
                 extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
             )
             prompt = _render_prompt(eval_template, eval_ctx)
-            eval_system = (
+            eval_system = self._with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
@@ -1050,7 +1065,7 @@ class StageRunner:
                 f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
                 f"Be strict but fair. Only loop_back if there are real, fixable problems."
             )
-            eval_system = (
+            eval_system = self._with_date(
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )

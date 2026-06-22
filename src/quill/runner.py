@@ -365,6 +365,7 @@ class StageRunner:
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
             )
+            self._dump_debug_prompt(piece, stage, "agent", eval_system, prompt)
             try:
                 response = client.chat(eval_system, prompt)
             except ConnectionError as e:

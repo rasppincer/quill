@@ -32,6 +32,7 @@ import yaml
 from .agent import AgentConfig, AgentDecision, load_agent_config, parse_agent_response
 from .llm import LLMClient
 from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
+from .run_logger import RunLogger
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +232,7 @@ class StageRunner:
 
     def __init__(self, agent_set: str = "default"):
         self.agent_set = agent_set
+        self.run_logger = RunLogger()
 
     def _build_render_context(
         self, piece: "Piece", stage: str, input_content: str, metrics_context: str,
@@ -254,38 +256,6 @@ class StageRunner:
         if extra:
             ctx.update(extra)
         return ctx
-
-    def _log_run_entry(
-        self, piece: "Piece", stage: str, call_type: str,
-        system: str, user: str, result: dict | None = None,
-    ):
-        """Append a run log entry to run-log.jsonl in the piece directory.
-
-        Args:
-            piece: The piece being processed.
-            stage: Current stage name.
-            call_type: "generate", "evaluate", or "agent" (single-call feedback).
-            system: System prompt sent to LLM.
-            user: User prompt sent to LLM (with all variables filled).
-            result: Optional dict with decision, critique, elapsed, etc.
-        """
-        from .agent import load_model_config
-        cfg = load_model_config()
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "stage": stage,
-            "call": call_type,
-            "model": cfg.get("model", ""),
-            "system_chars": len(system),
-            "user_chars": len(user),
-        }
-        if result:
-            entry.update(result)
-
-        log_file = piece.stage_dir() / "run-log.jsonl"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        logger.info("Run log entry: %s/%s (%s)", piece.id, stage, call_type)
 
     @staticmethod
     def _get_structured_output_format() -> dict | None:
@@ -639,7 +609,7 @@ class StageRunner:
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
-            self._log_run_entry(piece, stage, "generate", gen_system, prompt)
+            self.run_logger.log(piece, stage, "generate", gen_system, prompt)
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "generate", "prompt_chars": len(prompt),
             })
@@ -674,7 +644,7 @@ class StageRunner:
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
             )
-            self._log_run_entry(piece, stage, "agent", eval_system, prompt)
+            self.run_logger.log(piece, stage, "agent", eval_system, prompt)
             response_format = self._get_structured_output_format()
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "agent", "prompt_chars": len(prompt),
@@ -688,7 +658,7 @@ class StageRunner:
                 )
             decision = parse_agent_response(response)
             decision.output = response
-            self._log_run_entry(piece, stage, "agent", eval_system, prompt, {
+            self.run_logger.log(piece, stage, "agent", eval_system, prompt, {
                 "decision": decision.decision, "critique": decision.critique[:500],
             })
 
@@ -1048,7 +1018,7 @@ class StageRunner:
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
-            self._log_run_entry(piece, stage, "evaluate", eval_system, prompt)
+            self.run_logger.log(piece, stage, "evaluate", eval_system, prompt)
         else:
             # Fallback to hardcoded if no template exists
             logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
@@ -1077,7 +1047,7 @@ class StageRunner:
             return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
 
         result = parse_agent_response(eval_response)
-        self._log_run_entry(piece, stage, "evaluate", eval_system, prompt, {
+        self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
             "decision": result.decision, "critique": result.critique[:500],
         })
         return result

@@ -569,7 +569,7 @@ class TestRunLog:
         monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._log_run_entry(piece, "review", "agent", "system prompt", "user prompt", {
+        runner.run_logger.log(piece, "review", "agent", "system prompt", "user prompt", {
             "decision": "advance", "critique": "Good work.",
         })
 
@@ -590,9 +590,9 @@ class TestRunLog:
         monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._log_run_entry(piece, "review", "agent", "sys1", "user1")
-        runner._log_run_entry(piece, "review", "agent", "sys2", "user2", {"decision": "loop_back"})
-        runner._log_run_entry(piece, "draft", "generate", "sys3", "user3")
+        runner.run_logger.log(piece, "review", "agent", "sys1", "user1")
+        runner.run_logger.log(piece, "review", "agent", "sys2", "user2", {"decision": "loop_back"})
+        runner.run_logger.log(piece, "draft", "generate", "sys3", "user3")
 
         log_file = sample_piece / "run-log.jsonl"
         entries = [json.loads(line) for line in log_file.read_text().strip().split("\n")]

@@ -84,8 +84,8 @@
 
 ## Phase 8 — Codebase Health
 
-- [ ] **OOP refactor of runner.py** — runner.py is 1000+ lines. Split into focused classes: `PromptBuilder` (template rendering, context building, date injection), `RunManager` (already partially extracted — thread pool, event queues, run state), `StageExecutor` (run_stage, run_chain, decision handling), `MetricsService` (compute, load, guardrail comparison), `RunLogger` (JSONL logging). Each class gets its own file under `src/quill/runner/`.
-- [ ] **Spike: expose system prompt to user** — System prompt includes date context, genre/type instructions, JSON decision format. Worth surfacing in the Run Log or debug panel? Would help users understand why the LLM responds a certain way. Spike to assess value vs. complexity.
+- [ ] **OOP refactor of runner.py** — See docs/ADR-003-module-structure.md. Split into `src/quill/runner/` package: `prompt_builder.py`, `stage_runner.py`, `metrics_service.py`, `run_logger.py`, `run_manager.py`. Max 300 lines per file. Existing API (`from quill.runner import StageRunner`) unchanged.
+- [ ] **Spike: expose system prompt to user** — System prompt includes date context, genre/type instructions, JSON decision format. Worth surfacing in the Run Log or debug panel? Spike to assess value vs. complexity.
 
 ## Backlog
 

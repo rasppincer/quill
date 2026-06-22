@@ -93,7 +93,7 @@ class TestRunManagerStartRun:
         run_info = mgr.get_run(run_id)
         assert run_info is not None
         assert run_info["piece_id"] == "async-piece"
-        assert run_info["result"] is not None  # result set when run finishes
+        assert run_info["status"] == "complete"
 
     def test_get_run_nonexistent(self):
         """get_run() returns None for unknown run_id."""

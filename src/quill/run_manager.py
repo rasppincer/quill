@@ -178,6 +178,7 @@ class RunManager:
                 }
 
             with self._run_lock:
+                self._runs[run_id]["status"] = "complete"
                 self._runs[run_id]["result"] = result_data
 
         except Exception as exc:

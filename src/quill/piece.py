@@ -59,7 +59,6 @@ class Piece:
     """A writing piece with metadata and stage tracking."""
 
     # Stage classification
-    CONTENT_STAGES = {"draft", "revise", "humanize", "polish", "done"}
     STAGE_PREFIXES = _STAGE_PREFIXES  # delegate to module-level
 
     # Identity

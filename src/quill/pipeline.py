@@ -24,6 +24,7 @@ class Stage:
     key: str
     name: str
     description: str = ""
+    mode: str = "content"  # "content" (two-call) or "feedback" (single-call)
     next: str | None = None
     can_reject_to: list[str] = field(default_factory=list)
     required_fields: list[str] = field(default_factory=list)
@@ -52,6 +53,11 @@ class Pipeline:
         if stage and stage.next:
             return stage.next
         return None
+
+    def is_content_stage(self, key: str) -> bool:
+        """Check if a stage uses two-call (generate→evaluate) mode."""
+        stage = self.stages.get(key)
+        return stage.mode == "content" if stage else False
 
     def can_advance(self, current: str) -> bool:
         """Check if current stage can advance to the next."""
@@ -137,6 +143,7 @@ def load_pipeline(name: str = "default") -> Pipeline:
             key=key,
             name=stage_def.get("name", key),
             description=stage_def.get("description", ""),
+            mode=stage_def.get("mode", "content"),
             next=stage_def.get("next"),
             can_reject_to=stage_def.get("can_reject_to", []),
             required_fields=stage_def.get("required_fields", []),

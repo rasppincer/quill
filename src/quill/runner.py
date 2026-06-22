@@ -29,12 +29,9 @@ from .metrics_service import MetricsService
 from .prompt_builder import PromptBuilder, render_prompt
 
 # Re-export RunManager so tests can import it from quill.runner
-__all__ = ["StageRunner", "RunManager", "CONTENT_STAGES", "StageContext"]
+__all__ = ["StageRunner", "RunManager", "StageContext"]
 
 logger = logging.getLogger(__name__)
-
-# Content stages use two LLM calls (generate + evaluate).
-CONTENT_STAGES = {"outline", "draft", "revise", "humanize", "polish"}
 
 # Context bundle returned by _prepare_stage().
 StageContext = namedtuple("StageContext", [
@@ -151,7 +148,7 @@ class StageRunner:
             return {"error": str(e)}
 
         piece, agent_cfg = sc.piece, sc.agent_cfg
-        is_content = stage in CONTENT_STAGES
+        is_content = sc.pipeline.is_content_stage(stage)
 
         base = {
             "piece_id": piece_id, "stage": stage, "agent_set": self.agent_set,
@@ -271,7 +268,7 @@ class StageRunner:
             max_tokens=agent_cfg.max_tokens,
         )
 
-        is_content = stage in CONTENT_STAGES
+        is_content = sc.pipeline.is_content_stage(stage)
 
         self._emit(event_queue, "stage_start", {
             "stage": stage, "is_content_stage": is_content,
@@ -742,11 +739,10 @@ class StageRunner:
         response_format = PromptBuilder.get_structured_output_format()
         try:
             eval_response = client.chat(eval_system, prompt, response_format=response_format)
-        except ConnectionError:
+        except ConnectionError as e:
             return AgentDecision(
-                decision="advance",
-                critique="Evaluation call failed, advancing by default.",
-                output="",
+                decision="error", critique="", output="",
+                error=f"Evaluation call failed: {e}", stage=stage,
             )
 
         result = parse_agent_response(eval_response)

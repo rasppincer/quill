@@ -61,6 +61,7 @@ stages:
     can_reject_to: outline
 
   - key: review
+    mode: feedback
     name: Review
     description: Read, annotate, flag issues
     rules:
@@ -95,6 +96,7 @@ stages:
     can_reject_to: revise
 
   - key: validate
+    mode: feedback
     name: Validate
     description: Domain-specific fact checking
     rules:

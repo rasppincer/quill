@@ -366,9 +366,6 @@ async function runAgent() {
     const btn = document.getElementById('run-agent-btn');
     const resultDiv = document.getElementById('agent-result');
     const statusEl = document.getElementById('agent-status');
-    const logPanel = document.getElementById('live-log-panel');
-    const logDiv = document.getElementById('live-log');
-    const logStatus = document.getElementById('live-log-status');
 
     btn.disabled = true;
     btn.textContent = '⏳ Running...';
@@ -379,16 +376,19 @@ async function runAgent() {
     document.getElementById('agent-loops').textContent = '—';
     document.getElementById('agent-critique').textContent = 'Waiting for response...';
 
-    // Show live log panel
-    logPanel.style.display = 'block';
-    logDiv.innerHTML = '';
-    logStatus.textContent = 'Connecting...';
+    // Open run log panel
+    const logPanel = document.getElementById('run-log-panel');
+    const logEntries = document.getElementById('run-log-entries');
+    const logToggle = document.getElementById('run-log-toggle');
+    if (logPanel) { logPanel.style.display = 'block'; logToggle.textContent = '▼'; }
+    if (logEntries) { logEntries.innerHTML = '<div style="color:var(--text-muted)">Running...</div>'; }
 
     function appendLog(html) {
+        if (!logEntries) return;
         const line = document.createElement('div');
         line.innerHTML = html;
-        logDiv.appendChild(line);
-        logDiv.scrollTop = logDiv.scrollHeight;
+        logEntries.appendChild(line);
+        logEntries.scrollTop = logEntries.scrollHeight;
     }
 
     function ts() {
@@ -416,7 +416,7 @@ async function runAgent() {
 
         const runId = data.run_id;
         statusEl.textContent = 'Running...';
-        logStatus.textContent = `run: ${runId}`;
+        appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> Connected. Run: ${runId}`);
         appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-blue)">Run started</span> — ${data.stage} (run ${runId})`);
 
         // Connect to SSE
@@ -482,7 +482,7 @@ async function runAgent() {
             const d = JSON.parse(e.data);
             eventSource.close();
             appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">✓ Run complete</span> (${d.status})`);
-            logStatus.textContent = `Done (${d.status})`;
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">Done</span>`);
 
             const result = d.result || {};
             if (result.error) {

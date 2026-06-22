@@ -8,6 +8,7 @@ You are a quality evaluator for a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 {{INPUT_CONTENT}}
 
 ## Generated {{STAGE}} output:
+=== generated {{STAGE}} ===
 {{GENERATED}}
 
 {{METRICS}}

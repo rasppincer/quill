@@ -30,7 +30,7 @@ class LLMClient:
         self.max_tokens = max_tokens
 
     def chat(self, system: str, user: str, temperature: float | None = None,
-             max_tokens: int | None = None) -> str:
+             max_tokens: int | None = None, response_format: dict | None = None) -> str:
         """Send a chat completion request.
 
         Args:
@@ -38,6 +38,8 @@ class LLMClient:
             user: User message.
             temperature: Override default temperature.
             max_tokens: Override default max_tokens.
+            response_format: OpenAI-compatible response format, e.g.
+                {"type": "json_object"} for guaranteed JSON output.
 
         Returns:
             The assistant's response text.
@@ -55,6 +57,8 @@ class LLMClient:
             "temperature": temperature if temperature is not None else self.temperature,
             "max_tokens": max_tokens or self.max_tokens,
         }
+        if response_format:
+            payload["response_format"] = response_format
 
         headers = {
             "Content-Type": "application/json",

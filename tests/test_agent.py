@@ -152,6 +152,42 @@ class TestStripJsonBlock:
         result = _strip_json_block(text)
         assert '{"name": "test"' in result
 
+    def test_preserves_json_code_examples_in_content(self):
+        """JSON code examples in the middle of content are preserved."""
+        text = (
+            '## API Reference\n\n'
+            'To create a user, send a POST request:\n\n'
+            '```json\n{"name": "Alice", "email": "alice@example.com"}\n```\n\n'
+            'The response will be:\n\n'
+            '```json\n{"status": "ok", "id": 123}\n```\n\n'
+            'These examples show the API format.\n\n'
+            '```json\n{"decision": "advance", "critique": "Good work."}\n```'
+        )
+        result = _strip_json_block(text)
+        assert "API Reference" in result
+        assert '"name": "Alice"' in result
+        assert '"status": "ok"' in result
+        assert "These examples" in result
+        assert "decision" not in result
+
+    def test_preserves_json_in_blog_content(self):
+        """JSON in a programming blog post is preserved."""
+        text = (
+            '# Building REST APIs\n\n'
+            'A typical response looks like:\n'
+            '{"status": "ok", "data": [1, 2, 3]}\n\n'
+            'And error responses:\n'
+            '{"error": "not found", "code": 404}\n\n'
+            'In conclusion, REST APIs are great.\n\n'
+            '```json\n{"decision": "advance", "critique": "Well written."}\n```'
+        )
+        result = _strip_json_block(text)
+        assert "Building REST APIs" in result
+        assert '"status": "ok"' in result
+        assert '"error": "not found"' in result
+        assert "In conclusion" in result
+        assert "decision" not in result
+
 
 # ---------------------------------------------------------------------------
 # Config loading

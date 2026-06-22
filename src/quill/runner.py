@@ -102,6 +102,15 @@ class StageRunner:
         debug_file.write_text(content, encoding="utf-8")
         logger.info("Debug prompt dumped to %s", debug_file)
 
+    @staticmethod
+    def _get_structured_output_format() -> dict | None:
+        """Return response_format dict if structured_output is enabled in config."""
+        from .agent import load_model_config
+        cfg = load_model_config()
+        if cfg.get("structured_output"):
+            return {"type": "json_object"}
+        return None
+
     def get_loop_count(self, piece: Piece, stage: str) -> int:
         """Get the current loop count for a stage."""
         meta_path = piece.stage_dir() / "meta.yaml"
@@ -366,8 +375,9 @@ class StageRunner:
                 f"Respond with a JSON block containing 'decision' and 'critique'."
             )
             self._dump_debug_prompt(piece, stage, "agent", eval_system, prompt)
+            response_format = self._get_structured_output_format()
             try:
-                response = client.chat(eval_system, prompt)
+                response = client.chat(eval_system, prompt, response_format=response_format)
             except ConnectionError as e:
                 return AgentDecision(
                     decision="error", critique="", output="",
@@ -697,8 +707,9 @@ class StageRunner:
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
 
+        response_format = self._get_structured_output_format()
         try:
-            eval_response = client.chat(eval_system, prompt)
+            eval_response = client.chat(eval_system, prompt, response_format=response_format)
         except ConnectionError:
             return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
 

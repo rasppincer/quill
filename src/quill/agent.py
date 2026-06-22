@@ -163,11 +163,34 @@ def list_agent_prompts(agent_set: str) -> list[dict]:
 
 
 def _strip_json_block(response: str) -> str:
-    """Remove JSON decision blocks from the response, leaving the content body."""
-    # Strip ```json ... ``` blocks
-    cleaned = re.sub(r'```json\s*.*?\s*```', '', response, flags=re.DOTALL)
-    # Strip bare JSON objects that look like decision blocks
-    cleaned = re.sub(r'\{[^{}]*"decision"\s*:\s*"[^"]*"[^{}]*\}', '', cleaned)
+    """Remove trailing JSON decision block from the response, leaving content.
+
+    Only strips JSON that appears at or near the END of the response
+    (the decision block). JSON code examples in the middle of content
+    (e.g., API tutorials, programming blogs) are preserved.
+    """
+    cleaned = response
+
+    # Strip trailing ```json ... ``` block (decision block at end)
+    # Find the last ```json and check if it's a decision block
+    last_json_marker = cleaned.rfind('```json\n')
+    if last_json_marker != -1:
+        after_marker = cleaned[last_json_marker + 8:]  # len('```json\n') = 8
+        end_fence = after_marker.rfind('```')
+        if end_fence != -1:
+            json_str = after_marker[:end_fence].strip()
+            try:
+                data = json.loads(json_str)
+                if "decision" in data:
+                    cleaned = cleaned[:last_json_marker].strip()
+            except json.JSONDecodeError:
+                pass
+
+    # Strip trailing bare JSON decision block
+    trailing_bare = re.search(r'\n\{[^{}]*"decision"\s*:\s*"[^"]*"[^{}]*\}\s*$', cleaned)
+    if trailing_bare:
+        cleaned = cleaned[:trailing_bare.start()].strip()
+
     # Strip example markers the agent may have copied from prompts
     cleaned = re.sub(r'\(?\w+ text (?:starts|ends) here\)?\s*', '', cleaned)
     return cleaned.strip()

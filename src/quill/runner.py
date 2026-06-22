@@ -16,6 +16,7 @@ Loop tracking is stored in meta.yaml under `loops`:
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import threading
@@ -254,28 +255,37 @@ class StageRunner:
             ctx.update(extra)
         return ctx
 
-    def _dump_debug_prompt(
-        self, piece: "Piece", stage: str, label: str,
-        system: str, user: str,
+    def _log_run_entry(
+        self, piece: "Piece", stage: str, call_type: str,
+        system: str, user: str, result: dict | None = None,
     ):
-        """Write the actual prompt to a debug file when debug_prompts is on.
+        """Append a run log entry to run-log.jsonl in the piece directory.
 
-        Files are written to the piece directory as:
-            {stage}.{label}-prompt.md  (e.g. draft.generate-prompt.md)
+        Args:
+            piece: The piece being processed.
+            stage: Current stage name.
+            call_type: "generate", "evaluate", or "agent" (single-call feedback).
+            system: System prompt sent to LLM.
+            user: User prompt sent to LLM (with all variables filled).
+            result: Optional dict with decision, critique, elapsed, etc.
         """
         from .agent import load_model_config
         cfg = load_model_config()
-        if not cfg.get("debug_prompts"):
-            return
-        debug_file = piece.stage_dir() / _stage_filename(stage, f".{label}-prompt.md")
-        content = (
-            f"# Debug: {label} prompt for {stage}\n"
-            f"# Piece: {piece.id}\n\n"
-            f"## System\n{system}\n\n"
-            f"## User\n{user}\n"
-        )
-        debug_file.write_text(content, encoding="utf-8")
-        logger.info("Debug prompt dumped to %s", debug_file)
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "stage": stage,
+            "call": call_type,
+            "model": cfg.get("model", ""),
+            "system_chars": len(system),
+            "user_chars": len(user),
+        }
+        if result:
+            entry.update(result)
+
+        log_file = piece.stage_dir() / "run-log.jsonl"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        logger.info("Run log entry: %s/%s (%s)", piece.id, stage, call_type)
 
     @staticmethod
     def _get_structured_output_format() -> dict | None:
@@ -614,7 +624,7 @@ class StageRunner:
                 f"in {piece.language}. Produce high-quality content. "
                 f"Do NOT include any JSON or decision blocks — just write the content."
             )
-            self._dump_debug_prompt(piece, stage, "generate", gen_system, prompt)
+            self._log_run_entry(piece, stage, "generate", gen_system, prompt)
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "generate", "prompt_chars": len(prompt),
             })
@@ -649,7 +659,7 @@ class StageRunner:
                 f"in {piece.language}. Be critical and precise. "
                 f"Respond with a JSON block containing 'decision' and 'critique'."
             )
-            self._dump_debug_prompt(piece, stage, "agent", eval_system, prompt)
+            self._log_run_entry(piece, stage, "agent", eval_system, prompt)
             response_format = self._get_structured_output_format()
             self._emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": "agent", "prompt_chars": len(prompt),
@@ -663,6 +673,9 @@ class StageRunner:
                 )
             decision = parse_agent_response(response)
             decision.output = response
+            self._log_run_entry(piece, stage, "agent", eval_system, prompt, {
+                "decision": decision.decision, "critique": decision.critique[:500],
+            })
 
         decision.loop_count = loop_count
         decision.stage = stage
@@ -1020,7 +1033,7 @@ class StageRunner:
                 f"You are a quality evaluator. Respond with ONLY a JSON block "
                 f"containing 'decision' (advance or loop_back) and 'critique'."
             )
-            self._dump_debug_prompt(piece, stage, "evaluate", eval_system, prompt)
+            self._log_run_entry(piece, stage, "evaluate", eval_system, prompt)
         else:
             # Fallback to hardcoded if no template exists
             logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
@@ -1048,7 +1061,11 @@ class StageRunner:
         except ConnectionError:
             return AgentDecision(decision="advance", critique="Evaluation call failed, advancing by default.", output="")
 
-        return parse_agent_response(eval_response)
+        result = parse_agent_response(eval_response)
+        self._log_run_entry(piece, stage, "evaluate", eval_system, prompt, {
+            "decision": result.decision, "critique": result.critique[:500],
+        })
+        return result
 
     def _load_evaluate_template(self, agent_set: str) -> str | None:
         """Load evaluate.prompt.md from an agent set directory."""

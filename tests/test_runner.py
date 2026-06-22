@@ -558,36 +558,48 @@ class TestLoopGuardrails:
 # ---------------------------------------------------------------------------
 
 
-class TestDebugPromptDump:
-    """Test the debug prompt file dump."""
+class TestRunLog:
+    """Test the unified run log (JSONL)."""
 
-    def test_dump_creates_file(self, runner, sample_piece, monkeypatch):
-        """When debug_prompts is on, dump creates a file."""
+    def test_log_run_entry_creates_file(self, runner, sample_piece, monkeypatch):
+        """_log_run_entry appends a JSONL entry to run-log.jsonl."""
         from quill.piece import load_piece
+        import json
 
-        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"debug_prompts": True})
+        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._dump_debug_prompt(piece, "review", "generate", "system prompt", "user prompt")
+        runner._log_run_entry(piece, "review", "agent", "system prompt", "user prompt", {
+            "decision": "advance", "critique": "Good work.",
+        })
 
-        debug_file = sample_piece / _stage_filename("review", ".generate-prompt.md")
-        assert debug_file.exists()
-        content = debug_file.read_text()
-        assert "system prompt" in content
-        assert "user prompt" in content
-        assert "generate prompt for review" in content
+        log_file = sample_piece / "run-log.jsonl"
+        assert log_file.exists()
+        entries = [json.loads(line) for line in log_file.read_text().strip().split("\n")]
+        assert len(entries) == 1
+        assert entries[0]["stage"] == "review"
+        assert entries[0]["call"] == "agent"
+        assert entries[0]["decision"] == "advance"
+        assert entries[0]["system_chars"] == len("system prompt")
 
-    def test_dump_no_file_when_disabled(self, runner, sample_piece, monkeypatch):
-        """When debug_prompts is off, no file is created."""
+    def test_log_run_entry_appends(self, runner, sample_piece, monkeypatch):
+        """Multiple calls append entries, not overwrite."""
         from quill.piece import load_piece
+        import json
 
-        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"debug_prompts": False})
+        monkeypatch.setattr("quill.agent.load_model_config", lambda: {"model": "test-model"})
         piece = load_piece(sample_piece)
 
-        runner._dump_debug_prompt(piece, "review", "generate", "system", "user")
+        runner._log_run_entry(piece, "review", "agent", "sys1", "user1")
+        runner._log_run_entry(piece, "review", "agent", "sys2", "user2", {"decision": "loop_back"})
+        runner._log_run_entry(piece, "draft", "generate", "sys3", "user3")
 
-        debug_file = sample_piece / _stage_filename("review", ".generate-prompt.md")
-        assert not debug_file.exists()
+        log_file = sample_piece / "run-log.jsonl"
+        entries = [json.loads(line) for line in log_file.read_text().strip().split("\n")]
+        assert len(entries) == 3
+        assert entries[0]["call"] == "agent"
+        assert entries[1]["decision"] == "loop_back"
+        assert entries[2]["stage"] == "draft"
 
 
 # ---------------------------------------------------------------------------

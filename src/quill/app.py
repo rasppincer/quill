@@ -766,6 +766,46 @@ def pieces_debug_prompt(piece_id: str, stage: str):
     return jsonify(result)
 
 
+@app.route("/api/pieces/<piece_id>/run-log")
+def pieces_run_log(piece_id: str):
+    """Get the run log for a piece.
+
+    Query params:
+        stage: Filter by stage (optional).
+        limit: Max entries to return (default: 50).
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    log_file = piece.stage_dir() / "run-log.jsonl"
+    if not log_file.exists():
+        return jsonify({"entries": [], "count": 0})
+
+    stage_filter = request.args.get("stage")
+    limit = int(request.args.get("limit", 50))
+
+    entries = []
+    with open(log_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                if stage_filter and entry.get("stage") != stage_filter:
+                    continue
+                entries.append(entry)
+            except json.JSONDecodeError:
+                continue
+
+    # Return most recent first
+    entries.reverse()
+    entries = entries[:limit]
+
+    return jsonify({"entries": entries, "count": len(entries)})
+
+
 @app.route("/api/pieces/<piece_id>/run", methods=["POST"])
 def pieces_run(piece_id: str):
     """Run an agent on a specific stage or chain all remaining stages.

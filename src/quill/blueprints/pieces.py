@@ -12,6 +12,8 @@ from flask import Blueprint, jsonify, request, redirect, url_for
 
 from .shared import get_pipeline
 from ..piece import Piece, get_piece, list_pieces, _FRONTMATTER_RE, _stage_filename
+from ..metrics import maybe_recompute
+from ..runner import RunManager
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +244,6 @@ def pieces_get(piece_id: str):
     d["progress"] = pipeline.progress(piece.current_stage)
 
     # Include metrics for current stage
-    from ..metrics import maybe_recompute
     stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
     d["metrics"] = maybe_recompute(stage_file)
 
@@ -268,7 +269,6 @@ def pieces_get(piece_id: str):
     d["body"] = body
     d["body_length"] = len(body)
 
-    from ..runner import RunManager
     d["running"] = RunManager().is_piece_running(piece_id)
 
     return jsonify(d)
@@ -342,7 +342,6 @@ def pieces_advance(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
-    from ..runner import RunManager
     if RunManager().is_piece_running(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
 
@@ -374,7 +373,6 @@ def pieces_advance(piece_id: str):
     piece.save()
 
     # Compute metrics for the stage we just left (if it has content)
-    from ..metrics import maybe_recompute
     old_stage_file = piece.stage_dir() / _stage_filename(old_stage)
     if old_stage_file.exists():
         maybe_recompute(old_stage_file)
@@ -400,7 +398,6 @@ def pieces_reject(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
-    from ..runner import RunManager
     if RunManager().is_piece_running(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
 

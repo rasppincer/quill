@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from collections import namedtuple
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from .run_logger import RunLogger
 from .run_manager import RunManager
 from .metrics_service import MetricsService
 from .prompt_builder import PromptBuilder, render_prompt
+from .token_budget import check_and_truncate, load_context_window
 
 # Re-export RunManager so tests can import it from quill.runner
 __all__ = ["StageRunner", "RunManager", "StageContext"]
@@ -237,14 +239,38 @@ class StageRunner:
         """Emit an event to the queue if provided."""
         if event_queue is not None:
             event_queue.put({"type": event_type, "data": data})
+    def _apply_token_budget(
+        self, system_prompt: str, user_prompt: str, max_tokens: int,
+        call_label: str = "", event_queue=None,
+    ) -> tuple[str, bool]:
+        """Check context window budget and truncate *user_prompt* if needed.
+
+        Returns ``(possibly_truncated_user_prompt, was_truncated)``.
+        """
+        context_window = load_context_window()
+        truncated, was_truncated = check_and_truncate(
+            system_prompt, user_prompt, max_tokens, context_window,
+        )
+        if was_truncated:
+            logger.warning(
+                "Token budget: truncated %s prompt to fit context window "
+                "(context_window=%d, max_tokens=%d)",
+                call_label or "LLM", context_window, max_tokens,
+            )
+            self._emit(event_queue, "token_budget_truncated", {
+                "call": call_label, "context_window": context_window,
+                "max_tokens": max_tokens,
+            })
+        return truncated, was_truncated
 
     # ------------------------------------------------------------------
+    # Stage execution
     # Stage execution
     # ------------------------------------------------------------------
 
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
-        event_queue=None,
+        event_queue=None, trace_id: str | None = None,
     ) -> AgentDecision:
         """Execute a pipeline stage.
 
@@ -295,9 +321,9 @@ class StageRunner:
         })
 
         if is_content:
-            decision = self._run_content_stage(client, stage, piece, sc, event_queue)
+            decision = self._run_content_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
         else:
-            decision = self._run_feedback_stage(client, stage, piece, sc, event_queue)
+            decision = self._run_feedback_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
 
         decision.loop_count = loop_count
         decision.stage = stage
@@ -357,15 +383,21 @@ class StageRunner:
 
         return decision
 
-    def _run_content_stage(self, client, stage, piece, sc, event_queue):
+    def _run_content_stage(self, client, stage, piece, sc, event_queue, trace_id=None):
         """Two-call approach: generate content, then evaluate."""
         gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
-        self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt)
+        self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt, trace_id=trace_id)
         self._emit(event_queue, "stage_llm_call", {
             "stage": stage, "call": "generate", "prompt_chars": len(sc.prompt),
         })
+        # Token budget check for generate call (use agent_cfg.max_tokens, not
+        # client.max_tokens, because tests mock the client)
+        prompt_for_generate, _ = self._apply_token_budget(
+            gen_system, sc.prompt, sc.agent_cfg.max_tokens,
+            call_label="generate", event_queue=event_queue,
+        )
         try:
-            generated = client.chat(gen_system, sc.prompt)
+            generated = client.chat(gen_system, prompt_for_generate)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -381,7 +413,8 @@ class StageRunner:
         })
         decision = self._evaluate_output(
             client, stage, piece, generated, sc.pipeline, sc.input_content,
-            agent_set=self.agent_set,
+            agent_set=self.agent_set, max_tokens=sc.agent_cfg.max_tokens,
+            trace_id=trace_id,
         )
         decision.body = generated
         decision.output = generated
@@ -390,16 +423,21 @@ class StageRunner:
         self._write_decision(piece, stage, decision)
         return decision
 
-    def _run_feedback_stage(self, client, stage, piece, sc, event_queue):
+    def _run_feedback_stage(self, client, stage, piece, sc, event_queue, trace_id=None):
         """Single call with JSON decision expected."""
         eval_system = PromptBuilder.system_prompt(stage, piece, "feedback")
-        self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt)
+        self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, trace_id=trace_id)
         response_format = PromptBuilder.get_structured_output_format()
         self._emit(event_queue, "stage_llm_call", {
             "stage": stage, "call": "agent", "prompt_chars": len(sc.prompt),
         })
+        # Token budget check for feedback call
+        prompt_for_feedback, _ = self._apply_token_budget(
+            eval_system, sc.prompt, sc.agent_cfg.max_tokens,
+            call_label="feedback", event_queue=event_queue,
+        )
         try:
-            response = client.chat(eval_system, sc.prompt, response_format=response_format)
+            response = client.chat(eval_system, prompt_for_feedback, response_format=response_format)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -409,7 +447,7 @@ class StageRunner:
         decision.output = response
         self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, {
             "decision": decision.decision, "critique": decision.critique[:500],
-        })
+        }, trace_id=trace_id)
         return decision
 
     # ------------------------------------------------------------------
@@ -545,6 +583,7 @@ class StageRunner:
         results: list[AgentDecision] = []
         max_stages = 20  # safety limit
         skipped_stages: list[str] = []
+        trace_id = str(uuid.uuid4())
 
         self._emit(event_queue, "chain_start", {
             "piece_id": piece_id, "from_stage": current,
@@ -590,7 +629,7 @@ class StageRunner:
             result = None
             for attempt in range(chain_retry + 1):
                 try:
-                    result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue)
+                    result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue, trace_id=trace_id)
                 except (ConnectionError, TimeoutError, OSError) as exc:
                     # Transient LLM failure — retry with exponential backoff
                     if attempt < chain_retry:
@@ -741,7 +780,8 @@ class StageRunner:
     def _evaluate_output(
         self, client: LLMClient, stage: str, piece: Piece,
         generated: str, pipeline, input_content: str,
-        agent_set: str = "default",
+        agent_set: str = "default", max_tokens: int = 4096,
+        trace_id: str | None = None,
     ) -> AgentDecision:
         """Second call: evaluate generated content and return a JSON decision.
 
@@ -779,7 +819,7 @@ class StageRunner:
             )
             prompt = render_prompt(eval_template, eval_ctx)
             eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
-            self.run_logger.log(piece, stage, "evaluate", eval_system, prompt)
+            self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, trace_id=trace_id)
         else:
             # Fallback to hardcoded if no template exists
             logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
@@ -799,8 +839,13 @@ class StageRunner:
             eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
 
         response_format = PromptBuilder.get_structured_output_format()
+        # Token budget check for evaluate call
+        eval_prompt, _ = self._apply_token_budget(
+            eval_system, prompt, max_tokens,
+            call_label="evaluate",
+        )
         try:
-            eval_response = client.chat(eval_system, prompt, response_format=response_format)
+            eval_response = client.chat(eval_system, eval_prompt, response_format=response_format)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -810,5 +855,5 @@ class StageRunner:
         result = parse_agent_response(eval_response)
         self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
             "decision": result.decision, "critique": result.critique[:500],
-        })
+        }, trace_id=trace_id)
         return result

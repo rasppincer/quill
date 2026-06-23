@@ -8,6 +8,7 @@ from flask import Blueprint, render_template
 
 from .shared import get_pipeline
 from ..piece import get_piece, _stage_filename
+from ..metrics import maybe_recompute
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,6 @@ def dashboard_piece(piece_id: str):
     progress = pipeline.progress(piece.current_stage)
 
     # Include metrics for current stage
-    from ..metrics import maybe_recompute
     stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
     metrics = maybe_recompute(stage_file)
 

@@ -169,8 +169,9 @@ class RunManager:
                     ],
                 }
             else:
+                trace_id = str(uuid.uuid4())
                 result = runner.run_stage(
-                    piece_id, stage or "", event_queue=event_queue,
+                    piece_id, stage or "", event_queue=event_queue, trace_id=trace_id,
                 )
                 result_data = {
                     "stage": result.stage,

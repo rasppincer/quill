@@ -44,6 +44,12 @@ def load_model_config() -> dict:
     with open(MODEL_CONFIG_FILE) as f:
         cfg = yaml.safe_load(f) or {}
     _model_config_cache = (mtime, cfg)
+    # Validate on cache miss (warnings only, never blocks)
+    try:
+        from .config_validation import validate_config, MODEL_SCHEMA
+        validate_config(cfg, MODEL_SCHEMA, context="model.yaml")
+    except Exception:
+        pass
     return cfg
 
 
@@ -111,6 +117,13 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
     # Load global config
     with open(config_file) as f:
         cfg = yaml.safe_load(f) or {}
+
+    # Validate (warnings only, never blocks)
+    try:
+        from .config_validation import validate_config, AGENT_SET_SCHEMA
+        validate_config(cfg, AGENT_SET_SCHEMA, context=f"agents/{agent_set}/config.yaml")
+    except Exception:
+        pass
 
     # Load global model config first, then overlay agent set config
     global_cfg = load_model_config()

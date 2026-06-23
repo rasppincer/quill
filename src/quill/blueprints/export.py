@@ -10,6 +10,9 @@ from flask import Blueprint, jsonify, request, render_template, send_from_direct
 
 from .shared import get_pipeline
 from ..piece import get_piece, _FRONTMATTER_RE, _stage_filename
+from .. import audio as _audio_mod
+from .. import comic as _comic_mod
+from .. import gdocs as _gdocs_mod
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +51,8 @@ def pieces_export_google_docs(piece_id: str):
         return jsonify({"error": f"Stage '{stage}' has no content to export"}), 400
 
     try:
-        from ..gdocs import create_doc
         title = f"{piece.title} ({stage})"
-        result = create_doc(title, body)
+        result = _gdocs_mod.create_doc(title, body)
         return jsonify({
             "piece_id": piece_id,
             "stage": stage,
@@ -90,9 +92,8 @@ def pieces_comic(piece_id: str):
         return jsonify({"error": f"Invalid style '{style}'. Use: manga, western, noir"}), 400
 
     try:
-        from ..comic import generate_comic_html, save_comic_html
-        html = generate_comic_html(piece, stage=stage, style=style)
-        output_path = save_comic_html(piece, html)
+        html = _comic_mod.generate_comic_html(piece, stage=stage, style=style)
+        output_path = _comic_mod.save_comic_html(piece, html)
         return jsonify({
             "piece_id": piece_id,
             "stage": stage,
@@ -160,12 +161,10 @@ def pieces_audio_generate(piece_id: str):
         return jsonify({"error": f"Stage '{stage}' has no content"}), 400
 
     # Audio options from request
-    from ..audio import AudioOptions, generate_audio
-
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = data.get("filename", f"{stage}_{ts}.mp3")
 
-    options = AudioOptions(
+    options = _audio_mod.AudioOptions(
         voice=data.get("voice", ""),
         rate=data.get("rate", "+0%"),
         pitch=data.get("pitch", "+0Hz"),
@@ -174,7 +173,7 @@ def pieces_audio_generate(piece_id: str):
     )
 
     try:
-        result = generate_audio(
+        result = _audio_mod.generate_audio(
             text=body,
             output_dir=piece.stage_dir() / "audio",
             filename=filename,
@@ -201,9 +200,7 @@ def pieces_audio_list(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
-    from ..audio import list_audio_files
-
-    files = list_audio_files(piece.stage_dir())
+    files = _audio_mod.list_audio_files(piece.stage_dir())
     return jsonify({"piece_id": piece_id, "files": files, "count": len(files)})
 
 
@@ -232,16 +229,14 @@ def audio_voices():
     Query params:
         language: Language code filter (e.g., 'en', 'bg', 'de').
     """
-    from ..audio import list_voices, VOICE_PRESETS
-
     language = request.args.get("language", "")
 
     # Return presets if no language specified (faster, curated list)
     if not language:
-        return jsonify({"presets": VOICE_PRESETS})
+        return jsonify({"presets": _audio_mod.VOICE_PRESETS})
 
     try:
-        voices = asyncio.run(list_voices(language))
+        voices = asyncio.run(_audio_mod.list_voices(language))
         return jsonify({"language": language, "voices": voices})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

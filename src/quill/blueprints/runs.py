@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 
 from flask import Blueprint, jsonify, request, Response, stream_with_context
 
 from .shared import get_pipeline
 from ..piece import get_piece
+from ..runner import StageRunner, RunManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,6 @@ def pieces_run(piece_id: str):
     stage = data.get("stage")
     chain = data.get("chain", False)
 
-    from ..runner import StageRunner
     piece = get_piece(piece_id)
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
@@ -55,7 +56,8 @@ def pieces_run(piece_id: str):
         })
     else:
         target_stage = stage or piece.current_stage
-        result = runner.run_stage(piece_id, target_stage)
+        trace_id = str(uuid.uuid4())
+        result = runner.run_stage(piece_id, target_stage, trace_id=trace_id)
         return jsonify({
             "piece_id": piece_id,
             "stage": result.stage,
@@ -88,7 +90,6 @@ def pieces_run_async(piece_id: str):
 
     agent_set = data.get("agent_set") or piece.agent_set or "default"
 
-    from ..runner import RunManager
     manager = RunManager()
     run_id = manager.start_run(
         piece_id=piece_id,
@@ -116,7 +117,6 @@ def pieces_run_events(piece_id: str, run_id: str):
                  loop_start, chain_start, chain_stage_complete,
                  chain_complete, run_complete, error.
     """
-    from ..runner import RunManager
     manager = RunManager()
 
     run = manager.get_run(run_id)
@@ -186,7 +186,6 @@ def pieces_debug_prompt(piece_id: str, stage: str):
     Query params:
         agent_set: Agent set to use (default: piece's agent_set or "default").
     """
-    from ..runner import StageRunner
     piece = get_piece(piece_id)
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404

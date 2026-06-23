@@ -33,12 +33,21 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output"
 # Matches YAML frontmatter between --- delimiters
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
-# Stage → numeric prefix mapping for sorted file listing
-_STAGE_PREFIXES = {
-    "brief": "01", "outline": "02", "draft": "03",
-    "review": "04", "revise": "05", "humanize": "06",
-    "validate": "07", "polish": "08", "done": "09",
-}
+def _get_stage_prefix(stage: str) -> str | None:
+    """Derive numeric prefix from pipeline stage_order.
+
+    Returns zero-padded 2-digit string (e.g. '01', '02') or None.
+    Lazy-imports pipeline to avoid circular imports.
+    """
+    try:
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+        if stage in pipeline.stage_order:
+            idx = pipeline.stage_order.index(stage)
+            return f"{idx + 1:02d}"
+    except Exception:
+        pass
+    return None
 
 
 def _stage_filename(stage: str, suffix: str = ".md") -> str:
@@ -48,7 +57,7 @@ def _stage_filename(stage: str, suffix: str = ".md") -> str:
               _stage_filename("draft", ".decision.md") → "03_draft.decision.md"
               _stage_filename("unknown") → "unknown.md"
     """
-    prefix = _STAGE_PREFIXES.get(stage)
+    prefix = _get_stage_prefix(stage)
     if prefix:
         return f"{prefix}_{stage}{suffix}"
     return f"{stage}{suffix}"
@@ -59,7 +68,7 @@ class Piece:
     """A writing piece with metadata and stage tracking."""
 
     # Stage classification
-    STAGE_PREFIXES = _STAGE_PREFIXES  # delegate to module-level
+
 
     # Identity
     id: str = ""

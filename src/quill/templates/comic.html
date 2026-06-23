@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }} — Comic Adaptation</title>
+<style>
+:root {
+    --bg: #1a1a2e;
+    --panel-bg: #16213e;
+    --border: #0f3460;
+    --text: #e8e8e8;
+    --text-muted: #8899aa;
+    --accent: #e94560;
+    --bubble-bg: #ffffff;
+    --bubble-text: #1a1a2e;
+    --narration-bg: #0f3460;
+    --narration-text: #e8e8e8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    padding: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.comic-header {
+    text-align: center;
+    padding: 30px 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 30px;
+}
+.comic-header h1 {
+    font-size: 2em;
+    color: var(--accent);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+.comic-header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.comic-page {
+    margin-bottom: 40px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    background: rgba(15, 52, 96, 0.2);
+}
+.page-title {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Grid layouts */
+.page-panels {
+    display: grid;
+    gap: 12px;
+}
+.grid-1x2 { grid-template-columns: 1fr; }
+.grid-2x2 { grid-template-columns: 1fr 1fr; }
+.grid-2x3 { grid-template-columns: 1fr 1fr; }
+.grid-3x3 { grid-template-columns: 1fr 1fr 1fr; }
+
+@media (max-width: 700px) {
+    .grid-2x2, .grid-2x3, .grid-3x3 { grid-template-columns: 1fr; }
+}
+
+/* Panel */
+.panel {
+    background: var(--panel-bg);
+    border: 2px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+    min-height: 120px;
+    overflow: hidden;
+}
+.panel.noir {
+    background: #0a0a0a;
+    border-color: #333;
+    color: #ccc;
+}
+.panel.manga {
+    background: #fff;
+    border-color: #000;
+    color: #000;
+    --bubble-bg: #fff;
+    --bubble-text: #000;
+    --narration-bg: #f0f0f0;
+    --narration-text: #333;
+}
+
+.panel-number {
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    font-size: 0.7em;
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+.scene-desc {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-bottom: 10px;
+    line-height: 1.4;
+    padding-left: 20px;
+}
+
+.narration {
+    background: var(--narration-bg);
+    color: var(--narration-text);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-style: italic;
+    margin-bottom: 10px;
+    border-left: 3px solid var(--accent);
+    line-height: 1.5;
+}
+
+.dialogue-area {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+.bubble {
+    background: var(--bubble-bg);
+    color: var(--bubble-text);
+    padding: 8px 12px;
+    border-radius: 12px;
+    border-bottom-left-radius: 4px;
+    max-width: 85%;
+    font-size: 0.9em;
+    line-height: 1.4;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.bubble:nth-child(even) {
+    align-self: flex-end;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 4px;
+}
+.speaker {
+    font-weight: bold;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 2px;
+    color: var(--accent);
+}
+.bubble-text { }
+
+.sfx {
+    text-align: center;
+    color: var(--accent);
+    font-weight: bold;
+    text-transform: uppercase;
+    margin: 8px 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    letter-spacing: 3px;
+}
+
+.transition {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 6px;
+    font-style: italic;
+}
+
+.footer {
+    text-align: center;
+    padding: 20px 0;
+    color: var(--text-muted);
+    font-size: 0.8em;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+}
+
+/* Print styles */
+@media print {
+    body { background: #fff; color: #000; padding: 10px; }
+    .panel { border-color: #000; background: #fff; color: #000; break-inside: avoid; }
+    .comic-page { border-color: #000; break-after: page; }
+    .bubble { box-shadow: none; border: 1px solid #000; }
+}
+</style>
+</head>
+<body>
+
+<div class="comic-header">
+    <h1>{{ title }}</h1>
+    <div class="subtitle">{{ style_label }} Adaptation &bull; {{ pages|length }} page{% if pages|length != 1 %}s{% endif %} &bull; {{ total_panels }} panels</div>
+</div>
+
+{% for page in pages %}
+<div class="comic-page">
+    <div class="page-title">— {{ page.title }} —</div>
+    <div class="page-panels {{ page.grid_class }}">
+        {% for panel in page.panels %}
+        <div class="{{ panel.panel_class }}" style="border-left-color: {{ panel.emotion_color }}">
+            <div class="panel-number">#{{ panel.panel_number }}</div>
+            {% if panel.narration %}
+            <div class="narration">{{ panel.narration }}</div>
+            {% endif %}
+            <div class="scene-desc">{{ panel.scene_description }}</div>
+            {% if panel.dialogue %}
+            <div class="dialogue-area">
+                {% for d in panel.dialogue %}
+                <div class="bubble">
+                    {% if d.speaker %}<span class="speaker">{{ d.speaker }}</span>{% endif %}
+                    <span class="bubble-text">{{ d.text }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if panel.sound_effect %}
+            <div class="sfx" style="font-family:{{ panel.sfx_font }};font-size:{{ panel.sfx_size }}em">{{ panel.sound_effect }}</div>
+            {% endif %}
+            {% if panel.transition %}
+            <div class="transition">▸ {{ panel.transition }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+<div class="footer">
+    Generated by Quill Comic Engine &bull; <a href="javascript:window.print()" style="color:var(--accent)">🖨️ Print / Save as PDF</a>
+</div>
+
+</body>
+</html>

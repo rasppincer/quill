@@ -114,8 +114,13 @@ class Pipeline:
         }
 
 
+_pipeline_cache: dict[str, tuple[float, Pipeline]] = {}
+
+
 def load_pipeline(name: str = "default") -> Pipeline:
     """Load a pipeline definition from a workflow YAML file.
+
+    Results are cached by file mtime -- re-parsed only when the file changes.
 
     Args:
         name: Workflow name (filename without .yaml extension).
@@ -130,6 +135,11 @@ def load_pipeline(name: str = "default") -> Pipeline:
     path = WORKFLOWS_DIR / f"{name}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"Workflow not found: {path}")
+
+    mtime = path.stat().st_mtime
+    cached = _pipeline_cache.get(name)
+    if cached and cached[0] == mtime:
+        return cached[1]
 
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
 
@@ -162,5 +172,6 @@ def load_pipeline(name: str = "default") -> Pipeline:
         stage_inputs=stage_inputs,
     )
 
+    _pipeline_cache[name] = (mtime, pipeline)
     logger.info("Loaded pipeline '%s' with %d stages", pipeline.name, len(stages))
     return pipeline

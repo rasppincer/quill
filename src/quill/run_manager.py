@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -29,7 +30,9 @@ class RunManager:
             with cls._lock:
                 if cls._instance is None:
                     inst = super().__new__(cls)
-                    inst._executor = ThreadPoolExecutor(max_workers=2)
+                    inst._executor = ThreadPoolExecutor(
+                        max_workers=int(os.environ.get("QUILL_MAX_WORKERS", "2"))
+                    )
                     inst._runs = {}  # run_id -> run info dict
                     inst._run_lock = threading.Lock()
                     inst._piece_locks = {}  # piece_id -> threading.Lock

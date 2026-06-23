@@ -17,6 +17,7 @@ Loop tracking is stored in meta.yaml under `loops`:
 from __future__ import annotations
 
 import logging
+import time
 from collections import namedtuple
 from pathlib import Path
 
@@ -48,6 +49,24 @@ class StageRunner:
         self.run_logger = RunLogger()
         self.metrics_svc = MetricsService()
         self.prompt_builder = PromptBuilder()
+
+    # ------------------------------------------------------------------
+    # Config helpers
+    # ------------------------------------------------------------------
+
+    def _load_chain_retry(self) -> int:
+        """Load chain_retry setting from the agent set's config.yaml.
+
+        Returns the number of retries allowed for transient LLM failures.
+        Defaults to 0 (no retries) if not configured.
+        """
+        from .agent import AGENTS_DIR
+        import yaml
+        config_file = AGENTS_DIR / self.agent_set / "config.yaml"
+        if not config_file.exists():
+            return 0
+        cfg = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+        return cfg.get("chain_retry", 0)
 
     # ------------------------------------------------------------------
     # Thin wrappers — delegate to Piece methods for backward compatibility
@@ -533,6 +552,9 @@ class StageRunner:
         })
 
         while current and current != "done" and len(results) < max_stages:
+            # Load retry config once per stage (refreshed each iteration
+            # in case config changes, but practically loaded once)
+            chain_retry = self._load_chain_retry()
             # Research stage runs without an agent prompt
             if current == "research":
                 from .agent import load_research_config
@@ -565,7 +587,47 @@ class StageRunner:
                 else:
                     break
 
-            result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue)
+            result = None
+            for attempt in range(chain_retry + 1):
+                try:
+                    result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue)
+                except (ConnectionError, TimeoutError, OSError) as exc:
+                    # Transient LLM failure — retry with exponential backoff
+                    if attempt < chain_retry:
+                        backoff = 2 ** attempt  # 1s, 2s, 4s
+                        logger.warning(
+                            "Stage '%s' transient failure (attempt %d/%d), "
+                            "retrying in %ds: %s",
+                            current, attempt + 1, chain_retry + 1, backoff, exc,
+                        )
+                        self._emit(event_queue, "chain_retry", {
+                            "stage": current, "attempt": attempt + 1,
+                            "max_attempts": chain_retry + 1,
+                            "backoff_seconds": backoff,
+                            "error": str(exc),
+                        })
+                        time.sleep(backoff)
+                        continue
+                    else:
+                        result = AgentDecision(
+                            decision="error", critique="", output="",
+                            error=f"Transient LLM failure after {chain_retry + 1} attempts: {exc}",
+                        )
+                except ValueError as exc:
+                    # Permanent failure (missing piece, missing config) — break immediately
+                    result = AgentDecision(
+                        decision="error", critique="", output="",
+                        error=str(exc),
+                    )
+                break
+
+            if result is None:
+                # Should not happen, but safety fallback
+                result = AgentDecision(
+                    decision="error", critique="", output="",
+                    error="Unexpected empty result",
+                )
+
             results.append(result)
 
             self._emit(event_queue, "chain_stage_complete", {

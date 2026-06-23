@@ -6,6 +6,7 @@ description: "Fiction agents — stories, novels, flash fiction, creative writin
 temperature: 0.7
 max_tokens: 12288
 max_loops: 3
+chain_retry: 1
 trigger: "on_advance"
 research:
   enabled: true

@@ -234,7 +234,7 @@ class TestDisplayStages:
         displays = piece.display_stages()
         for d in displays:
             if d["stage"] == "draft":
-                assert d["display_name"] == "03_draft.md"
+                assert d["display_name"] == "04_draft.md"
             elif d["stage"] == "brief":
                 assert d["display_name"] == "01_brief.md"
 

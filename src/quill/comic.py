@@ -18,12 +18,23 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import jinja2
 import yaml
 
 from .llm import LLMClient
 from .piece import Piece, _FRONTMATTER_RE, _stage_filename
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Jinja2 template loader
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_LOADER = jinja2.PackageLoader("quill", "templates")
+_TEMPLATE_ENV = jinja2.Environment(
+    loader=_TEMPLATE_LOADER,
+    autoescape=False,
+)
 
 
 @dataclass
@@ -208,67 +219,75 @@ SFX_FONTS = {
 }
 
 
-def _render_panel_html(panel: ComicPanel, style: str) -> str:
-    """Render a single panel to HTML."""
+def _preprocess_panel(panel: ComicPanel, style: str) -> dict:
+    """Convert a ComicPanel into a dict of precomputed template values."""
     emotion_color = EMOTION_COLORS.get(panel.emotion.lower() if panel.emotion else "", "#dfe6e9")
 
-    # Scene description
-    scene_html = f'<div class="scene-desc">{panel.scene_description}</div>'
-
-    # Narration box
-    narration_html = ""
-    if panel.narration:
-        narration_html = f'<div class="narration">{panel.narration}</div>'
-
-    # Sound effect
-    sfx_html = ""
+    # SFX font lookup
+    sfx_font, sfx_size = "cursive", 1.6
     if panel.sound_effect:
         sfx_lower = panel.sound_effect.lower()
         sfx_key = next((k for k in SFX_FONTS if k in sfx_lower), "default")
-        font_family, size = SFX_FONTS[sfx_key]
-        sfx_html = f'<div class="sfx" style="font-family:{font_family};font-size:{size}em">{panel.sound_effect}</div>'
+        sfx_font, sfx_size = SFX_FONTS[sfx_key]
 
-    # Dialogue bubbles
-    dialogue_html = ""
-    if panel.dialogue:
-        bubbles = []
-        for d in panel.dialogue:
-            speaker = d.get("speaker", "")
-            text = d.get("text", "")
-            speaker_tag = f'<span class="speaker">{speaker}</span>' if speaker else ""
-            bubbles.append(f'<div class="bubble">{speaker_tag}<span class="bubble-text">{text}</span></div>')
-        dialogue_html = '<div class="dialogue-area">' + "".join(bubbles) + '</div>'
-
-    # Transition hint
-    transition_html = ""
-    if panel.transition:
-        transition_html = f'<div class="transition">▸ {panel.transition}</div>'
-
-    # Style variants
+    # Panel CSS class
     panel_class = "panel"
     if style == "noir":
         panel_class += " noir"
     elif style == "manga":
         panel_class += " manga"
 
-    return f'''<div class="{panel_class}" style="border-left-color: {emotion_color}">
-    <div class="panel-number">#{panel.panel_number}</div>
-    {narration_html}
-    {scene_html}
-    {dialogue_html}
-    {sfx_html}
-    {transition_html}
-</div>'''
+    return {
+        "panel_number": panel.panel_number,
+        "scene_description": panel.scene_description,
+        "dialogue": panel.dialogue,
+        "narration": panel.narration,
+        "sound_effect": panel.sound_effect,
+        "emotion": panel.emotion,
+        "transition": panel.transition,
+        "emotion_color": emotion_color,
+        "sfx_font": sfx_font,
+        "sfx_size": sfx_size,
+        "panel_class": panel_class,
+    }
+
+
+_PANEL_TEMPLATE = _TEMPLATE_ENV.from_string(
+    '<div class="{{ panel.panel_class }}" style="border-left-color: {{ panel.emotion_color }}">\n'
+    '    <div class="panel-number">#{{ panel.panel_number }}</div>\n'
+    '{% if panel.narration %}\n'
+    '    <div class="narration">{{ panel.narration }}</div>\n'
+    '{% endif %}\n'
+    '    <div class="scene-desc">{{ panel.scene_description }}</div>\n'
+    '{% if panel.dialogue %}\n'
+    '    <div class="dialogue-area">\n'
+    '{% for d in panel.dialogue %}\n'
+    '        <div class="bubble">{% if d.speaker %}<span class="speaker">{{ d.speaker }}</span>{% endif %}<span class="bubble-text">{{ d.text }}</span></div>\n'
+    '{% endfor %}\n'
+    '    </div>\n'
+    '{% endif %}\n'
+    '{% if panel.sound_effect %}\n'
+    '    <div class="sfx" style="font-family:{{ panel.sfx_font }};font-size:{{ panel.sfx_size }}em">{{ panel.sound_effect }}</div>\n'
+    '{% endif %}\n'
+    '{% if panel.transition %}\n'
+    '    <div class="transition">▸ {{ panel.transition }}</div>\n'
+    '{% endif %}\n'
+    '</div>'
+)
+
+
+def _render_panel_html(panel: ComicPanel, style: str) -> str:
+    """Render a single panel to HTML."""
+    return _PANEL_TEMPLATE.render(panel=_preprocess_panel(panel, style))
 
 
 def _render_comic_html(comic: ComicBook) -> str:
     """Render the full comic as a self-contained HTML page."""
-    pages_html = ""
+    # Preprocess pages with grid classes and panel dicts
+    pages = []
     for page in comic.pages:
-        panels_html = "\n".join(_render_panel_html(p, comic.style) for p in page.panels)
-        grid_class = "page-panels"
-        # Adjust grid based on panel count
         count = len(page.panels)
+        grid_class = "page-panels"
         if count <= 2:
             grid_class += " grid-1x2"
         elif count <= 4:
@@ -278,235 +297,27 @@ def _render_comic_html(comic: ComicBook) -> str:
         else:
             grid_class += " grid-3x3"
 
-        pages_html += f'''
-<div class="comic-page">
-    <div class="page-title">— {page.title} —</div>
-    <div class="{grid_class}">
-        {panels_html}
-    </div>
-</div>'''
+        pages.append({
+            "title": page.title,
+            "grid_class": grid_class,
+            "panels": [_preprocess_panel(p, comic.style) for p in page.panels],
+        })
 
-    style_label = {"manga": "📖 Manga Style", "western": "🦸 Western Style", "noir": "🕵️ Noir Style"}.get(comic.style, "Comic")
+    style_label = {
+        "manga": "📖 Manga Style",
+        "western": "🦸 Western Style",
+        "noir": "🕵️ Noir Style",
+    }.get(comic.style, "Comic")
 
-    return f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{comic.title} — Comic Adaptation</title>
-<style>
-:root {{
-    --bg: #1a1a2e;
-    --panel-bg: #16213e;
-    --border: #0f3460;
-    --text: #e8e8e8;
-    --text-muted: #8899aa;
-    --accent: #e94560;
-    --bubble-bg: #ffffff;
-    --bubble-text: #1a1a2e;
-    --narration-bg: #0f3460;
-    --narration-text: #e8e8e8;
-}}
+    total_panels = sum(len(p.panels) for p in comic.pages)
 
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-
-body {{
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    padding: 20px;
-    max-width: 1100px;
-    margin: 0 auto;
-}}
-
-.comic-header {{
-    text-align: center;
-    padding: 30px 0;
-    border-bottom: 2px solid var(--border);
-    margin-bottom: 30px;
-}}
-.comic-header h1 {{
-    font-size: 2em;
-    color: var(--accent);
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-}}
-.comic-header .subtitle {{
-    color: var(--text-muted);
-    font-size: 0.9em;
-}}
-
-.comic-page {{
-    margin-bottom: 40px;
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    background: rgba(15, 52, 96, 0.2);
-}}
-.page-title {{
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 0.85em;
-    margin-bottom: 16px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}}
-
-/* Grid layouts */
-.page-panels {{
-    display: grid;
-    gap: 12px;
-}}
-.grid-1x2 {{ grid-template-columns: 1fr; }}
-.grid-2x2 {{ grid-template-columns: 1fr 1fr; }}
-.grid-2x3 {{ grid-template-columns: 1fr 1fr; }}
-.grid-3x3 {{ grid-template-columns: 1fr 1fr 1fr; }}
-
-@media (max-width: 700px) {{
-    .grid-2x2, .grid-2x3, .grid-3x3 {{ grid-template-columns: 1fr; }}
-}}
-
-/* Panel */
-.panel {{
-    background: var(--panel-bg);
-    border: 2px solid var(--border);
-    border-left: 4px solid var(--accent);
-    border-radius: 8px;
-    padding: 14px;
-    position: relative;
-    min-height: 120px;
-    overflow: hidden;
-}}
-.panel.noir {{
-    background: #0a0a0a;
-    border-color: #333;
-    color: #ccc;
-}}
-.panel.manga {{
-    background: #fff;
-    border-color: #000;
-    color: #000;
-    --bubble-bg: #fff;
-    --bubble-text: #000;
-    --narration-bg: #f0f0f0;
-    --narration-text: #333;
-}}
-
-.panel-number {{
-    position: absolute;
-    top: 4px;
-    left: 8px;
-    font-size: 0.7em;
-    color: var(--text-muted);
-    opacity: 0.6;
-}}
-
-.scene-desc {{
-    font-style: italic;
-    color: var(--text-muted);
-    font-size: 0.85em;
-    margin-bottom: 10px;
-    line-height: 1.4;
-    padding-left: 20px;
-}}
-
-.narration {{
-    background: var(--narration-bg);
-    color: var(--narration-text);
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-size: 0.85em;
-    font-style: italic;
-    margin-bottom: 10px;
-    border-left: 3px solid var(--accent);
-    line-height: 1.5;
-}}
-
-.dialogue-area {{
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-}}
-.bubble {{
-    background: var(--bubble-bg);
-    color: var(--bubble-text);
-    padding: 8px 12px;
-    border-radius: 12px;
-    border-bottom-left-radius: 4px;
-    max-width: 85%;
-    font-size: 0.9em;
-    line-height: 1.4;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-}}
-.bubble:nth-child(even) {{
-    align-self: flex-end;
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 4px;
-}}
-.speaker {{
-    font-weight: bold;
-    font-size: 0.75em;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: block;
-    margin-bottom: 2px;
-    color: var(--accent);
-}}
-.bubble-text {{ }}
-
-.sfx {{
-    text-align: center;
-    color: var(--accent);
-    font-weight: bold;
-    text-transform: uppercase;
-    margin: 8px 0;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    letter-spacing: 3px;
-}}
-
-.transition {{
-    font-size: 0.7em;
-    color: var(--text-muted);
-    text-align: right;
-    margin-top: 6px;
-    font-style: italic;
-}}
-
-.footer {{
-    text-align: center;
-    padding: 20px 0;
-    color: var(--text-muted);
-    font-size: 0.8em;
-    border-top: 1px solid var(--border);
-    margin-top: 20px;
-}}
-
-/* Print styles */
-@media print {{
-    body {{ background: #fff; color: #000; padding: 10px; }}
-    .panel {{ border-color: #000; background: #fff; color: #000; break-inside: avoid; }}
-    .comic-page {{ border-color: #000; break-after: page; }}
-    .bubble {{ box-shadow: none; border: 1px solid #000; }}
-}}
-</style>
-</head>
-<body>
-
-<div class="comic-header">
-    <h1>{comic.title}</h1>
-    <div class="subtitle">{style_label} Adaptation • {len(comic.pages)} page{"s" if len(comic.pages) != 1 else ""} • {sum(len(p.panels) for p in comic.pages)} panels</div>
-</div>
-
-{pages_html}
-
-<div class="footer">
-    Generated by Quill Comic Engine • <a href="javascript:window.print()" style="color:var(--accent)">🖨️ Print / Save as PDF</a>
-</div>
-
-</body>
-</html>'''
+    template = _TEMPLATE_ENV.get_template("comic.html")
+    return template.render(
+        title=comic.title,
+        style_label=style_label,
+        pages=pages,
+        total_panels=total_panels,
+    )
 
 
 # ---------------------------------------------------------------------------

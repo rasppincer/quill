@@ -27,12 +27,24 @@ AGENTS_DIR = Path(__file__).resolve().parents[2] / "agents"
 MODEL_CONFIG_FILE = AGENTS_DIR / "model.yaml"
 
 
+_model_config_cache: tuple[float, dict] | None = None
+
+
 def load_model_config() -> dict:
-    """Load global model configuration from agents/model.yaml."""
-    if MODEL_CONFIG_FILE.exists():
-        with open(MODEL_CONFIG_FILE) as f:
-            return yaml.safe_load(f) or {}
-    return {}
+    """Load global model configuration from agents/model.yaml.
+
+    Cached by file mtime -- re-parsed only when the file changes.
+    """
+    global _model_config_cache
+    if not MODEL_CONFIG_FILE.exists():
+        return {}
+    mtime = MODEL_CONFIG_FILE.stat().st_mtime
+    if _model_config_cache and _model_config_cache[0] == mtime:
+        return _model_config_cache[1]
+    with open(MODEL_CONFIG_FILE) as f:
+        cfg = yaml.safe_load(f) or {}
+    _model_config_cache = (mtime, cfg)
+    return cfg
 
 
 def save_model_config(cfg: dict):

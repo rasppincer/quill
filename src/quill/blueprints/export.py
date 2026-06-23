@@ -19,6 +19,30 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("export", __name__)
 
 
+def _resolve_stage_file(piece, stage: str):
+    """Resolve stage file, falling back from 'done' to 'polish'.
+
+    Returns (stage_file_path, resolved_stage) or (None, stage) if not found.
+    """
+    stage_file = piece.stage_dir() / _stage_filename(stage)
+    if not stage_file.exists():
+        # "done" is a terminal stage with no content file — fall back to polish
+        if stage == "done":
+            stage_file = piece.stage_dir() / _stage_filename("polish")
+            stage = "polish"
+    if not stage_file.exists():
+        # Fallback: scan for any file matching the stage name (handles
+        # index shifts when pipeline stages are added/removed)
+        import re
+        for f in piece.stage_dir().glob(f"*_{stage}.md"):
+            if not f.name.endswith((".decision.md", ".metrics.yaml")):
+                stage_file = f
+                break
+    if not stage_file.exists():
+        return None, stage
+    return stage_file, stage
+
+
 # ---------------------------------------------------------------------------
 # Google Docs export
 # ---------------------------------------------------------------------------
@@ -38,9 +62,8 @@ def pieces_export_google_docs(piece_id: str):
     data = request.get_json(silent=True) or {}
     stage = data.get("stage", piece.current_stage)
 
-    # Load the stage content
-    stage_file = piece.stage_dir() / _stage_filename(stage)
-    if not stage_file.exists():
+    stage_file, stage = _resolve_stage_file(piece, stage)
+    if not stage_file:
         return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
 
     text = stage_file.read_text(encoding="utf-8")
@@ -78,7 +101,7 @@ def pieces_comic(piece_id: str):
 
     JSON body:
         stage: Which stage to use (default: current stage).
-        style: Comic style — "manga", "western", or "noir" (default: "manga").
+        style: Comic style -- "manga", "western", or "noir" (default: "manga").
     """
     piece = get_piece(piece_id)
     if not piece:
@@ -148,9 +171,8 @@ def pieces_audio_generate(piece_id: str):
     data = request.get_json(silent=True) or {}
     stage = data.get("stage", piece.current_stage)
 
-    # Load the stage content
-    stage_file = piece.stage_dir() / _stage_filename(stage)
-    if not stage_file.exists():
+    stage_file, stage = _resolve_stage_file(piece, stage)
+    if not stage_file:
         return jsonify({"error": f"Stage file '{stage}.md' not found"}), 404
 
     text = stage_file.read_text(encoding="utf-8")

@@ -42,7 +42,7 @@ stages:
     required_artifacts:
       - section_list
       - pacing_notes
-    next: draft
+    next: research
     can_reject_to: brief
 
   - key: research

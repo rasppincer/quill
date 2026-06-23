@@ -301,6 +301,8 @@ class StageRunner:
         if loop_count >= agent_cfg.max_loops:
             logger.info("Stage '%s' reached max loops (%d), forcing advance",
                         stage, agent_cfg.max_loops)
+            # Actually advance the piece to prevent chain loop
+            piece.advance_to(sc.stage_def.next) if sc.stage_def and sc.stage_def.next else None
             return AgentDecision(
                 decision="advance",
                 critique=f"Max loops ({agent_cfg.max_loops}) reached. Forcing advance.",

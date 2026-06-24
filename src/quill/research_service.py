@@ -33,6 +33,7 @@ class ResearchResult:
     results: list[SearchResult]
     markdown: str
     from_cache: bool = False
+    used_fallback: bool = False
 
 
 class ResearchService:
@@ -61,22 +62,23 @@ class ResearchService:
         age = time.time() - research_file.stat().st_mtime
         return age < self.cache_ttl
 
-    def generate_queries(self, brief_text: str, outline_text: str) -> list[str]:
+    def generate_queries(self, brief_text: str, outline_text: str) -> tuple[list[str], bool]:
         """Use the LLM to generate search queries from brief + outline.
 
-        Returns a list of 3-5 search query strings.
+        Returns a tuple of (queries, used_fallback).
         Falls back to keyword extraction if LLM is unavailable.
         """
         if not self.llm_client:
             logger.warning("No LLM client — falling back to keyword extraction")
-            return self._fallback_queries(brief_text, outline_text)
+            return self._fallback_queries(brief_text, outline_text), True
 
         system = (
             "You are a research assistant. Given a writing brief and outline, "
             "generate 3-5 web search queries that would find useful reference "
             "material for writing this piece.\n\n"
-            "Return ONLY a JSON array of strings. No other text.\n"
-            'Example: ["query 1", "query 2", "query 3"]'
+            "Return your answer as a JSON array of strings, wrapped in a "
+            "```json code block.\n"
+            'Example:\n```json\n["query 1", "query 2", "query 3"]\n```'
         )
 
         user = f"## Brief\n{brief_text[:2000]}\n\n## Outline\n{outline_text[:2000]}"
@@ -86,17 +88,16 @@ class ResearchService:
                 system=system,
                 user=user,
                 temperature=0.3,
-                max_tokens=200,
-                response_format={"type": "json_object"},
+                max_tokens=1024,
             )
             queries = self._parse_queries(response)
             if queries:
                 logger.info("LLM generated %d research queries", len(queries))
-                return queries
+                return queries, False
         except Exception:
             logger.exception("LLM query generation failed")
 
-        return self._fallback_queries(brief_text, outline_text)
+        return self._fallback_queries(brief_text, outline_text), True
 
     def _parse_queries(self, response: str) -> list[str]:
         """Parse LLM response into a list of query strings."""
@@ -112,6 +113,14 @@ class ResearchService:
                         return [str(q).strip() for q in val if q]
         except json.JSONDecodeError:
             pass
+
+        # Try extracting JSON from ```json code block
+        code_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', response, re.DOTALL)
+        if code_match:
+            try:
+                return [str(q).strip() for q in json.loads(code_match.group(1)) if q]
+            except json.JSONDecodeError:
+                pass
 
         # Try extracting JSON array from text
         match = re.search(r'\[.*?\]', response, re.DOTALL)
@@ -171,11 +180,12 @@ class ResearchService:
             )
 
         # Generate queries
-        queries = self.generate_queries(brief_text, outline_text)
+        queries, used_fallback = self.generate_queries(brief_text, outline_text)
         if not queries:
             logger.warning("No research queries generated")
             return ResearchResult(
                 queries=[], results=[], markdown="*No search queries generated.*\n",
+                used_fallback=used_fallback,
             )
 
         # Execute searches
@@ -193,6 +203,7 @@ class ResearchService:
             queries=queries,
             results=all_results,
             markdown=markdown,
+            used_fallback=used_fallback,
         )
 
     @staticmethod

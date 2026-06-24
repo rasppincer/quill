@@ -483,7 +483,7 @@ class StageRunner:
         # Read inputs (brief + outline)
         input_content = self._read_inputs(piece, stage, pipeline)
         stage_dir = piece.stage_dir()
-        research_file = stage_dir / "research.md"
+        research_file = stage_dir / _stage_filename(stage)
 
         # Check cache
         svc = ResearchService()
@@ -508,6 +508,7 @@ class StageRunner:
         from .agent import load_model_config
         from .llm import LLMClient
         model_cfg = load_model_config()
+        debug = model_cfg.get("debug_prompts", False)
         llm_client = LLMClient(
             api_base=model_cfg.get("api_base", "https://api.openai.com/v1"),
             api_key=model_cfg.get("api_key", ""),
@@ -517,6 +518,21 @@ class StageRunner:
         )
 
         svc = ResearchService(llm_client=llm_client)
+
+        # Dump debug prompt for query generation
+        if debug:
+            debug_file = stage_dir / _stage_filename(stage, ".generate-prompt.md")
+            debug_content = (
+                f"# Debug: research query generation prompt\n"
+                f"# Piece: {piece.id}\n\n"
+                f"## System\nYou are a research assistant. Given a writing brief and outline, "
+                f"generate 3-5 web search queries.\n\n"
+                f"## Brief (first 2000 chars)\n{brief_text[:2000]}\n\n"
+                f"## Outline (first 2000 chars)\n{outline_text[:2000]}\n"
+            )
+            debug_file.write_text(debug_content, encoding="utf-8")
+            logger.info("Debug research prompt dumped to %s", debug_file)
+
         result = svc.execute(
             brief_text=brief_text,
             outline_text=outline_text,
@@ -527,11 +543,13 @@ class StageRunner:
             critique = "Research cache hit."
         elif result.results:
             research_file.write_text(result.markdown, encoding="utf-8")
-            critique = f"Found {len(result.results)} sources from {len(result.queries)} queries."
+            fallback = " (fallback queries)" if result.used_fallback else ""
+            critique = f"Found {len(result.results)} sources from {len(result.queries)} queries{fallback}."
             logger.info("Research complete: %s", critique)
         else:
             research_file.write_text(result.markdown, encoding="utf-8")
-            critique = "No research results found."
+            fallback = " (fallback queries)" if result.used_fallback else ""
+            critique = f"No research results found{fallback}."
             logger.warning("Research returned no results")
 
         self._emit(event_queue, "research_complete", {

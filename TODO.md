@@ -106,3 +106,7 @@
 - ~~Template library~~ — overlaps with agent sets
 - ~~Humanizer checklist~~ — agent handles this in prompt
 - ~~Consistency check~~ — agent handles this in prompt
+
+## Backlog (from research stage review)
+
+- [ ] **Source verification stage** — New stage after research that validates whether the URLs in research.md actually contain the claimed content. Prevents the draft agent from citing snippets that misrepresent the source. Could use web_extract to fetch and compare.

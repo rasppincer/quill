@@ -6,7 +6,7 @@ chain_retry: 1
 trigger: on_advance
 research:
   enabled: true
-  required: false  # optional: user can skip research
+  required: false
 stages:
   outline:
     name: Outline Agent

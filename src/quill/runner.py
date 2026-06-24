@@ -285,7 +285,7 @@ class StageRunner:
         """
         # Research is a special stage — no agent prompt, uses ResearchService
         if stage == "research":
-            return self._run_research(piece_id, stage, output_dir, event_queue)
+            return self._run_research(piece_id, stage, output_dir, event_queue, force_advance=force_advance)
 
         try:
             sc = self._prepare_stage(piece_id, stage, output_dir)
@@ -461,7 +461,7 @@ class StageRunner:
 
     def _run_research(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
-        event_queue=None,
+        event_queue=None, force_advance: bool = False,
     ) -> AgentDecision:
         """Execute the research stage: generate queries, search, save results."""
         from .piece import DEFAULT_OUTPUT_DIR, load_piece
@@ -542,15 +542,31 @@ class StageRunner:
             research_file=research_file,
         )
 
+        # Write research.md with frontmatter (consistent with other stage files)
+        def _write_research_with_frontmatter(content: str):
+            import yaml
+            from datetime import datetime, timezone
+            fm = yaml.dump({
+                "id": piece.id, "title": piece.title,
+                "genre": piece.genre, "type": piece.type,
+                "audience": getattr(piece, 'audience', ''),
+                "tone": getattr(piece, 'tone', ''),
+                "language": piece.language,
+                "current_stage": "research",
+                "created": getattr(piece, 'created', datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+                "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            }, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            research_file.write_text(f"---\n{fm}---\n{content}", encoding="utf-8")
+
         if result.from_cache:
             critique = "Research cache hit."
         elif result.results:
-            research_file.write_text(result.markdown, encoding="utf-8")
+            _write_research_with_frontmatter(result.markdown)
             fallback = " (fallback queries)" if result.used_fallback else ""
             critique = f"Found {len(result.results)} sources from {len(result.queries)} queries{fallback}."
             logger.info("Research complete: %s", critique)
         else:
-            research_file.write_text(result.markdown, encoding="utf-8")
+            _write_research_with_frontmatter(result.markdown)
             fallback = " (fallback queries)" if result.used_fallback else ""
             critique = f"No research results found{fallback}."
             logger.warning("Research returned no results")
@@ -560,10 +576,24 @@ class StageRunner:
             "results": len(result.results), "cached": result.from_cache,
         })
 
-        # Advance to next stage
+        # Log to run-log
+        self.run_logger.log(piece, stage, "research", "ResearchService", "\n".join(result.queries), {
+            "queries": len(result.queries),
+            "results": len(result.results),
+            "cached": result.from_cache,
+            "used_fallback": result.used_fallback,
+        }, trace_id=locals().get("trace_id"))
+
+        # Advance to next stage (respect trigger)
+        from .agent import load_agent_config
+        agent_cfg = load_agent_config(self.agent_set, "brief")  # any stage to get trigger
+        auto_advance = force_advance or (agent_cfg.trigger in ("auto",) if agent_cfg else True)
         stage_def = pipeline.get_stage(stage)
-        if stage_def and stage_def.next:
+        if auto_advance and stage_def and stage_def.next:
             piece.advance_to(stage_def.next)
+            logger.info("Research → advance to '%s'", stage_def.next)
+        else:
+            logger.info("Research complete (no auto-advance, trigger=%s)", agent_cfg.trigger if agent_cfg else "?")
 
         return AgentDecision(
             decision="advance", critique=critique,

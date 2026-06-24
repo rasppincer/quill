@@ -56,11 +56,24 @@ class ResearchService:
         self.cache_ttl = cache_ttl
 
     def is_fresh(self, research_file: Path) -> bool:
-        """Check if research.md exists and is within TTL."""
+        """Check if research.md exists, is within TTL, and has actual content."""
         if not research_file.exists():
             return False
         age = time.time() - research_file.stat().st_mtime
-        return age < self.cache_ttl
+        if age >= self.cache_ttl:
+            return False
+        # Verify the file has actual content (not just frontmatter)
+        try:
+            text = research_file.read_text(encoding="utf-8")
+            # Strip frontmatter
+            if text.startswith("---"):
+                parts = text.split("---", 2)
+                body = parts[2] if len(parts) > 2 else ""
+            else:
+                body = text
+            return bool(body.strip())
+        except Exception:
+            return False
 
     def generate_queries(self, brief_text: str, outline_text: str) -> tuple[list[str], bool]:
         """Use the LLM to generate search queries from brief + outline.

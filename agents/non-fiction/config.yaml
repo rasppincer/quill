@@ -1,49 +1,38 @@
-# Non-Fiction Agent Set
-# Configurable LLM-powered agents for non-fiction writing pipeline.
-# Model/API config lives in agents/model.yaml (global).
-
-description: "Non-fiction agents for blog posts, essays, articles, and analysis"
+description: Non-fiction agents for blog posts, essays, articles, and analysis
 temperature: 0.7
 max_tokens: 12288
 max_loops: 3
 chain_retry: 1
-trigger: "on_advance"  # on_advance | auto
+trigger: on_advance
 research:
   enabled: true
-  required: true  # non-fiction always researches
-
+  required: true
 stages:
   outline:
-    name: "Outline Agent"
-    description: "Creates structured outline from brief with thesis and evidence hooks"
+    name: Outline Agent
+    description: Creates structured outline from brief with thesis and evidence hooks
     temperature: 0.6
-
   draft:
-    name: "Draft Agent"
-    description: "Produces full evidence-backed draft from outline"
+    name: Draft Agent
+    description: Produces full evidence-backed draft from outline
     temperature: 0.7
-
   review:
-    name: "Review Agent"
-    description: "Reads draft and produces structural/quality critique"
+    name: Review Agent
+    description: Reads draft and produces structural/quality critique
     temperature: 0.5
-
   revise:
-    name: "Revise Agent"
-    description: "Applies review feedback to produce revised draft"
+    name: Revise Agent
+    description: Applies review feedback to produce revised draft
     temperature: 0.6
-
   humanize:
-    name: "Humanize Agent"
-    description: "Strips AI-isms, injects personality, natural voice"
+    name: Humanize Agent
+    description: Strips AI-isms, injects personality, natural voice
     temperature: 0.8
-
   validate:
-    name: "Validate Agent"
-    description: "Domain-specific fact checking and consistency verification"
+    name: Validate Agent
+    description: Domain-specific fact checking and consistency verification
     temperature: 0.3
-
   polish:
-    name: "Polish Agent"
-    description: "Final line-level edits, title optimization"
+    name: Polish Agent
+    description: Final line-level edits, title optimization
     temperature: 0.5

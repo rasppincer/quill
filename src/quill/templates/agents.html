@@ -291,9 +291,11 @@
             if (data.error) {
                 status.textContent = data.error;
                 status.style.color = 'var(--accent-red)';
+                if (typeof toast === 'function') toast(data.error, 'error');
             } else {
-                status.textContent = 'Saved';
+                status.textContent = '✓ Saved';
                 status.style.color = 'var(--accent-green)';
+                if (typeof toast === 'function') toast('Flavor config saved', 'success');
                 setTimeout(function() { status.textContent = ''; }, 2000);
             }
         });

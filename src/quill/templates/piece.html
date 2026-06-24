@@ -96,9 +96,6 @@
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
         <h3 style="margin:0;cursor:pointer" onclick="toggleRunLog()">📋 Run Log <span id="run-log-toggle" style="font-size:12px;color:var(--text-muted)">▶</span></h3>
-        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px">
-            <input type="checkbox" id="run-log-enabled" onchange="toggleRunLogEnabled()" style="accent-color:var(--accent)"> Enabled
-        </label>
     </div>
     <div id="run-log-panel" style="display:none;margin-top:12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;line-height:1.8;max-height:500px;overflow-y:auto;font-family:monospace">
         <div id="run-log-entries" style="color:var(--text-muted)">Loading...</div>
@@ -483,19 +480,11 @@ function toggleRunLog() {
 }
 
 function toggleRunLogEnabled() {
-    const enabled = document.getElementById('run-log-enabled').checked;
-    localStorage.setItem('quill_run_log_enabled', enabled ? '1' : '0');
+    // Deprecated — run log is always enabled. Kept for backward compat.
 }
 
 async function loadRunLog() {
     const entriesDiv = document.getElementById('run-log-entries');
-    const enabled = localStorage.getItem('quill_run_log_enabled') !== '0';
-    document.getElementById('run-log-enabled').checked = enabled;
-
-    if (!enabled) {
-        entriesDiv.innerHTML = '<div style="color:var(--text-muted)">Run log is disabled. Enable to see entries.</div>';
-        return;
-    }
 
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-log?limit=30`);

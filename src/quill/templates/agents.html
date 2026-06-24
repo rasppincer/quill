@@ -55,13 +55,6 @@
 </div>
 
 <div id="agent-detail" style="display:none">
-    <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
-        <div class="label" style="margin-bottom:0">Editing flavor:</div>
-        <select id="flavor-selector" onchange="window.showSet(this.value)" style="min-width:200px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
-        </select>
-    </div>
-    <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
-
     <div class="meta-grid" style="margin-bottom:20px">
         <div class="meta-item">
             <div class="label">Max Loops</div>
@@ -79,10 +72,17 @@
                     <option value="manual">manual — run agent only on explicit click</option>
                 </select>
                 <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
+                <span id="flavor-config-status" style="color:var(--text-muted);font-size:13px"></span>
             </div>
         </div>
-        <span id="flavor-config-status" style="color:var(--text-muted);font-size:13px"></span>
     </div>
+
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
+        <div class="label" style="margin-bottom:0">Editing flavor:</div>
+        <select id="flavor-selector" onchange="window.showSet(this.value)" style="min-width:200px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+        </select>
+    </div>
+    <p id="set-desc" style="color:var(--text-secondary);margin-bottom:16px"></p>
 
     <h3 style="margin-top:24px">Prompt Templates</h3>
     <div id="prompt-list"></div>

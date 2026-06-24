@@ -311,6 +311,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         const data = await resp.json();
         const sets = data.agent_sets || [];
         select.innerHTML = '';
+
+        // Research is a special stage — uses ResearchService, no prompt file needed
+        if (CURRENT_STAGE === 'research') {
+            select.innerHTML = '<option value="non-fiction">ResearchService</option>';
+            const btn = document.getElementById('run-agent-btn');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '🔍 Run Research';
+                btn.title = 'Search SearXNG for reference material';
+            }
+            return;
+        }
+
         if (sets.length === 0) {
             select.innerHTML = '<option value="">No agents for this stage</option>';
             const btn = document.getElementById('run-agent-btn');
@@ -382,8 +395,18 @@ async function toggleStageContent() {
             try {
                 const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
                 const data = await resp.json();
-                const raw = data.body || '(empty)';
-                div.innerHTML = marked.parse(raw);
+                // Research stage: show research.md if it exists, otherwise prompt to run
+                if (CURRENT_STAGE === 'research') {
+                    const raw = data.body || '';
+                    if (raw.includes('Search Queries') || raw.includes('Results (')) {
+                        div.innerHTML = marked.parse(raw);
+                    } else {
+                        div.innerHTML = '<div style="color:var(--accent-yellow);padding:12px">🔍 Research hasn\'t run yet. Click <strong>Run Research</strong> above to search for reference material.</div>';
+                    }
+                } else {
+                    const raw = data.body || '(empty)';
+                    div.innerHTML = marked.parse(raw);
+                }
                 stageContentLoaded = true;
             } catch (e) {
                 div.textContent = 'Error loading content';

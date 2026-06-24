@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="margin-bottom:8px">
-    <a href="{{ url_for('dashboard') }}" style="color:var(--text-muted);text-decoration:none;font-size:13px">← Back to pieces</a>
+    <a href="{{ url_for('dashboard.dashboard') }}" style="color:var(--text-muted);text-decoration:none;font-size:13px">← Back to pieces</a>
 </div>
 
 <h2 id="piece-title" onclick="startRename()" style="cursor:pointer" title="Click to rename">{{ piece.title }}</h2>

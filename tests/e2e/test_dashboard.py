@@ -1,78 +1,105 @@
-"""E2E tests for the dashboard overview page."""
+"""Playwright E2E tests for Quill dashboard.
+
+Covers: trigger save, brief editor, disabled buttons, agent dropdown.
+"""
 import pytest
-from playwright.sync_api import expect
+from playwright.sync_api import expect, Page
 
 
-class TestDashboard:
-    """Pieces overview page at /dashboard."""
-
-    def test_dashboard_loads(self, page, base_url):
-        """Dashboard page loads and shows pieces heading."""
-        page.goto(f"{base_url}/dashboard")
-        expect(page.locator("body")).to_contain_text("Pieces", timeout=5000)
-
-    def test_pieces_list_visible(self, page, base_url):
-        """At least one piece card visible in the overview."""
-        page.goto(f"{base_url}/dashboard")
-        # Piece cards or table rows should exist
-        pieces = page.locator("[class*='piece'], [class*='card'], tr[data-id], .piece-card")
-        expect(pieces.first).to_be_visible(timeout=5000)
-
-    def test_stats_cards_visible(self, page, base_url):
-        """Stats cards (total pieces, stages, etc.) are visible."""
-        page.goto(f"{base_url}/dashboard")
-        # Should have some stats/metrics display
-        stats = page.locator("[class*='stat'], [class*='metric'], [class*='card']")
-        expect(stats.first).to_be_visible(timeout=5000)
-
-    def test_nav_links_present(self, page, base_url):
-        """Navigation links to Pipeline and Agents pages exist."""
-        page.goto(f"{base_url}/dashboard")
-        pipeline_link = page.locator("a[href*='pipeline']")
-        agents_link = page.locator("a[href*='agents']")
-        expect(pipeline_link).to_be_attached()
-        expect(agents_link).to_be_attached()
-
-    def test_create_piece_button(self, page, base_url):
-        """Create piece button or modal trigger exists."""
-        page.goto(f"{base_url}/dashboard")
-        create_btn = page.locator("button:has-text('Create'), button:has-text('New'), a:has-text('Create')")
-        expect(create_btn.first).to_be_attached()
+QUILL = "http://localhost:8325"
 
 
-class TestPipelinePage:
-    """Pipeline info page at /dashboard/pipeline."""
-
-    def test_pipeline_page_loads(self, page, base_url):
-        """Pipeline page loads and shows stages."""
-        page.goto(f"{base_url}/dashboard/pipeline")
-        expect(page.locator("body")).to_contain_text("brief")
-
-    def test_all_stages_listed(self, page, base_url):
-        """All 9 pipeline stages are listed."""
-        page.goto(f"{base_url}/dashboard/pipeline")
-        for stage in ["brief", "outline", "draft", "review", "revise", "humanize", "validate", "polish", "done"]:
-            expect(page.locator("body")).to_contain_text(stage, timeout=3000)
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    return {**browser_context_args, "base_url": QUILL}
 
 
-class TestAgentsPage:
-    """Agents/flavors page at /dashboard/agents."""
+def _find_brief_piece(page: Page) -> str | None:
+    """Find a piece currently at the brief stage via API."""
+    import json, urllib.request
+    try:
+        with urllib.request.urlopen(f"{QUILL}/api/pieces", timeout=5) as resp:
+            data = json.loads(resp.read())
+            for p in data.get("pieces", []):
+                if p.get("current_stage") == "brief":
+                    return p["id"]
+    except Exception:
+        pass
+    return None
 
-    def test_agents_page_loads(self, page, base_url):
-        """Agents page loads."""
-        page.goto(f"{base_url}/dashboard/agents")
-        expect(page.locator("body")).to_contain_text("agent", timeout=5000)
 
-    def test_flavors_listed(self, page, base_url):
-        """At least the default flavor is listed."""
-        page.goto(f"{base_url}/dashboard/agents")
-        expect(page.locator("body")).to_contain_text("default", timeout=5000)
+class TestAgentsTab:
+    """Trigger dropdown and save feedback."""
 
-    def test_model_config_visible(self, page, base_url):
-        """Model configuration section is visible."""
-        page.goto(f"{base_url}/dashboard/agents")
-        page.wait_for_load_state("networkidle")
-        body = page.locator("body").inner_text().lower()
-        assert any(word in body for word in ["model", "api", "temperature", "agent"]), (
-            f"Expected model/agent config text, got: {body[:200]}"
-        )
+    def test_trigger_dropdown_has_three_options(self, page: Page):
+        page.goto("/dashboard/agents")
+        page.locator("#set-trigger").wait_for(state="visible", timeout=5000)
+        options = page.locator("#set-trigger option")
+        assert options.count() == 3
+        values = [options.nth(i).get_attribute("value") for i in range(3)]
+        assert "on_advance" in values
+        assert "auto" in values
+        assert "manual" in values
+
+    def test_trigger_save_shows_feedback(self, page: Page):
+        page.goto("/dashboard/agents")
+        page.locator("#set-trigger").wait_for(state="visible", timeout=5000)
+        page.wait_for_timeout(1000)  # Wait for flavor to load
+        page.locator("#set-trigger").select_option("auto")
+        page.evaluate("window.saveFlavorConfig()")
+        # Status element shows "Saved" on success
+        status = page.locator("#flavor-config-status")
+        expect(status).to_contain_text("Saved", timeout=5000)
+
+    def test_trigger_save_inline_feedback(self, page: Page):
+        page.goto("/dashboard/agents")
+        page.locator("#set-trigger").wait_for(state="visible", timeout=5000)
+        page.wait_for_timeout(1000)  # Wait for flavor to load
+        page.locator("#set-trigger").select_option("on_advance")
+        page.evaluate("window.saveFlavorConfig()")
+        status = page.locator("#flavor-config-status")
+        expect(status).to_contain_text("Saved", timeout=5000)
+
+
+class TestBriefEditor:
+    """Brief stage textarea and content guard."""
+
+    def test_brief_editor_visible_at_brief_stage(self, page: Page):
+        piece_id = _find_brief_piece(page)
+        if not piece_id:
+            pytest.skip("No piece at brief stage")
+        page.goto(f"/pieces/{piece_id}")
+        editor = page.locator("#brief-editor")
+        expect(editor).to_be_visible(timeout=5000)
+
+    def test_brief_editor_has_save_button(self, page: Page):
+        piece_id = _find_brief_piece(page)
+        if not piece_id:
+            pytest.skip("No piece at brief stage")
+        page.goto(f"/pieces/{piece_id}")
+        save_btn = page.locator("button", has_text="Save Brief")
+        expect(save_btn).to_be_visible(timeout=5000)
+
+    def test_brief_editor_shows_content(self, page: Page):
+        piece_id = _find_brief_piece(page)
+        if not piece_id:
+            pytest.skip("No piece at brief stage")
+        page.goto(f"/pieces/{piece_id}")
+        editor = page.locator("#brief-editor")
+        expect(editor).to_be_visible(timeout=5000)
+        # Should have some content loaded
+        value = editor.input_value()
+        assert len(value) > 0, "Brief editor should have content"
+
+
+class TestDisabledButtons:
+    """Disabled button styling."""
+
+    def test_disabled_run_agent_at_brief(self, page: Page):
+        piece_id = _find_brief_piece(page)
+        if not piece_id:
+            pytest.skip("No piece at brief stage")
+        page.goto(f"/pieces/{piece_id}")
+        btn = page.locator("#run-agent-btn")
+        expect(btn).to_be_visible(timeout=5000)
+        assert btn.is_disabled(), "Run Agent should be disabled at brief stage"

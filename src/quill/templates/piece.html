@@ -105,6 +105,24 @@
     </div>
 </div>
 
+<!-- Brief editor (only at brief stage) -->
+{% if piece.current_stage == 'brief' %}
+<div class="section" id="brief-editor-section" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">✏️ Write Your Brief</h3>
+        <span id="brief-status" style="font-size:13px;color:var(--text-muted)">Loading...</span>
+    </div>
+    <div style="background:var(--accent-blue);color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:13px;line-height:1.5">
+        <strong>What is the brief?</strong> This is where you describe what you want written — the topic, angle, key points, style, and any specific requirements. The more detail you provide, the better the pipeline output. The metadata (title, genre, audience, tone) is already captured above — use this space for the <em>substance</em> of your piece.
+    </div>
+    <textarea id="brief-editor" rows="15" style="width:100%;padding:12px 16px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:14px;line-height:1.7;font-family:inherit;resize:vertical" placeholder="Describe what you want written...&#10;&#10;Example:&#10;# Title&#10;&#10;## Key Points&#10;- Point 1&#10;- Point 2&#10;&#10;## Style Notes&#10;Write in a conversational tone..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button class="btn success" onclick="saveBrief()">💾 Save Brief</button>
+        <span id="brief-save-status" style="font-size:13px;color:var(--text-muted)"></span>
+    </div>
+</div>
+{% endif %}
+
 <!-- Stage content viewer -->
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -201,6 +219,66 @@
 const PIECE_ID = {{ piece.id|tojson }};
 const CURRENT_STAGE = {{ piece.current_stage|tojson }};
 const PIECE_AGENT_SET = {{ (piece.agent_set or '')|tojson }};
+
+// Brief editor (only at brief stage)
+if (CURRENT_STAGE === 'brief') {
+    document.addEventListener('DOMContentLoaded', async function() {
+        const textarea = document.getElementById('brief-editor');
+        const statusEl = document.getElementById('brief-status');
+        if (!textarea) return;
+
+        // Load existing brief content
+        try {
+            const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/brief`);
+            const data = await resp.json();
+            textarea.value = data.content || '';
+            if (data.has_content) {
+                statusEl.textContent = '✓ Brief has content';
+                statusEl.style.color = 'var(--accent-green)';
+            } else {
+                statusEl.textContent = '⚠ No content yet — write your brief below';
+                statusEl.style.color = 'var(--accent-yellow)';
+            }
+        } catch (e) {
+            statusEl.textContent = 'Failed to load brief';
+            statusEl.style.color = 'var(--accent-red)';
+        }
+    });
+}
+
+async function saveBrief() {
+    const textarea = document.getElementById('brief-editor');
+    const saveStatus = document.getElementById('brief-save-status');
+    const statusEl = document.getElementById('brief-status');
+    if (!textarea) return;
+
+    saveStatus.textContent = 'Saving...';
+    saveStatus.style.color = 'var(--text-muted)';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/brief`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: textarea.value}),
+        });
+        const data = await resp.json();
+        if (data.status === 'saved') {
+            saveStatus.textContent = '✓ Saved';
+            saveStatus.style.color = 'var(--accent-green)';
+            if (data.has_content) {
+                statusEl.textContent = '✓ Brief has content';
+                statusEl.style.color = 'var(--accent-green)';
+            } else {
+                statusEl.textContent = '⚠ No content yet';
+                statusEl.style.color = 'var(--accent-yellow)';
+            }
+            setTimeout(() => { saveStatus.textContent = ''; }, 2000);
+        }
+    } catch (e) {
+        saveStatus.textContent = 'Failed to save';
+        saveStatus.style.color = 'var(--accent-red)';
+    }
+}
 
 // Load available agents for current stage
 document.addEventListener('DOMContentLoaded', async function() {

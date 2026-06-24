@@ -330,6 +330,67 @@ def pieces_rename(piece_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Brief content editing
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/brief", methods=["GET"])
+def pieces_brief_get(piece_id: str):
+    """Get brief content (body below frontmatter)."""
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    stage_file = piece.stage_dir() / _stage_filename("brief")
+    body = ""
+    if stage_file.exists():
+        text = stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        body = text[m.end():] if m else text
+
+    has_content = bool(body.strip())
+    return jsonify({"content": body, "has_content": has_content})
+
+
+@bp.route("/api/pieces/<piece_id>/brief", methods=["PUT"])
+def pieces_brief_put(piece_id: str):
+    """Save brief content (body below frontmatter).
+
+    JSON body:
+        content (required): The brief text to save.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    content = data.get("content", "")
+
+    stage_file = piece.stage_dir() / _stage_filename("brief")
+    if stage_file.exists():
+        # Preserve frontmatter, replace body
+        text = stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        if m:
+            new_text = f"{text[:m.end()]}{content}"
+        else:
+            new_text = content
+    else:
+        # Create new file with minimal frontmatter
+        fm = yaml.dump({
+            "id": piece.id, "title": piece.title,
+            "genre": piece.genre, "type": piece.type,
+            "language": piece.language,
+            "current_stage": "brief",
+        }, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        new_text = f"---\n{fm}---\n{content}"
+
+    stage_file.write_text(new_text, encoding="utf-8")
+
+    return jsonify({"status": "saved", "has_content": bool(content.strip())})
+
+
+# ---------------------------------------------------------------------------
 # Stage management
 # ---------------------------------------------------------------------------
 
@@ -344,6 +405,20 @@ def pieces_advance(piece_id: str):
 
     if RunManager().is_piece_running(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
+
+    # Brief stage requires user-written content before advancing
+    if piece.current_stage == "brief":
+        stage_file = piece.stage_dir() / _stage_filename("brief")
+        body = ""
+        if stage_file.exists():
+            text = stage_file.read_text(encoding="utf-8")
+            m = _FRONTMATTER_RE.match(text)
+            body = text[m.end():] if m else text
+        if not body.strip():
+            return jsonify({
+                "error": "Brief has no content. Write your brief before advancing.",
+                "hint": "Describe what you want written — the topic, angle, key points, style.",
+            }), 400
 
     next_stage = pipeline.next_stage(piece.current_stage)
     if not next_stage:

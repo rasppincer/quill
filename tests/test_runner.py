@@ -186,7 +186,7 @@ class TestRunStage:
         # Patch DEFAULT_OUTPUT_DIR
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
-        result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
+        result = runner.run_stage("test-piece", "review", output_dir=tmp_output, force_advance=True)
 
         assert result.decision == "advance"
         assert "Good structure" in result.critique

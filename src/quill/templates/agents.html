@@ -74,8 +74,9 @@
             <div class="label">Trigger</div>
             <div style="display:flex;gap:8px;align-items:center">
                 <select id="set-trigger" style="padding:4px 8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
-                    <option value="on_advance">on_advance</option>
-                    <option value="auto">auto</option>
+                    <option value="on_advance">on_advance — run agent, user clicks Advance</option>
+                    <option value="auto">auto — run agent + auto-advance (chain mode)</option>
+                    <option value="manual">manual — run agent only on explicit click</option>
                 </select>
                 <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
             </div>

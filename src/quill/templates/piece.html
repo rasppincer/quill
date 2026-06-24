@@ -627,10 +627,11 @@ async function runAgent() {
                 statusEl.style.color = 'var(--accent-green)';
                 if (decision === 'advance') {
                     toast('Agent decided: advance', 'success');
-                    setTimeout(() => location.reload(), 1500);
                 } else if (decision === 'loop_back') {
                     toast('Agent decided: loop back', 'warning');
                 }
+                // Reload to show updated content (agent may have advanced or stayed)
+                setTimeout(() => location.reload(), 1500);
             }
 
             btn.disabled = false;

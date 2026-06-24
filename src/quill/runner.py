@@ -270,7 +270,7 @@ class StageRunner:
 
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
-        event_queue=None, trace_id: str | None = None,
+        event_queue=None, trace_id: str | None = None, force_advance: bool = False,
     ) -> AgentDecision:
         """Execute a pipeline stage.
 
@@ -369,10 +369,13 @@ class StageRunner:
                 self._write_output(piece, stage, self._format_feedback(decision.critique))
             if is_content:
                 self.metrics_svc.compute(piece, stage)
-            if sc.stage_def and sc.stage_def.next:
+            # Auto-advance only if trigger allows it or forced (chain mode)
+            auto_advance = force_advance or agent_cfg.trigger in ("auto",)
+            if auto_advance and sc.stage_def and sc.stage_def.next:
                 piece.advance_to(sc.stage_def.next)
-            logger.info("Stage '%s' → advance to '%s'", stage,
-                        sc.stage_def.next if sc.stage_def else "?")
+                logger.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
+            else:
+                logger.info("Stage '%s' → advance decision (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
         else:
             logger.warning("Stage '%s' returned unknown decision: '%s'",
                            stage, decision.decision)
@@ -649,7 +652,7 @@ class StageRunner:
             result = None
             for attempt in range(chain_retry + 1):
                 try:
-                    result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue, trace_id=trace_id)
+                    result = self.run_stage(piece_id, current, output_dir, event_queue=event_queue, trace_id=trace_id, force_advance=True)
                 except (ConnectionError, TimeoutError, OSError) as exc:
                     # Transient LLM failure — retry with exponential backoff
                     if attempt < chain_retry:

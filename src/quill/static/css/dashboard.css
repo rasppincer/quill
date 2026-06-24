@@ -250,6 +250,11 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
     color: var(--text-primary);
     background: var(--bg-tertiary);
 }
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
 
 .btn:hover { border-color: var(--accent-blue); }
 .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--accent-blue); color: var(--accent-blue); }

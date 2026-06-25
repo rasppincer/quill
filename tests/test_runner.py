@@ -73,7 +73,7 @@ class TestReadInputs:
         piece = load_piece(sample_piece)
         pipeline = load_pipeline("default")
 
-        inputs = runner._read_inputs(piece, "review", pipeline)
+        inputs = runner.assembler.read_inputs(piece, "review", pipeline)
         assert "draft content" in inputs
 
     def test_revise_reads_draft_and_review(self, runner, sample_piece_with_review, tmp_output):
@@ -81,7 +81,7 @@ class TestReadInputs:
         from quill.piece import load_piece
         piece = load_piece(sample_piece_with_review)
 
-        inputs = runner._read_inputs(piece, "revise", _make_pipeline())
+        inputs = runner.assembler.read_inputs(piece, "revise", _make_pipeline())
         assert "draft content" in inputs
         assert "stronger opening" in inputs
 
@@ -95,7 +95,7 @@ class TestReadInputs:
         (d / _stage_filename("revise")).write_text("The revised text here.")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "humanize", _make_pipeline())
+        inputs = runner.assembler.read_inputs(piece, "humanize", _make_pipeline())
         assert "revised text" in inputs
 
     def test_unknown_stage_reads_previous(self, runner, sample_piece, tmp_output):
@@ -107,7 +107,7 @@ class TestReadInputs:
 
         # brief has no explicit mapping and is the first stage.
         # Runner also reads the current stage file as "previous attempt" if it exists.
-        inputs = runner._read_inputs(piece, "brief", pipeline, loop_count=1)
+        inputs = runner.assembler.read_inputs(piece, "brief", pipeline, loop_count=1)
         # sample_piece has brief.md, so it gets picked up as "previous attempt"
         assert "brief" in inputs.lower()
 
@@ -464,7 +464,7 @@ class TestBuildRenderContext:
         from quill.piece import load_piece
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         piece = load_piece(sample_piece)
-        ctx = runner._build_render_context(piece, "review", "test content", "metrics here")
+        ctx = runner.assembler.build_render_context(piece, "review", "test content", "metrics here")
         assert ctx["TITLE"] == "Test Piece"
         assert ctx["GENRE"] == "fiction"
         assert ctx["TYPE"] == "story"
@@ -482,7 +482,7 @@ class TestBuildRenderContext:
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         piece = load_piece(sample_piece)
         runner.set_loop_count(piece, "review", 2)
-        ctx = runner._build_render_context(piece, "review", "content", "metrics")
+        ctx = runner.assembler.build_render_context(piece, "review", "content", "metrics")
         assert ctx["loop_count"] == 2
         assert ctx["is_looping"] is True
 
@@ -491,7 +491,7 @@ class TestBuildRenderContext:
         from quill.piece import load_piece
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         piece = load_piece(sample_piece)
-        ctx = runner._build_render_context(
+        ctx = runner.assembler.build_render_context(
             piece, "draft", "input", "metrics",
             extra={"GENERATED": "some text", "INPUT_CONTENT": "full input"},
         )
@@ -868,7 +868,7 @@ class TestTwoFileOutput:
         (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "draft", _make_pipeline(), loop_count=1)
+        inputs = runner.assembler.read_inputs(piece, "draft", _make_pipeline(), loop_count=1)
 
         assert "Previous draft attempt" in inputs
         assert "Needs more evidence" in inputs
@@ -887,7 +887,7 @@ class TestTwoFileOutput:
         (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
 
         piece = load_piece(d)
-        inputs = runner._read_inputs(piece, "draft", _make_pipeline(), loop_count=0)
+        inputs = runner.assembler.read_inputs(piece, "draft", _make_pipeline(), loop_count=0)
 
         assert "Previous draft attempt" not in inputs
         assert "evaluation feedback" not in inputs

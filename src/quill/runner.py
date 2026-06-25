@@ -112,6 +112,9 @@ class StageRunner:
         piece, agent_cfg = sc.piece, sc.agent_cfg
         loop_count = sc.loop_count
 
+        # Set stage state to generating
+        piece.set_stage_state(stage, "generating")
+
         # Check loop limit
         if loop_count >= agent_cfg.max_loops:
             logger.info("Stage '%s' reached max loops (%d), forcing advance",
@@ -178,6 +181,7 @@ class StageRunner:
             })
         elif decision.decision == "advance":
             piece.set_loop_count(stage, 0)
+            piece.set_stage_state(stage, "ready")
             self.metrics_svc.cleanup_guardrail_snapshot(piece, stage)
             if not is_content:
                 piece.write_output(stage, self._format_feedback(decision.critique))

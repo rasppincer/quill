@@ -134,6 +134,7 @@ def pieces_create():
     )
 
     path = piece.save()
+    piece.set_stage_state("brief", "ready")
     return jsonify({"id": piece.id, "title": piece.title, "stage": piece.current_stage, "path": str(path)}), 201
 
 
@@ -505,3 +506,66 @@ def pieces_reject(piece_id: str):
         "reason": data.get("reason", ""),
         "progress": pipeline.progress(piece.current_stage),
     })
+
+
+# ---------------------------------------------------------------------------
+# Stage navigation
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/stages/<stage>")
+def pieces_stage_navigate(piece_id: str, stage: str):
+    """Navigate to a specific stage — returns content + metrics.
+
+    Only stages with state != 'empty' are navigable.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    if not piece.can_navigate(stage):
+        return jsonify({"error": f"Stage '{stage}' has not yet been reached"}), 404
+
+    stage_file = piece.stage_dir() / _stage_filename(stage)
+    body = ""
+    if stage_file.exists():
+        text = stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        body = text[m.end():] if m else text
+
+    metrics = maybe_recompute(stage_file) if stage_file.exists() else None
+
+    return jsonify({
+        "piece_id": piece_id,
+        "stage": stage,
+        "state": piece.get_stage_state(stage),
+        "content": body,
+        "metrics": metrics,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Trigger management
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/trigger", methods=["POST"])
+def pieces_set_trigger(piece_id: str):
+    """Set the trigger mode for a piece.
+
+    JSON body:
+        trigger: manual | on_advance | auto
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    trigger = data.get("trigger", "").strip()
+    if trigger not in ("manual", "on_advance", "auto"):
+        return jsonify({"error": f"Invalid trigger '{trigger}'. Must be: manual, on_advance, auto"}), 400
+
+    piece.trigger = trigger
+    piece.save()
+
+    return jsonify({"id": piece.id, "trigger": piece.trigger})

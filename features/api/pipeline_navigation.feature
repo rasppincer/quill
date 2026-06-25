@@ -40,7 +40,7 @@ Feature: Pipeline navigation and stage lifecycle
   Scenario: Running agent transitions stage through generating to ready
     Given a piece "gen-test" at stage "outline"
     And the piece has brief.md content
-    When I run the agent for stage "outline" with agent set "default"
+    When I run the agent for stage "outline" with agent set "fiction"
     Then stage "outline" has state "ready"
     And the outline.md file has content
     And the run log records state "generating" for stage "outline"
@@ -80,7 +80,7 @@ Feature: Pipeline navigation and stage lifecycle
   Scenario: Re-running brief supersedes everything after it
     Given a piece "super-all" at stage "polish"
     And the piece has content in all stages through polish
-    When I run the agent for stage "brief" with agent set "default"
+    When I run the agent for stage "brief" with agent set "non-fiction"
     Then stage "brief" has state "ready"
     And stage "outline" has state "superseded"
     And stage "draft" has state "superseded"
@@ -116,7 +116,7 @@ Feature: Pipeline navigation and stage lifecycle
   Scenario: Manual trigger — user must click run agent explicitly
     Given a piece "man-run" at stage "outline" with trigger "manual"
     And the piece has brief.md content
-    When I run the agent for stage "outline" with agent set "default"
+    When I run the agent for stage "outline" with agent set "fiction"
     Then stage "outline" has state "ready"
     And the outline.md file has content
 
@@ -143,7 +143,7 @@ Feature: Pipeline navigation and stage lifecycle
     Given a piece "oa-rerun" at stage "outline" with trigger "on_advance"
     And the piece has brief.md content
     And the outline.md has auto-generated content
-    When I run the agent for stage "outline" with agent set "default"
+    When I run the agent for stage "outline" with agent set "non-fiction"
     Then stage "outline" has state "ready"
     And the outline.md file has content
 

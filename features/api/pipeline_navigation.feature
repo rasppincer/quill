@@ -37,25 +37,22 @@ Feature: Pipeline navigation and stage lifecycle
     Then the piece is at stage "outline"
     And stage "outline" has state "empty"
 
-  Scenario: Running agent sets stage to generating then ready
+  Scenario: Running agent transitions stage through generating to ready
     Given a piece "gen-test" at stage "outline"
     And the piece has brief.md content
     When I run the agent for stage "outline" with agent set "default"
     Then stage "outline" has state "ready"
     And the outline.md file has content
+    And the run log records state "generating" for stage "outline"
 
   # ── Free navigation within explored territory ────────────────────
 
-  Scenario: Navigate to any previously reached stage
-    Given a piece "nav-test" at stage "review"
-    And the piece has content in brief, outline, and draft stages
+  Scenario: Navigate to earlier stage and back to current
+    Given a piece "nav-test" at stage "draft"
+    And the piece has content in brief and outline stages
     When I navigate to stage "brief"
     Then the stage content for "brief" is returned
     And the stage metrics for "brief" are returned
-
-  Scenario: Navigate to current stage
-    Given a piece "nav-cur" at stage "draft"
-    And the piece has outline.md content
     When I navigate to stage "draft"
     Then the stage content for "draft" is returned
 

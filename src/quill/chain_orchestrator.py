@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .agent import AgentDecision, load_agent_config
 from .piece import load_piece, _stage_filename
+from .run_manager import RunManager
 from .stage_runner import LLMCaller, _emit
 from .timeit import timeit
 
@@ -168,6 +169,17 @@ class ChainOrchestrator:
 
             if result.error:
                 break
+
+            # Check for interrupt signal
+            manager = RunManager()
+            if manager.is_interrupted(piece_id):
+                manager.clear_interrupt(piece_id)
+                _emit(event_queue, "chain_interrupted", {
+                    "stage": result.stage, "completed": len(results),
+                })
+                logger.info("Chain interrupted for piece '%s' after stage '%s'", piece_id, result.stage)
+                break
+
             if result.decision == "advance":
                 piece = load_piece(piece_dir)
                 current = piece.current_stage

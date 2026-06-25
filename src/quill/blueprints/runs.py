@@ -34,6 +34,10 @@ def pieces_run(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
+    # Block manual run during auto mode
+    if piece.trigger == "auto" and RunManager().is_piece_running(piece_id):
+        return jsonify({"error": "Piece is in auto mode — cannot run agent manually"}), 409
+
     # Use piece's agent_set, fall back to request body, then "default"
     agent_set = data.get("agent_set") or piece.agent_set or "default"
     runner = StageRunner(agent_set=agent_set)
@@ -206,3 +210,88 @@ def pieces_debug_prompt(piece_id: str, stage: str):
     if "error" in result:
         return jsonify(result), 404
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Auto pipeline
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/auto", methods=["POST"])
+def pieces_auto(piece_id: str):
+    """Start the auto pipeline — runs all remaining stages.
+
+    The piece must have trigger set to 'auto' and brief content.
+    While running, run/advance endpoints are blocked.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    if RunManager().is_piece_running(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' already has a running job"}), 409
+
+    # Require brief content
+    from ..piece import _stage_filename
+    brief_file = piece.stage_dir() / _stage_filename("brief")
+    if brief_file.exists():
+        from ..piece import _FRONTMATTER_RE
+        text = brief_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        body = text[m.end():] if m else text
+        if not body.strip():
+            return jsonify({"error": "Brief has no content. Write your brief before starting auto pipeline."}), 400
+    else:
+        return jsonify({"error": "Brief has no content. Write your brief before starting auto pipeline."}), 400
+
+    # Set trigger to auto
+    piece.trigger = "auto"
+    piece.save()
+
+    agent_set = piece.agent_set or "default"
+    manager = RunManager()
+    run_id = manager.start_run(
+        piece_id=piece_id,
+        stage=piece.current_stage,
+        agent_set=agent_set,
+        chain=True,
+    )
+
+    if run_id is None:
+        return jsonify({"error": f"Piece '{piece_id}' already has a running job"}), 409
+
+    return jsonify({
+        "run_id": run_id,
+        "piece_id": piece_id,
+        "stage": piece.current_stage,
+        "trigger": "auto",
+    })
+
+
+@bp.route("/api/pieces/<piece_id>/interrupt", methods=["POST"])
+def pieces_interrupt(piece_id: str):
+    """Interrupt the auto pipeline after the current stage completes.
+
+    Downgrades trigger to 'on_advance'.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    manager = RunManager()
+
+    if not manager.is_piece_running(piece_id):
+        return jsonify({"error": f"Piece '{piece_id}' has no running job"}), 400
+
+    # Signal interrupt
+    manager.interrupt(piece_id)
+
+    # Downgrade trigger
+    piece.trigger = "on_advance"
+    piece.save()
+
+    return jsonify({
+        "piece_id": piece_id,
+        "trigger": "on_advance",
+        "status": "interrupt_requested",
+    })

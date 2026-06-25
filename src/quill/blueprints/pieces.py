@@ -407,6 +407,10 @@ def pieces_advance(piece_id: str):
     if RunManager().is_piece_running(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
 
+    # Block advance during auto mode
+    if piece.trigger == "auto" and RunManager().is_piece_running(piece_id):
+        return jsonify({"error": "Piece is in auto mode — cannot advance manually"}), 409
+
     # Brief stage requires user-written content before advancing
     if piece.current_stage == "brief":
         stage_file = piece.stage_dir() / _stage_filename("brief")

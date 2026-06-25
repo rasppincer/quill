@@ -37,6 +37,7 @@ class RunManager:
                     inst._run_lock = threading.Lock()
                     inst._piece_locks = {}  # piece_id -> threading.Lock
                     inst._piece_locks_lock = threading.Lock()
+                    inst._interrupted = set()  # piece_ids to interrupt after current stage
                     cls._instance = inst
         return cls._instance
 
@@ -54,6 +55,19 @@ class RunManager:
                 if info["piece_id"] == piece_id and info["status"] == "running":
                     return True
         return False
+
+    def interrupt(self, piece_id: str):
+        """Mark a piece for interruption after the current stage completes."""
+        self._interrupted.add(piece_id)
+        logger.info("Interrupt requested for piece '%s'", piece_id)
+
+    def is_interrupted(self, piece_id: str) -> bool:
+        """Check if a piece has been requested to interrupt."""
+        return piece_id in self._interrupted
+
+    def clear_interrupt(self, piece_id: str):
+        """Clear the interrupt flag for a piece."""
+        self._interrupted.discard(piece_id)
 
     def start_run(
         self,

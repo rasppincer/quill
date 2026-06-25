@@ -38,5 +38,11 @@ def before_scenario(context, scenario):
                                                    "renamed-", "frontmatter-",
                                                    "llm-", "concurrent-",
                                                    "advance-during-", "reject-during-",
-                                                   "log-append-", "clean-test")):
+                                                   "log-append-", "clean-test",
+                                                   "nav-", "adv-", "gen-", "super-",
+                                                   "man-", "oa-", "auto-", "piece-",
+                                                   "trig-", "loop-", "no-run",
+                                                   "trigger-", "detail-", "bad-",
+                                                   "guard-", "int-", "no-brief",
+                                                   "format-test", "empty-chain")):
                 shutil.rmtree(d, ignore_errors=True)

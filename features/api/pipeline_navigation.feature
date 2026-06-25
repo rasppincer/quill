@@ -32,7 +32,8 @@ Feature: Pipeline navigation and stage lifecycle
     And stage "draft" has state "empty"
 
   Scenario: Advancing creates next stage in empty state
-    Given a piece "adv-test" at stage "brief"
+    Given a piece "adv-test" at stage "brief" with trigger "manual"
+    And the piece has brief.md content
     When I advance the piece
     Then the piece is at stage "outline"
     And stage "outline" has state "empty"
@@ -59,12 +60,12 @@ Feature: Pipeline navigation and stage lifecycle
   Scenario: Cannot navigate beyond frontier
     Given a piece "nav-lock" at stage "outline"
     When I navigate to stage "draft"
-    Then I get an error containing "not yet reached"
+    Then I get an error containing "not yet been reached"
 
   Scenario: Cannot navigate to stage far beyond frontier
     Given a piece "nav-far" at stage "brief"
     When I navigate to stage "humanize"
-    Then I get an error containing "not yet reached"
+    Then I get an error containing "not yet been reached"
 
   # ── Running agent on earlier stage supersedes later stages ───────
 
@@ -156,6 +157,7 @@ Feature: Pipeline navigation and stage lifecycle
 
   # ── Trigger mode: auto ──────────────────────────────────────────
 
+  @slow
   Scenario: Auto trigger — full pipeline runs without user intervention
     Given a piece "auto-full" at stage "brief"
     And the piece has brief.md content
@@ -164,6 +166,7 @@ Feature: Pipeline navigation and stage lifecycle
     Then the piece reaches stage "done"
     And all content stages have state "ready"
 
+  @slow
   Scenario: Auto trigger — user can navigate to any reached stage while running
     Given a piece "auto-nav" at stage "brief"
     And the piece has brief.md content
@@ -173,6 +176,7 @@ Feature: Pipeline navigation and stage lifecycle
     And I navigate to stage "outline"
     Then the stage content for "outline" is returned
 
+  @slow
   Scenario: Auto trigger — run agent button is disabled while running
     Given a piece "auto-disabled" at stage "brief"
     And the piece has brief.md content
@@ -182,6 +186,7 @@ Feature: Pipeline navigation and stage lifecycle
     And I attempt to run the agent for stage "outline"
     Then I get an error containing "auto mode"
 
+  @slow
   Scenario: Auto trigger — advance button is disabled while running
     Given a piece "auto-noadv" at stage "brief"
     And the piece has brief.md content
@@ -191,6 +196,7 @@ Feature: Pipeline navigation and stage lifecycle
     And I attempt to advance the piece
     Then I get an error containing "auto mode"
 
+  @slow
   Scenario: Auto trigger — interrupt downgrades to on_advance
     Given a piece "auto-int" at stage "brief"
     And the piece has brief.md content
@@ -203,7 +209,8 @@ Feature: Pipeline navigation and stage lifecycle
 
   Scenario: Auto trigger — cannot start without brief content
     Given a piece "auto-nobrief" at stage "brief"
-    When I set the piece trigger to "auto"
+    When I clear the brief content
+    And I set the piece trigger to "auto"
     And I start the auto pipeline
     Then I get an error containing "brief"
 
@@ -226,6 +233,7 @@ Feature: Pipeline navigation and stage lifecycle
 
   # ── Inner generate-evaluate loop ────────────────────────────────
 
+  @slow
   Scenario: Agent loop-back is invisible to user
     Given a piece "loop-inner" at stage "draft" with trigger "on_advance"
     And the piece has outline.md and research.md content

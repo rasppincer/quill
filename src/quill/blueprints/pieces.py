@@ -457,12 +457,29 @@ def pieces_advance(piece_id: str):
     if old_stage_file.exists():
         maybe_recompute(old_stage_file)
 
-    return jsonify({
+    result_data = {
         "id": piece.id,
         "previous_stage": old_stage,
         "current_stage": piece.current_stage,
         "progress": pipeline.progress(piece.current_stage),
-    })
+    }
+
+    # If trigger is on_advance or auto, run agent on the new stage
+    if piece.trigger in ("on_advance", "auto"):
+        from ..runner import StageRunner
+        import uuid as _uuid
+        agent_set = piece.agent_set or "default"
+        runner = StageRunner(agent_set=agent_set)
+        trace_id = str(_uuid.uuid4())
+        agent_result = runner.run_stage(piece_id, piece.current_stage, trace_id=trace_id)
+        result_data["agent"] = {
+            "stage": agent_result.stage,
+            "decision": agent_result.decision,
+            "critique": agent_result.critique[:500] if agent_result.critique else "",
+            "error": agent_result.error,
+        }
+
+    return jsonify(result_data)
 
 
 @bp.route("/api/pieces/<piece_id>/reject", methods=["POST"])

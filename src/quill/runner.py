@@ -271,6 +271,7 @@ class StageRunner:
             _emit(event_queue, "research_cached", {
                 "stage": stage, "file": str(research_file),
             })
+            piece.set_stage_state(stage, "ready")
             return AgentDecision(
                 decision="advance", critique="Research cache hit.",
                 output="", stage=stage,
@@ -365,6 +366,8 @@ class StageRunner:
             logger.info("Research → advance to '%s'", stage_def.next)
         else:
             logger.info("Research complete (no auto-advance, trigger=%s)", agent_cfg.trigger if agent_cfg else "?")
+
+        piece.set_stage_state(stage, "ready")
 
         return AgentDecision(
             decision="advance", critique=critique,

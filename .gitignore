@@ -28,3 +28,6 @@ htmlcov/
 
 # Output (piece content — local only, not in repo)
 output/
+
+# Logs (rotated, local only)
+logs/

@@ -229,10 +229,12 @@ Feature: Pipeline navigation and stage lifecycle
   Scenario: Agent loop-back is invisible to user
     Given a piece "loop-inner" at stage "draft" with trigger "on_advance"
     And the piece has outline.md and research.md content
+    And the agent evaluate call will reject on first attempt then accept
     When I run the agent for stage "draft" with agent set "fiction"
     Then stage "draft" has state "ready"
     And the draft.md file has content
-    # The agent may have looped internally — user only sees the final result
+    And the run log shows an inner evaluate "loop_back" for stage "draft"
+    And the run log shows 2 generate calls for stage "draft"
 
   Scenario: Agent max_loops is respected
     Given a piece "loop-max" at stage "draft" with trigger "on_advance"

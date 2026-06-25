@@ -157,50 +157,63 @@ Feature: Pipeline navigation and stage lifecycle
   # ── Trigger mode: auto ──────────────────────────────────────────
 
   Scenario: Auto trigger — full pipeline runs without user intervention
-    Given a piece "auto-full" at stage "brief" with trigger "auto"
+    Given a piece "auto-full" at stage "brief"
     And the piece has brief.md content
-    When I start the auto pipeline
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
     Then the piece reaches stage "done"
     And all content stages have state "ready"
 
   Scenario: Auto trigger — user can navigate to any reached stage while running
-    Given a piece "auto-nav" at stage "brief" with trigger "auto"
+    Given a piece "auto-nav" at stage "brief"
     And the piece has brief.md content
-    When I start the auto pipeline
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
     And I wait until the piece reaches stage "draft"
     And I navigate to stage "outline"
     Then the stage content for "outline" is returned
 
   Scenario: Auto trigger — run agent button is disabled while running
-    Given a piece "auto-disabled" at stage "brief" with trigger "auto"
+    Given a piece "auto-disabled" at stage "brief"
     And the piece has brief.md content
-    When I start the auto pipeline
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
     And I wait until the piece reaches stage "outline"
     And I attempt to run the agent for stage "outline"
     Then I get an error containing "auto mode"
 
   Scenario: Auto trigger — advance button is disabled while running
-    Given a piece "auto-noadv" at stage "brief" with trigger "auto"
+    Given a piece "auto-noadv" at stage "brief"
     And the piece has brief.md content
-    When I start the auto pipeline
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
     And I wait until the piece reaches stage "outline"
     And I attempt to advance the piece
     Then I get an error containing "auto mode"
 
   Scenario: Auto trigger — interrupt downgrades to on_advance
-    Given a piece "auto-int" at stage "brief" with trigger "auto"
+    Given a piece "auto-int" at stage "brief"
     And the piece has brief.md content
-    When I start the auto pipeline
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
     And I wait until the piece reaches stage "outline"
     And I interrupt the auto pipeline
     Then the piece trigger is "on_advance"
     And the pipeline stops after the current stage completes
 
+  Scenario: Auto trigger — cannot start without brief content
+    Given a piece "auto-nobrief" at stage "brief"
+    When I set the piece trigger to "auto"
+    And I start the auto pipeline
+    Then I get an error containing "brief"
+
   # ── Trigger is per-piece ────────────────────────────────────────
 
   Scenario: Different pieces can have different triggers
-    Given a piece "piece-manual" at stage "brief" with trigger "manual"
-    And a piece "piece-auto" at stage "brief" with trigger "auto"
+    Given a piece "piece-manual" at stage "brief"
+    And a piece "piece-auto" at stage "brief"
+    When I set piece "piece-manual" trigger to "manual"
+    And I set piece "piece-auto" trigger to "auto"
     Then piece "piece-manual" trigger is "manual"
     And piece "piece-auto" trigger is "auto"
 

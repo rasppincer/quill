@@ -14,15 +14,20 @@
     <button class="btn" onclick="cancelRename()" style="margin-left:4px">Cancel</button>
 </div>
 
-<!-- Pipeline visualization -->
-<div class="pipeline">
+<!-- Pipeline stage tabs -->
+<div id="stage-tabs" class="stage-tabs">
     {% for stage in pipeline %}
-        {% if not loop.first %}<div class="arrow">→</div>{% endif %}
         {% set idx = loop.index0 %}
         {% set current_idx = pipeline_order.index(piece.current_stage) if piece.current_stage in pipeline_order else -1 %}
-        <div class="step {% if idx < current_idx %}completed{% elif idx == current_idx %}current{% else %}pending{% endif %}">
-            {{ stage.name }}
+        {% set state = piece.stage_states.get(stage.key, 'empty') if piece.stage_states else ('ready' if idx <= current_idx else 'empty') %}
+        <div class="stage-tab {{ state }} {% if stage.key == piece.current_stage %}active{% endif %}"
+             data-stage="{{ stage.key }}" data-state="{{ state }}"
+             onclick="navigateToStage('{{ stage.key }}')"
+             title="{{ stage.name }} ({{ state }})">
+            <span class="stage-dot {{ state }}"></span>
+            <span class="stage-label">{{ stage.name }}</span>
         </div>
+        {% if not loop.last %}<div class="stage-arrow">→</div>{% endif %}
     {% endfor %}
 </div>
 
@@ -30,47 +35,65 @@
 <div class="cards">
     <div class="card">
         <div class="label">Current Stage</div>
-        <div class="value purple">{{ piece.current_stage|title }}</div>
+        <div class="value purple" id="current-stage-display">{{ piece.current_stage|title }}</div>
+    </div>
+    <div class="card">
+        <div class="label">Viewing</div>
+        <div class="value blue" id="viewing-stage-display">{{ piece.current_stage|title }}</div>
     </div>
     <div class="card">
         <div class="label">Progress</div>
         <div class="value blue">{{ progress.percent }}%</div>
     </div>
     <div class="card">
-        <div class="label">Genre</div>
-        <div class="value" style="font-size:18px">{{ piece.genre or '—' }}</div>
-    </div>
-    <div class="card">
-        <div class="label">Language</div>
-        <div class="value" style="font-size:18px">{{ piece.language or '—' }}</div>
+        <div class="label">Trigger</div>
+        <div class="value" id="trigger-display">{{ piece.trigger or 'on_advance' }}</div>
     </div>
 </div>
 
 <!-- Actions -->
 <div class="actions">
-    {% for target in progress.can_reject_to %}
-    <button class="btn danger" onclick="reject('{{ target }}')">
-        ← Reject to {{ target|title }}
-    </button>
-    {% endfor %}
-    {% if progress.next %}
-    <button class="btn success" onclick="advance()">
-        Advance to {{ progress.next|title }} →
-    </button>
-    {% endif %}
-    <button class="btn" id="run-agent-btn" onclick="runAgent()" style="margin-left:auto">
+    <!-- Trigger selector -->
+    <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:12px;color:var(--text-muted)">Trigger:</label>
+        <select id="trigger-select" onchange="setTrigger(this.value)" style="padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
+            <option value="manual" {% if piece.trigger == 'manual' %}selected{% endif %}>Manual</option>
+            <option value="on_advance" {% if piece.trigger == 'on_advance' or not piece.trigger %}selected{% endif %}>On Advance</option>
+            <option value="auto" {% if piece.trigger == 'auto' %}selected{% endif %}>Auto</option>
+        </select>
+    </div>
+
+    <!-- Run Agent -->
+    <button class="btn" id="run-agent-btn" onclick="runAgent()" style="margin-left:12px">
         ▶ Run Agent
     </button>
     <select id="agent-select" style="margin-left:8px;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
         <option value="">Loading agents...</option>
     </select>
-    <button class="btn" id="export-gdocs-btn" onclick="exportGDocs()" style="margin-left:12px" title="Export to Google Docs">
-        📄 Export to GDocs
+
+    <!-- Advance -->
+    {% if progress.next %}
+    <button class="btn success" id="advance-btn" onclick="advance()" style="margin-left:12px">
+        Advance to {{ progress.next|title }} →
     </button>
-    <button class="btn" id="generate-audio-btn" onclick="generateAudio()" style="margin-left:12px" title="Generate audio version">
+    {% endif %}
+
+    <!-- Auto pipeline -->
+    <button class="btn" id="auto-btn" onclick="toggleAuto()" style="margin-left:12px;background:var(--accent);color:#fff">
+        ▶ Auto Pipeline
+    </button>
+    <button class="btn danger" id="interrupt-btn" onclick="interruptAuto()" style="display:none;margin-left:8px">
+        ⏹ Interrupt
+    </button>
+
+    <!-- Export -->
+    <button class="btn" id="export-gdocs-btn" onclick="exportGDocs()" style="margin-left:auto" title="Export to Google Docs">
+        📄 Export
+    </button>
+    <button class="btn" id="generate-audio-btn" onclick="generateAudio()" style="margin-left:8px" title="Generate audio version">
         🔊 Audio
     </button>
-    <div style="margin-left:12px;display:flex;align-items:center;gap:4px">
+    <div style="margin-left:8px;display:flex;align-items:center;gap:4px">
         <button class="btn" id="comic-btn" onclick="generateComic()" style="background:var(--accent);color:#fff" title="Generate comic adaptation">
             🎨 Comic
         </button>
@@ -92,7 +115,7 @@
     <div id="agent-critique" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
 </div>
 
-<!-- Run Log (historical) -->
+<!-- Run Log -->
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
         <h3 style="margin:0;cursor:pointer" onclick="toggleRunLog()">📋 Run Log <span id="run-log-toggle" style="font-size:12px;color:var(--text-muted)">▶</span></h3>
@@ -123,10 +146,10 @@
 <!-- Stage content viewer -->
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">Stage Content — {{ piece.current_stage|title }}</h3>
-        <button class="btn" id="toggle-content-btn" onclick="toggleStageContent()">Show</button>
+        <h3 style="margin:0" id="content-heading">Stage Content — {{ piece.current_stage|title }}</h3>
+        <span id="stage-state-badge" style="font-size:12px;padding:2px 8px;border-radius:10px;background:var(--bg-secondary);border:1px solid var(--border)"></span>
     </div>
-    <div id="stage-content" style="display:none;margin-top:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-size:14px;line-height:1.8;max-height:600px;overflow-y:auto">
+    <div id="stage-content" style="margin-top:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-size:14px;line-height:1.8;max-height:600px;overflow-y:auto">
         <style>
             #stage-content h1, #stage-content h2, #stage-content h3 { color: var(--text-primary); margin: 1.2em 0 0.4em; }
             #stage-content h1 { font-size: 1.4em; } #stage-content h2 { font-size: 1.2em; } #stage-content h3 { font-size: 1.1em; }
@@ -137,6 +160,11 @@
             #stage-content code { background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
             #stage-content ul, #stage-content ol { padding-left: 1.5em; margin: 0.4em 0; }
         </style>
+        <div style="color:var(--text-muted)">Loading...</div>
+    </div>
+    <!-- Metrics for viewed stage -->
+    <div id="stage-metrics" style="display:none;margin-top:12px">
+        <div class="meta-grid" id="stage-metrics-grid"></div>
     </div>
 </div>
 
@@ -154,8 +182,10 @@
     <h3>Brief / Metadata</h3>
     <div class="meta-grid">
         <div class="meta-item"><div class="label">Type</div><div class="value">{{ piece.type or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Genre</div><div class="value">{{ piece.genre or '—' }}</div></div>
         <div class="meta-item"><div class="label">Audience</div><div class="value">{{ piece.audience or '—' }}</div></div>
         <div class="meta-item"><div class="label">Tone</div><div class="value">{{ piece.tone or '—' }}</div></div>
+        <div class="meta-item"><div class="label">Language</div><div class="value">{{ piece.language or '—' }}</div></div>
         <div class="meta-item"><div class="label">Target Length</div><div class="value">{{ piece.target_length or '—' }}</div></div>
         <div class="meta-item"><div class="label">Created</div><div class="value">{{ piece.created or '—' }}</div></div>
         <div class="meta-item"><div class="label">Updated</div><div class="value">{{ piece.updated or '—' }}</div></div>
@@ -174,41 +204,6 @@
     </ul>
 </div>
 {% endif %}
-
-{% if metrics %}
-<div class="section">
-    <h3>Text Metrics <span style="color:var(--text-muted);font-size:12px;font-weight:normal">— {{ piece.current_stage }}</span></h3>
-    <div class="meta-grid">
-        <div class="meta-item">
-            <div class="label">Flesch Ease</div>
-            <div class="value {% if metrics.flesch_ease >= 60 %}green{% elif metrics.flesch_ease >= 40 %}yellow{% else %}red{% endif %}">{{ metrics.flesch_ease }}</div>
-            <div style="font-size:11px;color:var(--text-muted)">0=hard, 100=easy</div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Grade Level</div>
-            <div class="value">{{ metrics.flesch_kincaid }}</div>
-            <div style="font-size:11px;color:var(--text-muted)">US school grade</div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Words</div>
-            <div class="value blue">{{ metrics.word_count }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Avg Sentence</div>
-            <div class="value">{{ metrics.avg_sentence_length }} words</div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Vocabulary</div>
-            <div class="value">{{ (metrics.type_token_ratio * 100)|round(1) }}%</div>
-            <div style="font-size:11px;color:var(--text-muted)">type-token ratio</div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Passive Voice</div>
-            <div class="value {% if metrics.passive_voice_pct <= 10 %}green{% elif metrics.passive_voice_pct <= 20 %}yellow{% else %}red{% endif %}">{{ metrics.passive_voice_pct }}%</div>
-        </div>
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -216,15 +211,282 @@
 const PIECE_ID = {{ piece.id|tojson }};
 const CURRENT_STAGE = {{ piece.current_stage|tojson }};
 const PIECE_AGENT_SET = {{ (piece.agent_set or '')|tojson }};
+const PIPELINE_ORDER = {{ pipeline_order|tojson }};
+let VIEWING_STAGE = CURRENT_STAGE;
 
-// Brief editor (only at brief stage)
+// ── Stage navigation ──────────────────────────────────────────────
+
+async function navigateToStage(stage) {
+    // Update active tab
+    document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('viewing'));
+    const tab = document.querySelector(`.stage-tab[data-stage="${stage}"]`);
+    if (tab) tab.classList.add('viewing');
+
+    VIEWING_STAGE = stage;
+    document.getElementById('viewing-stage-display').textContent = stage.charAt(0).toUpperCase() + stage.slice(1);
+    document.getElementById('content-heading').textContent = `Stage Content — ${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
+
+    // Load content from navigate endpoint
+    const contentDiv = document.getElementById('stage-content');
+    contentDiv.innerHTML = '<div style="color:var(--text-muted)">Loading...</div>';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/stages/${stage}`);
+        const data = await resp.json();
+
+        if (data.error) {
+            contentDiv.innerHTML = `<div style="color:var(--accent-red)">${data.error}</div>`;
+            return;
+        }
+
+        // Render content
+        const raw = data.content || '(empty)';
+        if (raw.trim()) {
+            contentDiv.innerHTML = marked.parse(raw);
+        } else {
+            contentDiv.innerHTML = '<div style="color:var(--text-muted)">(empty — run agent to generate content)</div>';
+        }
+
+        // State badge
+        const badge = document.getElementById('stage-state-badge');
+        const state = data.state || 'empty';
+        const stateColors = {
+            'ready': 'var(--accent-green)',
+            'generating': 'var(--accent-blue)',
+            'superseded': 'var(--accent-yellow)',
+            'empty': 'var(--text-muted)',
+        };
+        badge.textContent = state;
+        badge.style.borderColor = stateColors[state] || 'var(--border)';
+        badge.style.color = stateColors[state] || 'var(--text-muted)';
+
+        // Metrics
+        const metricsDiv = document.getElementById('stage-metrics');
+        const metricsGrid = document.getElementById('stage-metrics-grid');
+        if (data.metrics && Object.keys(data.metrics).length > 0) {
+            const m = data.metrics;
+            metricsGrid.innerHTML = `
+                <div class="meta-item"><div class="label">Flesch Ease</div><div class="value ${m.flesch_ease >= 60 ? 'green' : m.flesch_ease >= 40 ? 'yellow' : 'red'}">${m.flesch_ease || '—'}</div></div>
+                <div class="meta-item"><div class="label">Grade Level</div><div class="value">${m.flesch_kincaid || '—'}</div></div>
+                <div class="meta-item"><div class="label">Words</div><div class="value blue">${m.word_count || '—'}</div></div>
+                <div class="meta-item"><div class="label">Avg Sentence</div><div class="value">${m.avg_sentence_length || '—'} words</div></div>
+                <div class="meta-item"><div class="label">Vocabulary</div><div class="value">${m.type_token_ratio ? (m.type_token_ratio * 100).toFixed(1) + '%' : '—'}</div></div>
+                <div class="meta-item"><div class="label">Passive Voice</div><div class="value ${m.passive_voice_pct <= 10 ? 'green' : m.passive_voice_pct <= 20 ? 'yellow' : 'red'}">${m.passive_voice_pct || '—'}%</div></div>
+            `;
+            metricsDiv.style.display = 'block';
+        } else {
+            metricsDiv.style.display = 'none';
+        }
+
+        // Update agent selector for this stage
+        loadAgentsForStage(stage);
+
+    } catch (e) {
+        contentDiv.innerHTML = `<div style="color:var(--accent-red)">Error loading content: ${e.message}</div>`;
+    }
+}
+
+// ── Trigger ───────────────────────────────────────────────────────
+
+async function setTrigger(trigger) {
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/trigger`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ trigger }),
+        });
+        const data = await resp.json();
+        if (data.error) {
+            toast(data.error, 'error');
+            return;
+        }
+        document.getElementById('trigger-display').textContent = trigger;
+        toast(`Trigger set to ${trigger}`, 'success');
+        updateButtonStates();
+    } catch (e) {
+        toast(`Failed to set trigger: ${e.message}`, 'error');
+    }
+}
+
+// ── Auto pipeline ─────────────────────────────────────────────────
+
+async function toggleAuto() {
+    const btn = document.getElementById('auto-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting...';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/auto`, { method: 'POST' });
+        const data = await resp.json();
+
+        if (data.error) {
+            toast(data.error, 'error');
+            btn.disabled = false;
+            btn.textContent = '▶ Auto Pipeline';
+            return;
+        }
+
+        toast('Auto pipeline started', 'success');
+        document.getElementById('auto-btn').style.display = 'none';
+        document.getElementById('interrupt-btn').style.display = '';
+        document.getElementById('trigger-select').value = 'auto';
+        document.getElementById('trigger-display').textContent = 'auto';
+        updateButtonStates();
+
+        // Connect to SSE for progress
+        connectAutoSSE(data.run_id);
+
+    } catch (e) {
+        toast(`Failed to start auto: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = '▶ Auto Pipeline';
+    }
+}
+
+function connectAutoSSE(runId) {
+    const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/runs/${runId}/events`);
+
+    eventSource.addEventListener('chain_stage_complete', function(e) {
+        const d = JSON.parse(e.data);
+        // Update stage tab states
+        refreshStageTabs();
+    });
+
+    eventSource.addEventListener('chain_complete', function(e) {
+        eventSource.close();
+        toast('Auto pipeline complete!', 'success');
+        resetAutoButtons();
+        location.reload();
+    });
+
+    eventSource.addEventListener('chain_interrupted', function(e) {
+        eventSource.close();
+        toast('Pipeline interrupted', 'info');
+        resetAutoButtons();
+        location.reload();
+    });
+
+    eventSource.addEventListener('error', function(e) {
+        if (eventSource.readyState === EventSource.CLOSED) {
+            resetAutoButtons();
+        }
+    });
+}
+
+async function interruptAuto() {
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/interrupt`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) {
+            toast(data.error, 'error');
+            return;
+        }
+        toast('Interrupt requested — will stop after current stage', 'info');
+        document.getElementById('interrupt-btn').disabled = true;
+        document.getElementById('interrupt-btn').textContent = '⏳ Stopping...';
+    } catch (e) {
+        toast(`Failed to interrupt: ${e.message}`, 'error');
+    }
+}
+
+function resetAutoButtons() {
+    document.getElementById('auto-btn').style.display = '';
+    document.getElementById('auto-btn').disabled = false;
+    document.getElementById('auto-btn').textContent = '▶ Auto Pipeline';
+    document.getElementById('interrupt-btn').style.display = 'none';
+    document.getElementById('interrupt-btn').disabled = false;
+    document.getElementById('interrupt-btn').textContent = '⏹ Interrupt';
+    updateButtonStates();
+}
+
+// ── Button state management ───────────────────────────────────────
+
+function updateButtonStates() {
+    const trigger = document.getElementById('trigger-select').value;
+    const isAuto = trigger === 'auto';
+    const runBtn = document.getElementById('run-agent-btn');
+    const advanceBtn = document.getElementById('advance-btn');
+
+    // During auto mode, disable run and advance
+    if (isAuto && document.getElementById('interrupt-btn').style.display !== 'none') {
+        if (runBtn) { runBtn.disabled = true; runBtn.title = 'Auto mode — cannot run manually'; }
+        if (advanceBtn) { advanceBtn.disabled = true; advanceBtn.title = 'Auto mode — cannot advance manually'; }
+    } else {
+        if (runBtn) { runBtn.disabled = false; runBtn.title = ''; }
+        if (advanceBtn) { advanceBtn.disabled = false; advanceBtn.title = ''; }
+    }
+}
+
+// ── Refresh stage tabs ────────────────────────────────────────────
+
+async function refreshStageTabs() {
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
+        const data = await resp.json();
+        const states = data.stage_states || {};
+
+        document.querySelectorAll('.stage-tab').forEach(tab => {
+            const stage = tab.dataset.stage;
+            const state = states[stage] || 'empty';
+            tab.dataset.state = state;
+            tab.className = `stage-tab ${state} ${stage === data.current_stage ? 'active' : ''}`;
+            const dot = tab.querySelector('.stage-dot');
+            if (dot) dot.className = `stage-dot ${state}`;
+        });
+    } catch (e) { /* ignore */ }
+}
+
+// ── Load agents for a specific stage ──────────────────────────────
+
+async function loadAgentsForStage(stage) {
+    const select = document.getElementById('agent-select');
+    if (!select) return;
+
+    if (stage === 'research') {
+        select.innerHTML = '<option value="non-fiction">ResearchService</option>';
+        const btn = document.getElementById('run-agent-btn');
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 Run Research'; btn.title = 'Search SearXNG for reference material'; }
+        return;
+    }
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/agents/for-stage/${stage}`);
+        const data = await resp.json();
+        const sets = data.agent_sets || [];
+
+        if (sets.length === 0) {
+            select.innerHTML = '<option value="">No agents for this stage</option>';
+            const btn = document.getElementById('run-agent-btn');
+            if (btn) { btn.disabled = true; btn.title = 'No agent prompts configured for this stage'; }
+            return;
+        }
+
+        select.innerHTML = '';
+        sets.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
+            if (s.name === PIECE_AGENT_SET || (!PIECE_AGENT_SET && s.name === 'default')) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+
+        const btn = document.getElementById('run-agent-btn');
+        if (btn) { btn.disabled = false; btn.textContent = '▶ Run Agent'; btn.title = ''; }
+    } catch (e) {
+        select.innerHTML = '<option value="default">default</option>';
+    }
+}
+
+// ── Brief editor ──────────────────────────────────────────────────
+
 if (CURRENT_STAGE === 'brief') {
     document.addEventListener('DOMContentLoaded', async function() {
         const textarea = document.getElementById('brief-editor');
         const statusEl = document.getElementById('brief-status');
         if (!textarea) return;
 
-        // Load existing brief content
         try {
             const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/brief`);
             const data = await resp.json();
@@ -277,74 +539,29 @@ async function saveBrief() {
     }
 }
 
-// Load available agents for current stage
-document.addEventListener('DOMContentLoaded', async function() {
-    const select = document.getElementById('agent-select');
-    if (!select) return;
+// ── Init ──────────────────────────────────────────────────────────
 
-    // Check if piece has a running job (survives page refresh)
+document.addEventListener('DOMContentLoaded', async function() {
+    // Load initial stage content
+    navigateToStage(CURRENT_STAGE);
+
+    // Check if auto pipeline is running
     try {
-        const pieceResp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
-        const pieceData = await pieceResp.json();
-        if (pieceData.running) {
-            const btn = document.getElementById('run-agent-btn');
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = '⏳ Running...';
-            }
-            const statusEl = document.getElementById('agent-status');
-            if (statusEl) {
-                statusEl.textContent = 'Agent running (refreshed page — run still in progress)';
-                statusEl.style.color = 'var(--accent-blue)';
-            }
-            document.getElementById('agent-result').style.display = 'block';
-            // Poll until run completes
-            pollRunStatus();
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
+        const data = await resp.json();
+        if (data.running) {
+            document.getElementById('auto-btn').style.display = 'none';
+            document.getElementById('interrupt-btn').style.display = '';
+            document.getElementById('trigger-select').value = data.trigger || 'auto';
+            updateButtonStates();
         }
     } catch (e) { /* ignore */ }
 
-    try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/agents/for-stage/${CURRENT_STAGE}`);
-        const data = await resp.json();
-        const sets = data.agent_sets || [];
-        select.innerHTML = '';
-
-        // Research is a special stage — uses ResearchService, no prompt file needed
-        if (CURRENT_STAGE === 'research') {
-            select.innerHTML = '<option value="non-fiction">ResearchService</option>';
-            const btn = document.getElementById('run-agent-btn');
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '🔍 Run Research';
-                btn.title = 'Search SearXNG for reference material';
-            }
-            return;
-        }
-
-        if (sets.length === 0) {
-            select.innerHTML = '<option value="">No agents for this stage</option>';
-            const btn = document.getElementById('run-agent-btn');
-            if (btn) {
-                btn.disabled = true;
-                btn.title = 'No agent prompts configured for this stage';
-            }
-            return;
-        }
-        sets.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.name;
-            opt.textContent = s.name;
-            if (s.name === PIECE_AGENT_SET || (!PIECE_AGENT_SET && s.name === 'default')) {
-                opt.selected = true;
-            }
-            select.appendChild(opt);
-        });
-    } catch (e) {
-        select.innerHTML = '<option value="default">default</option>';
-    }
+    // Load audio files
+    loadAudioFiles();
 });
 
-let stageContentLoaded = false;
+// ── Rename ────────────────────────────────────────────────────────
 
 function startRename() {
     document.getElementById('piece-title').style.display = 'none';
@@ -382,130 +599,22 @@ async function saveRename() {
     }
 }
 
-async function toggleStageContent() {
-    const div = document.getElementById('stage-content');
-    const btn = document.getElementById('toggle-content-btn');
-
-    if (div.style.display === 'none') {
-        if (!stageContentLoaded) {
-            btn.textContent = 'Loading...';
-            try {
-                const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
-                const data = await resp.json();
-                // Research stage: show research.md if it exists, otherwise prompt to run
-                if (CURRENT_STAGE === 'research') {
-                    const raw = data.body || '';
-                    if (raw.includes('Search Queries') || raw.includes('Results (')) {
-                        div.innerHTML = marked.parse(raw);
-                    } else {
-                        div.innerHTML = '<div style="color:var(--accent-yellow);padding:12px">🔍 Research hasn\'t run yet. Click <strong>Run Research</strong> above to search for reference material.</div>';
-                    }
-                } else {
-                    const raw = data.body || '(empty)';
-                    div.innerHTML = marked.parse(raw);
-                }
-                stageContentLoaded = true;
-            } catch (e) {
-                div.textContent = 'Error loading content';
-            }
-        }
-        div.style.display = 'block';
-        btn.textContent = 'Hide';
-    } else {
-        div.style.display = 'none';
-        btn.textContent = 'Show';
-    }
-}
+// ── Advance ───────────────────────────────────────────────────────
 
 async function advance() {
+    const btn = document.getElementById('advance-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Advancing...'; }
+
     const result = await api(`/api/pieces/${PIECE_ID}/advance`, { method: 'POST' });
     if (result) {
         toast(`Advanced to ${result.current_stage}`, 'success');
         setTimeout(() => location.reload(), 500);
-    }
-}
-
-async function reject(target) {
-    if (!confirm(`Revert to "${target}"?`)) return;
-    const result = await api(`/api/pieces/${PIECE_ID}/reject`, {
-        method: 'POST',
-        body: JSON.stringify({ target, reason: 'Manual revert from dashboard' }),
-    });
-    if (result) {
-        toast(`Reverted to ${result.current_stage}`, 'info');
-        setTimeout(() => location.reload(), 500);
-    }
-}
-
-// Poll for run completion after page refresh
-async function pollRunStatus() {
-    const btn = document.getElementById('run-agent-btn');
-    const statusEl = document.getElementById('agent-status');
-    const maxPolls = 120; // 120 * 2s = 4 minutes max
-    for (let i = 0; i < maxPolls; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-            const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`);
-            const data = await resp.json();
-            if (!data.running) {
-                // Run completed — reload to show new state
-                window.location.reload();
-                return;
-            }
-        } catch (e) { /* ignore */ }
-    }
-    // Timed out
-    if (statusEl) {
-        statusEl.textContent = 'Run timed out — refresh to check status';
-        statusEl.style.color = 'var(--accent-red)';
-    }
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = '▶ Run Agent';
-    }
-}
-
-// Run Log (historical)
-function toggleRunLog() {
-    const panel = document.getElementById('run-log-panel');
-    const toggle = document.getElementById('run-log-toggle');
-    if (panel.style.display === 'none') {
-        panel.style.display = 'block';
-        toggle.textContent = '▼';
-        loadRunLog();
     } else {
-        panel.style.display = 'none';
-        toggle.textContent = '▶';
+        if (btn) { btn.disabled = false; btn.textContent = `Advance →`; }
     }
 }
 
-function toggleRunLogEnabled() {
-    // Deprecated — run log is always enabled. Kept for backward compat.
-}
-
-async function loadRunLog() {
-    const entriesDiv = document.getElementById('run-log-entries');
-
-    try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-log?limit=30`);
-        const data = await resp.json();
-        if (!data.entries || data.entries.length === 0) {
-            entriesDiv.innerHTML = '<div style="color:var(--text-muted)">No run log entries yet.</div>';
-            return;
-        }
-        entriesDiv.innerHTML = data.entries.map(e => {
-            const ts = e.ts ? new Date(e.ts).toLocaleTimeString() : '?';
-            const stage = e.stage || '?';
-            const call = e.call || '?';
-            const decision = e.decision ? `<span style="color:${e.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)'}">${e.decision}</span>` : '';
-            const critique = e.critique ? `<div style="color:var(--text-muted);margin-left:16px;white-space:pre-wrap">${e.critique.substring(0, 200)}</div>` : '';
-            const chars = e.user_chars ? `${e.user_chars} chars` : '';
-            return `<div style="border-bottom:1px solid var(--border);padding:4px 0">${ts} <b>${stage}</b> [${call}] ${decision} <span style="color:var(--text-muted)">${chars}</span>${critique}</div>`;
-        }).join('');
-    } catch (err) {
-        entriesDiv.innerHTML = `<div style="color:var(--accent-red)">Error loading run log: ${err.message}</div>`;
-    }
-}
+// ── Run Agent ─────────────────────────────────────────────────────
 
 async function runAgent() {
     const btn = document.getElementById('run-agent-btn');
@@ -536,17 +645,14 @@ async function runAgent() {
         logEntries.scrollTop = logEntries.scrollHeight;
     }
 
-    function ts() {
-        return new Date().toLocaleTimeString();
-    }
+    function ts() { return new Date().toLocaleTimeString(); }
 
     try {
         const agentSet = document.getElementById('agent-select').value;
-        // Start async run
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ agent_set: agentSet })
+            body: JSON.stringify({ agent_set: agentSet, stage: VIEWING_STAGE })
         });
         const data = await resp.json();
 
@@ -562,7 +668,6 @@ async function runAgent() {
         const runId = data.run_id;
         statusEl.textContent = 'Running...';
         appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> Connected. Run: ${runId}`);
-        appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-blue)">Run started</span> — ${data.stage} (run ${runId})`);
 
         // Connect to SSE
         const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/runs/${runId}/events`);
@@ -606,11 +711,16 @@ async function runAgent() {
             const d = JSON.parse(e.data);
             const color = d.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
             appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:${color}">Chain stage ${d.completed}:</span> ${d.stage} → ${d.decision}`);
+            refreshStageTabs();
         });
 
         eventSource.addEventListener('chain_complete', function(e) {
             const d = JSON.parse(e.data);
             appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Chain complete</span> — ${d.total_stages} stages`);
+        });
+
+        eventSource.addEventListener('chain_interrupted', function(e) {
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-yellow)">Chain interrupted</span>`);
         });
 
         eventSource.addEventListener('error', function(e) {
@@ -627,103 +737,115 @@ async function runAgent() {
             const d = JSON.parse(e.data);
             eventSource.close();
             appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">✓ Run complete</span> (${d.status})`);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">Done</span>`);
 
             const result = d.result || {};
             if (result.error) {
                 statusEl.textContent = `Error: ${result.error}`;
                 statusEl.style.color = 'var(--accent-red)';
             } else {
-                const decision = result.decision || (result.results && result.results.length > 0 ? result.results[result.results.length - 1].decision : '?');
                 statusEl.textContent = 'Complete';
                 statusEl.style.color = 'var(--accent-green)';
-                if (decision === 'advance') {
-                    toast('Agent decided: advance', 'success');
-                } else if (decision === 'loop_back') {
-                    toast('Agent decided: loop back', 'warning');
-                }
-                // Reload to show updated content (agent may have advanced or stayed)
+                toast('Agent run complete', 'success');
                 setTimeout(() => location.reload(), 1500);
             }
 
             btn.disabled = false;
             btn.textContent = '▶ Run Agent';
-            loadRunLog();  // Refresh run log after completion
+            loadRunLog();
         });
 
-        // Handle SSE connection errors (transport level)
         eventSource.onerror = function() {
             if (eventSource.readyState === EventSource.CLOSED) return;
-            // Will auto-reconnect, but if it's been a while, show status
         };
 
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
         statusEl.style.color = 'var(--accent-red)';
-        appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Error: ${e.message}</span>`);
         btn.disabled = false;
         btn.textContent = '▶ Run Agent';
     }
 }
 
+// ── Run Log ───────────────────────────────────────────────────────
+
+function toggleRunLog() {
+    const panel = document.getElementById('run-log-panel');
+    const toggle = document.getElementById('run-log-toggle');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        toggle.textContent = '▼';
+        loadRunLog();
+    } else {
+        panel.style.display = 'none';
+        toggle.textContent = '▶';
+    }
+}
+
+function toggleRunLogEnabled() { /* deprecated */ }
+
+async function loadRunLog() {
+    const entriesDiv = document.getElementById('run-log-entries');
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-log?limit=30`);
+        const data = await resp.json();
+        if (!data.entries || data.entries.length === 0) {
+            entriesDiv.innerHTML = '<div style="color:var(--text-muted)">No run log entries yet.</div>';
+            return;
+        }
+        entriesDiv.innerHTML = data.entries.map(e => {
+            const ts = e.ts ? new Date(e.ts).toLocaleTimeString() : '?';
+            const stage = e.stage || '?';
+            const call = e.call || '?';
+            const decision = e.decision ? `<span style="color:${e.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)'}">${e.decision}</span>` : '';
+            const critique = e.critique ? `<div style="color:var(--text-muted);margin-left:16px;white-space:pre-wrap">${e.critique.substring(0, 200)}</div>` : '';
+            const chars = e.user_chars ? `${e.user_chars} chars` : '';
+            return `<div style="border-bottom:1px solid var(--border);padding:4px 0">${ts} <b>${stage}</b> [${call}] ${decision} <span style="color:var(--text-muted)">${chars}</span>${critique}</div>`;
+        }).join('');
+    } catch (err) {
+        entriesDiv.innerHTML = `<div style="color:var(--accent-red)">Error loading run log: ${err.message}</div>`;
+    }
+}
+
+// ── Export / Audio / Comic ─────────────────────────────────────────
+
 async function exportGDocs() {
     const btn = document.getElementById('export-gdocs-btn');
     btn.disabled = true;
     btn.textContent = '⏳ Exporting...';
-
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/export/google-docs`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ stage: CURRENT_STAGE })
+            body: JSON.stringify({ stage: VIEWING_STAGE })
         });
         const data = await resp.json();
-
-        if (data.error) {
-            toast(`Export failed: ${data.error}`, 'error');
-        } else {
-            toast('Exported to Google Docs!', 'success');
-            window.open(data.url, '_blank');
-        }
-    } catch (e) {
-        toast(`Export error: ${e.message}`, 'error');
-    }
-
+        if (data.error) { toast(`Export failed: ${data.error}`, 'error'); }
+        else { toast('Exported to Google Docs!', 'success'); window.open(data.url, '_blank'); }
+    } catch (e) { toast(`Export error: ${e.message}`, 'error'); }
     btn.disabled = false;
-    btn.textContent = '📄 Export to GDocs';
+    btn.textContent = '📄 Export';
 }
 
 async function generateComic() {
     const btn = document.getElementById('comic-btn');
     const styleSelect = document.getElementById('comic-style');
     const style = styleSelect ? styleSelect.value : 'manga';
-
     btn.disabled = true;
     btn.textContent = '⏳ Generating...';
-
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/comic`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ stage: CURRENT_STAGE, style: style })
+            body: JSON.stringify({ stage: VIEWING_STAGE, style: style })
         });
         const data = await resp.json();
-
-        if (data.error) {
-            toast(`Comic failed: ${data.error}`, 'error');
-        } else {
-            toast(`Comic generated (${style} style)!`, 'success');
-            window.open(`${SCRIPT_ROOT}${data.viewer_url}`, '_blank');
-        }
-    } catch (e) {
-        toast(`Comic error: ${e.message}`, 'error');
-    }
-
+        if (data.error) { toast(`Comic failed: ${data.error}`, 'error'); }
+        else { toast(`Comic generated (${style} style)!`, 'success'); window.open(`${SCRIPT_ROOT}${data.viewer_url}`, '_blank'); }
+    } catch (e) { toast(`Comic error: ${e.message}`, 'error'); }
     btn.disabled = false;
     btn.textContent = '🎨 Comic';
 }
 
-// Load audio files on page load
 document.addEventListener('DOMContentLoaded', loadAudioFiles);
 
 async function loadAudioFiles() {
@@ -732,7 +854,6 @@ async function loadAudioFiles() {
         const data = await resp.json();
         const section = document.getElementById('audio-section');
         const container = document.getElementById('audio-files');
-
         if (data.files && data.files.length > 0) {
             section.style.display = 'block';
             container.innerHTML = data.files.map(f => `
@@ -748,35 +869,23 @@ async function loadAudioFiles() {
         } else {
             section.style.display = 'none';
         }
-    } catch (e) {
-        // Silently ignore — audio section just stays hidden
-    }
+    } catch (e) { /* silently ignore */ }
 }
 
 async function generateAudio() {
     const btn = document.getElementById('generate-audio-btn');
     btn.disabled = true;
     btn.textContent = '⏳ Generating...';
-
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/audio`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ stage: CURRENT_STAGE })
+            body: JSON.stringify({ stage: VIEWING_STAGE })
         });
         const data = await resp.json();
-
-        if (data.error) {
-            toast(`Audio failed: ${data.error}`, 'error');
-        } else {
-            const sizeKB = (data.size_bytes / 1024).toFixed(0);
-            toast(`Audio generated! ${data.filename} (${sizeKB} KB, ${data.voice})`, 'success');
-            loadAudioFiles();
-        }
-    } catch (e) {
-        toast(`Audio error: ${e.message}`, 'error');
-    }
-
+        if (data.error) { toast(`Audio failed: ${data.error}`, 'error'); }
+        else { const sizeKB = (data.size_bytes / 1024).toFixed(0); toast(`Audio generated! ${data.filename} (${sizeKB} KB, ${data.voice})`, 'success'); loadAudioFiles(); }
+    } catch (e) { toast(`Audio error: ${e.message}`, 'error'); }
     btn.disabled = false;
     btn.textContent = '🔊 Audio';
 }

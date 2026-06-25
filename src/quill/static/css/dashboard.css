@@ -232,6 +232,101 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
     flex-shrink: 0;
     width: 12px;
     text-align: center;
+
+/* ── Stage tabs (navigable pipeline) ─────────────────── */
+.stage-tabs {
+    display: flex;
+    gap: 2px;
+    margin: 16px 0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stage-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    user-select: none;
+}
+
+.stage-tab:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+}
+
+.stage-tab.active {
+    background: rgba(188,140,255,0.2);
+    color: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+.stage-tab.viewing {
+    background: rgba(88,166,255,0.15);
+    color: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+
+.stage-tab.ready {
+    color: var(--accent-green);
+}
+
+.stage-tab.generating {
+    color: var(--accent-blue);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.stage-tab.superseded {
+    color: var(--accent-orange);
+    opacity: 0.7;
+}
+
+.stage-tab.empty {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.stage-tab.empty:hover {
+    background: var(--bg-tertiary);
+    border-color: transparent;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.stage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.stage-dot.ready { background: var(--accent-green); }
+.stage-dot.generating { background: var(--accent-blue); animation: pulse 1.5s ease-in-out infinite; }
+.stage-dot.superseded { background: var(--accent-orange); }
+.stage-dot.empty { background: var(--bg-tertiary); border: 1px solid var(--border); }
+
+.stage-label {
+    white-space: nowrap;
+}
+
+.stage-arrow {
+    color: var(--text-muted);
+    font-size: 10px;
+    flex-shrink: 0;
+    width: 12px;
+    text-align: center;
 }
 
 /* ── Buttons ────────────────────────────────────────── */

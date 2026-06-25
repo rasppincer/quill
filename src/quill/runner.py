@@ -114,6 +114,9 @@ class StageRunner:
 
         # Set stage state to generating
         piece.set_stage_state(stage, "generating")
+        self.llm.run_logger.log(piece, stage, "state_transition", "", "", {
+            "state": "generating",
+        }, trace_id=trace_id)
 
         # Check loop limit
         if loop_count >= agent_cfg.max_loops:

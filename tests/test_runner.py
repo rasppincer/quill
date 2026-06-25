@@ -627,6 +627,31 @@ class TestRunLog:
         assert entries[2]["stage"] == "draft"
 
 
+class TestStateTransitionLog:
+    """Verify run log records 'generating' state transition."""
+
+    @patch("quill.runner.LLMClient")
+    def test_run_stage_logs_generating_state(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
+        """run_stage logs a state_transition entry with state=generating."""
+        import json
+        from quill.piece import load_piece
+
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        mock_client = MagicMock()
+        mock_llm_cls.return_value = mock_client
+        mock_client.chat.return_value = '{"decision": "advance", "critique": "Good."}'
+
+        runner.run_stage("test-piece", "review", output_dir=tmp_output)
+
+        log_file = sample_piece / "run-log.jsonl"
+        assert log_file.exists()
+        entries = [json.loads(line) for line in log_file.read_text().strip().split("\n") if line]
+        state_entries = [e for e in entries if e.get("call") == "state_transition"]
+        assert len(state_entries) >= 1
+        assert state_entries[0]["state"] == "generating"
+        assert state_entries[0]["stage"] == "review"
+
+
 # ---------------------------------------------------------------------------
 # Two-file output (content stages)
 # ---------------------------------------------------------------------------

@@ -428,6 +428,12 @@ class TestRunAgent:
         """Run agent on a piece's current stage."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
+        # Set manual trigger so advance doesn't auto-run agent
+        from quill.piece import load_piece
+        piece = load_piece(sample_piece)
+        piece.trigger = "manual"
+        piece.save()
+
         # Advance to review (which has an agent)
         client.post("/api/pieces/test-piece/advance")
 

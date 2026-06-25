@@ -25,6 +25,7 @@ from .metrics_service import MetricsService
 from .prompt_builder import PromptBuilder
 from .stage_runner import LLMCaller, _emit
 from .timeit import timeit, flush_timings, clear_timings
+from .logging_config import get_logger, get_piece_logger
 
 __all__ = ["StageRunner", "RunManager", "StageContext"]
 
@@ -113,9 +114,11 @@ class StageRunner:
 
         piece, agent_cfg = sc.piece, sc.agent_cfg
         loop_count = sc.loop_count
+        plog = get_piece_logger("runner", piece_id)
 
         # Set stage state to generating
         piece.set_stage_state(stage, "generating")
+        plog.info("Stage '%s' → generating (loop %d)", stage, loop_count)
         self.llm.run_logger.log(piece, stage, "state_transition", "", "", {
             "state": "generating",
         }, trace_id=trace_id)
@@ -177,6 +180,7 @@ class StageRunner:
             piece.set_loop_count(stage, loop_count + 1)
             if not is_content:
                 piece.write_decision(stage, decision.decision, decision.critique)
+            plog.info("Stage '%s' → loop_back (loop %d/%d)", stage, loop_count + 1, agent_cfg.max_loops)
             logger.info("Stage '%s' loop_back (loop %d/%d)",
                         stage, loop_count + 1, agent_cfg.max_loops)
             _emit(event_queue, "loop_start", {
@@ -187,6 +191,7 @@ class StageRunner:
         elif decision.decision == "advance":
             piece.set_loop_count(stage, 0)
             piece.set_stage_state(stage, "ready")
+            plog.info("Stage '%s' → ready (advance)", stage)
             self.metrics_svc.cleanup_guardrail_snapshot(piece, stage)
             if not is_content:
                 piece.write_output(stage, self._format_feedback(decision.critique))
@@ -196,7 +201,7 @@ class StageRunner:
             auto_advance = force_advance or agent_cfg.trigger in ("auto",)
             if auto_advance and sc.stage_def and sc.stage_def.next:
                 piece.advance_to(sc.stage_def.next)
-                logger.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
+                plog.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
             else:
                 logger.info("Stage '%s' → advance decision (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
         else:

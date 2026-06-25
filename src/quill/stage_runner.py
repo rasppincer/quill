@@ -75,7 +75,7 @@ class LLMCaller:
             call_label="generate", event_queue=event_queue,
         )
         try:
-            generated = client.chat(gen_system, prompt_for_generate)
+            generated = client.chat(gen_system, prompt_for_generate, piece_id=piece.id)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -123,7 +123,7 @@ class LLMCaller:
             call_label="feedback", event_queue=event_queue,
         )
         try:
-            response = client.chat(eval_system, prompt_for_feedback, response_format=response_format)
+            response = client.chat(eval_system, prompt_for_feedback, response_format=response_format, piece_id=piece.id)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -207,7 +207,7 @@ class LLMCaller:
             call_label="evaluate",
         )
         try:
-            eval_response = client.chat(eval_system, eval_prompt, response_format=response_format)
+            eval_response = client.chat(eval_system, eval_prompt, response_format=response_format, piece_id=piece.id)
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",

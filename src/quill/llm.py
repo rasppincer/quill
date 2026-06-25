@@ -17,8 +17,10 @@ import urllib.error
 from typing import Any
 
 from .timeit import log_timing
+from .logging_config import get_logger
 
 logger = logging.getLogger(__name__)
+_common_log = get_logger("llm")
 
 
 class LLMClient:
@@ -33,7 +35,8 @@ class LLMClient:
         self.max_tokens = max_tokens
 
     def chat(self, system: str, user: str, temperature: float | None = None,
-             max_tokens: int | None = None, response_format: dict | None = None) -> str:
+             max_tokens: int | None = None, response_format: dict | None = None,
+             piece_id: str | None = None) -> str:
         """Send a chat completion request.
 
         Args:
@@ -80,6 +83,15 @@ class LLMClient:
                 elapsed = time.monotonic() - t0
                 content = body["choices"][0]["message"]["content"]
                 log_timing(f"llm.chat ({self.model}, {input_chars} chars in, {len(content)} chars out)", elapsed)
+
+                # Log to appropriate logger
+                log_msg = f"LLM call: model={self.model}, in={input_chars} chars, out={len(content)} chars, elapsed={elapsed:.1f}s"
+                if piece_id:
+                    from .logging_config import get_piece_logger
+                    get_piece_logger("llm", piece_id).info(log_msg)
+                else:
+                    _common_log.info(log_msg)
+
                 return content
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="replace")

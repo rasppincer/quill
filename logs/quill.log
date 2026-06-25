@@ -1,0 +1,778 @@
+2026-06-25 18:30:42 [INFO] quill: Logging initialized — level=INFO, logs_dir=/home/bob/projects/quill/logs, retention=3 days
+2026-06-25 18:30:42 [INFO] quill.pipeline: Loaded pipeline 'default' with 10 stages
+2026-06-25 18:30:42 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_humanize_reads_revise0/output/hz-piece/07_humanize.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_writes_to_stage_file0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_review_advance0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → advance to 'revise'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.014s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_review_advance0/output/test-piece/06_revise.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_review_loop_back0/output/test-piece/05_review.decision.md
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → loop_back (loop 1/3)
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' loop_back (loop 1/3)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.009s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_body0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_body0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_body0/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_body0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=57.2, words=11
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.013s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 3)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' reached max loops (3), forcing advance
+2026-06-25 18:30:43 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.003s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/02_outline.md not found, body empty
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'default'
+2026-06-25 18:30:43 [INFO] quill.chain_orchestrator: Research disabled for agent set 'default', skipping
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'draft' — no agent prompt in set 'default'
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/02_outline.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.003s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → advance to 'revise'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.011s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md not found, body empty
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: chain-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for chain-piece/revise: flesch=59.7, words=6
+2026-06-25 18:30:43 [INFO] quill.piece: Advanced meta.yaml to stage 'humanize'
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance to 'humanize'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.014s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/07_humanize.md not found, body empty
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'humanize' — no agent prompt in set 'default'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'validate' — no agent prompt in set 'default'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'polish' — no agent prompt in set 'default'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.043s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Flushed 8 entries to /tmp/pytest-of-bob/pytest-247/test_chain_skips_stages_withou0/output/chain-piece/timing.jsonl
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.044s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_chain_errors_when_all_sta0/output/empty-chain-piece/02_outline.md not found, body empty
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [INFO] quill.chain_orchestrator: Research disabled for agent set 'empty', skipping
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'draft' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'review' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'revise' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'humanize' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'validate' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [WARNING] quill.chain_orchestrator: Skipping stage 'polish' — no agent prompt in set 'empty'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.006s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Flushed 1 entries to /tmp/pytest-of-bob/pytest-247/test_chain_errors_when_all_sta0/output/empty-chain-piece/timing.jsonl
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.007s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_review_writes_clean_markd0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.015s
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Saved guardrail snapshot for review
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Cleaned up guardrail snapshot for review
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/draft (generate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_run_stage_logs_generating0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.011s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_0/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.002s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=78.9, words=7
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.014s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_1/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_1/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.002s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_includes_1/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=62.8, words=3
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.014s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=0.0, words=3
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.024s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_deci0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_deci0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_deci0/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.002s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_content_stage_writes_deci0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=78.9, words=7
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.017s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_loop_back_preserves_gener0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.007s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_loop_back_preserves_gener0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.001s
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_loop_back_preserves_gener0/output/test-piece/06_revise.decision.md
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.002s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → loop_back (loop 1/3)
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' loop_back (loop 1/3)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.018s
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_decision_file_not_in_body0/output/decision-only/04_draft.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-247/test_write_decision_format0/output/test-piece/04_draft.decision.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'My Blog Post' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_create_piece0/output/my-blog-post/01_brief.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_get_piece0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_body_length_nonzero_when_0/output/test-piece/05_review.md not found, body empty
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_advance0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_advance0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_advance0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.015s
+2026-06-25 18:30:43 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.022s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_reject0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_reject0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_reject0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_reject0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_returns_comp0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_returns_comp0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_returns_comp0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:43 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/06_revise.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_debug_prompt_content_stag0/output/test-piece/05_review.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:30:43 [WARNING] quill.runner: Stage 'revise' returned unknown decision: 'error'
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.003s
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_run_agent_on_piece0/output/test-piece/04_draft.md
+2026-06-25 18:30:43 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_run_agent_on_piece0/output/test-piece/05_review.md
+2026-06-25 18:30:43 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_run_agent_on_piece0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:30:43 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:43 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:30:43 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Seruil' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_mid_progress_serui0/output/seruil/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.blueprints.pieces: Imported piece 'Seruil' at stage 'draft' (4 stage files)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Seruil' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_mid_progress_serui0/output/seruil/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_import_mid_progress_serui0/output/seruil/04_draft.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Minimal Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_import_minimal0/output/minimal-piece/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.blueprints.pieces: Imported piece 'Minimal Piece' at stage 'brief' (1 stage files)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Minimal Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_import_minimal0/output/minimal-piece/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Body Only' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_import_with_body_only0/output/body-only/06_revise.md
+2026-06-25 18:30:44 [INFO] quill.blueprints.pieces: Imported piece 'Body Only' at stage 'revise' (1 stage files)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Body Only' stage 'revise' to /tmp/pytest-of-bob/pytest-247/test_import_with_body_only0/output/body-only/06_revise.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Old Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_preserves_created_0/output/old-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.blueprints.pieces: Imported piece 'Old Piece' at stage 'draft' (1 stage files)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Old Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_preserves_created_0/output/old-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_import_preserves_created_0/output/old-piece/04_draft.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.blueprints.pieces: Imported piece 'Advanceable' at stage 'draft' (1 stage files)
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Advanceable' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_import_can_advance_after0/output/advanceable/05_review.md
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_import_can_advance_after0/output/advanceable/04_draft.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:44 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:30:44 [INFO] quill.run_logger: Run log entry: advanceable/review (state_transition)
+2026-06-25 18:30:44 [INFO] quill.run_logger: Run log entry: advanceable/review (agent)
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:30:44 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:30:44 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_missing_stage_file_gracef0/output/missing-stage/05_review.md not found, body empty
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Test' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_write_output_cleans_conte0/output/clean-test/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-247/test_write_output_cleans_conte0/output/clean-test/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'New Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_save_creates_directory_st0/output/new-piece/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Meta Test' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_save_meta_yaml_content0/output/meta-test/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'FM Test' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_save_stage_file_has_front0/output/fm-test/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-247/test_save_preserves_existing_s0/output/test-piece/05_review.md
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-247/test_supersede_marks_later_sta0/output/test-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:30:44 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_supersede_marks_later_sta0/output/test-piece/02_outline.md not found, body empty
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-247/test_supersede_resets_frontier0/output/test-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:30:44 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_supersede_resets_frontier0/output/test-piece/02_outline.md not found, body empty
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-247/test_supersede_clears_supersed0/output/test-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-247/test_supersede_handles_empty_s0/output/test-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Advanced meta.yaml to stage 'brief'
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded from stage 'brief', frontier reset
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-247/test_set_trigger_persists0/output/test-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_navigate_to_ready_stage0/output/nav-piece/01_brief.metrics.yaml
+2026-06-25 18:30:44 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_navigate_to_empty_stage_b0/output/nav-lock/02_outline.md not found, body empty
+2026-06-25 18:30:44 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-247/test_navigate_to_superseded_st0/output/nav-super/02_outline.md not found, body empty
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_navigate_to_superseded_st0/output/nav-super/04_draft.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_navigate_returns_metrics0/output/nav-metrics/01_brief.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Trigger' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_set_trigger0/output/trigger-piece/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-247/test_get_trigger_in_piece_deta0/output/detail-trigger/01_brief.metrics.yaml
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-247/test_supersede_on_earlier_stag0/output/super-piece/04_draft.md
+2026-06-25 18:30:44 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:30:44 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:30:44 [INFO] quill.runner: Stage 'outline' → generating (loop 0)
+2026-06-25 18:30:44 [INFO] quill.run_logger: Run log entry: super-piece/outline (state_transition)
+2026-06-25 18:30:44 [INFO] quill.run_logger: Run log entry: super-piece/outline (generate)
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:30:44 [WARNING] quill.runner: Stage 'outline' returned unknown decision: 'error'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Auto' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_auto_starts_chain0/output/auto-piece/01_brief.md
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.018s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Flushed 2 entries to /tmp/pytest-of-bob/pytest-247/test_auto_requires_brief_conte0/output/auto-piece/timing.jsonl
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.019s
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'TA' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_auto_sets_trigger0/output/trigger-auto/01_brief.md
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.014s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Flushed 2 entries to /home/bob/projects/quill/output/trigger-auto/timing.jsonl
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.014s
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Int' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_interrupt_downgrades_trig0/output/int-piece/01_brief.md
+2026-06-25 18:30:44 [INFO] quill.run_manager: Interrupt requested for piece 'int-piece'
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'Int' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_interrupt_downgrades_trig0/output/int-piece/01_brief.md
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner._run_research: 0.005s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.005s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner._run_research: 0.001s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.001s
+2026-06-25 18:30:44 [INFO] quill.chain_orchestrator: Research disabled for agent set 'default', skipping
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'draft' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.043s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Flushed 6 entries to /home/bob/projects/quill/output/int-piece/timing.jsonl
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.045s
+2026-06-25 18:30:44 [INFO] quill.piece: Saved piece 'GR' stage 'brief' to /tmp/pytest-of-bob/pytest-247/test_run_blocked_during_auto0/output/guard-run/01_brief.md
+2026-06-25 18:30:44 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.013s
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Flushed 2 entries to /home/bob/projects/quill/output/guard-run/timing.jsonl
+2026-06-25 18:30:44 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.015s
+2026-06-25 18:31:18 [INFO] quill: Logging initialized — level=INFO, logs_dir=/home/bob/projects/quill/logs, retention=3 days
+2026-06-25 18:31:18 [INFO] quill.pipeline: Loaded pipeline 'default' with 10 stages
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_humanize_reads_revise0/output/hz-piece/07_humanize.md not found, body empty
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_writes_to_stage_file0/output/test-piece/05_review.md
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_review_advance0/output/test-piece/05_review.md
+2026-06-25 18:31:18 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → advance to 'revise'
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.014s
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_review_advance0/output/test-piece/06_revise.md not found, body empty
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_review_loop_back0/output/test-piece/05_review.decision.md
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → loop_back (loop 1/3)
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' loop_back (loop 1/3)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.010s
+2026-06-25 18:31:18 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_body0/output/test-piece/06_revise.md
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_body0/output/test-piece/06_revise.md
+2026-06-25 18:31:18 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_body0/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:18 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_body0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:31:18 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=57.2, words=11
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.012s
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → generating (loop 3)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' reached max loops (3), forcing advance
+2026-06-25 18:31:18 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.002s
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/02_outline.md not found, body empty
+2026-06-25 18:31:18 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'default'
+2026-06-25 18:31:18 [INFO] quill.chain_orchestrator: Research disabled for agent set 'default', skipping
+2026-06-25 18:31:18 [WARNING] quill.chain_orchestrator: Skipping stage 'draft' — no agent prompt in set 'default'
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/02_outline.md not found, body empty
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.003s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: chain-piece/review (state_transition)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: chain-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.run_logger: Run log entry: chain-piece/review (agent)
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.000s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:31:18 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/05_review.md
+2026-06-25 18:31:18 [INFO] quill.piece: Advanced meta.yaml to stage 'revise'
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'review' → advance to 'revise'
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.010s
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md not found, body empty
+2026-06-25 18:31:18 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md not found, body empty
+2026-06-25 18:31:18 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:18 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: chain-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: chain-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: chain-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/06_revise.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Metrics for chain-piece/revise: flesch=59.7, words=6
+2026-06-25 18:31:19 [INFO] quill.piece: Advanced meta.yaml to stage 'humanize'
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → advance to 'humanize'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.013s
+2026-06-25 18:31:19 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/07_humanize.md not found, body empty
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'humanize' — no agent prompt in set 'default'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'validate' — no agent prompt in set 'default'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'polish' — no agent prompt in set 'default'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.040s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Flushed 8 entries to /tmp/pytest-of-bob/pytest-248/test_chain_skips_stages_withou0/output/chain-piece/timing.jsonl
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.041s
+2026-06-25 18:31:19 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_chain_errors_when_all_sta0/output/empty-chain-piece/02_outline.md not found, body empty
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [INFO] quill.chain_orchestrator: Research disabled for agent set 'empty', skipping
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'draft' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'review' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'revise' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'humanize' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'validate' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [WARNING] quill.chain_orchestrator: Skipping stage 'polish' — no agent prompt in set 'empty'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.004s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Flushed 1 entries to /tmp/pytest-of-bob/pytest-248/test_chain_errors_when_all_sta0/output/empty-chain-piece/timing.jsonl
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.005s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.000s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_review_writes_clean_markd0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.011s
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Saved guardrail snapshot for review
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Cleaned up guardrail snapshot for review
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/draft (generate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_run_stage_logs_generating0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.011s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_0/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=78.9, words=7
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.011s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_1/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_1/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_includes_1/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=62.8, words=3
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.012s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_evaluate_prompt_has_both_0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=0.0, words=3
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.012s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_deci0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.006s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_deci0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_deci0/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_content_stage_writes_deci0/output/test-piece/06_revise.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.metrics_service: Metrics for test-piece/revise: flesch=78.9, words=7
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.015s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_loop_back_preserves_gener0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_loop_back_preserves_gener0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [WARNING] quill.stage_runner: No evaluate.prompt.md in agent set 'default', using fallback
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (evaluate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.evaluate_output: 0.000s
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_loop_back_preserves_gener0/output/test-piece/06_revise.decision.md
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → loop_back (loop 1/3)
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' loop_back (loop 1/3)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.010s
+2026-06-25 18:31:19 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_decision_file_not_in_body0/output/decision-only/04_draft.md not found, body empty
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote decision to /tmp/pytest-of-bob/pytest-248/test_write_decision_format0/output/test-piece/04_draft.decision.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'My Blog Post' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_create_piece0/output/my-blog-post/01_brief.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_get_piece0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_body_length_nonzero_when_0/output/test-piece/05_review.md not found, body empty
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_advance0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_advance0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_advance0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.014s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.020s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_reject0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_reject0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_reject0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_reject0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_returns_comp0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_returns_comp0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_returns_comp0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.008s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/06_revise.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_debug_prompt_content_stag0/output/test-piece/05_review.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'revise' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/revise (generate)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'revise' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.009s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.005s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_run_agent_on_piece0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_run_agent_on_piece0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_run_agent_on_piece0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_run_agent_on_piece0/output/test-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: test-piece/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.000s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → ready (advance)
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_run_agent_on_piece0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → advance decision (no auto-advance, trigger=on_advance)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.012s
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Seruil' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_mid_progress_serui0/output/seruil/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.blueprints.pieces: Imported piece 'Seruil' at stage 'draft' (4 stage files)
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Seruil' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_mid_progress_serui0/output/seruil/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_import_mid_progress_serui0/output/seruil/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Minimal Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_import_minimal0/output/minimal-piece/01_brief.md
+2026-06-25 18:31:19 [INFO] quill.blueprints.pieces: Imported piece 'Minimal Piece' at stage 'brief' (1 stage files)
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Minimal Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_import_minimal0/output/minimal-piece/01_brief.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Body Only' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_import_with_body_only0/output/body-only/06_revise.md
+2026-06-25 18:31:19 [INFO] quill.blueprints.pieces: Imported piece 'Body Only' at stage 'revise' (1 stage files)
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Body Only' stage 'revise' to /tmp/pytest-of-bob/pytest-248/test_import_with_body_only0/output/body-only/06_revise.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Old Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_preserves_created_0/output/old-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.blueprints.pieces: Imported piece 'Old Piece' at stage 'draft' (1 stage files)
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Old Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_preserves_created_0/output/old-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_import_preserves_created_0/output/old-piece/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.blueprints.pieces: Imported piece 'Advanceable' at stage 'draft' (1 stage files)
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Advanceable' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_import_can_advance_after0/output/advanceable/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Advanceable' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_import_can_advance_after0/output/advanceable/05_review.md
+2026-06-25 18:31:19 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_import_can_advance_after0/output/advanceable/04_draft.metrics.yaml
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:19 [INFO] quill.runner: Stage 'review' → generating (loop 0)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: advanceable/review (state_transition)
+2026-06-25 18:31:19 [INFO] quill.run_logger: Run log entry: advanceable/review (agent)
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] LLMCaller.run_feedback_stage: 0.001s
+2026-06-25 18:31:19 [WARNING] quill.runner: Stage 'review' returned unknown decision: 'error'
+2026-06-25 18:31:19 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:31:19 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_missing_stage_file_gracef0/output/missing-stage/05_review.md not found, body empty
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_write_output_cleans_conte0/output/clean-test/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Wrote output to /tmp/pytest-of-bob/pytest-248/test_write_output_cleans_conte0/output/clean-test/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'New Piece' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_save_creates_directory_st0/output/new-piece/01_brief.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Meta Test' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_save_meta_yaml_content0/output/meta-test/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'FM Test' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_save_stage_file_has_front0/output/fm-test/01_brief.md
+2026-06-25 18:31:19 [INFO] quill.piece: Saved piece 'Test Piece' stage 'review' to /tmp/pytest-of-bob/pytest-248/test_save_preserves_existing_s0/output/test-piece/05_review.md
+2026-06-25 18:31:19 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-248/test_supersede_marks_later_sta0/output/test-piece/04_draft.md
+2026-06-25 18:31:19 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:31:19 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:31:20 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_supersede_marks_later_sta0/output/test-piece/02_outline.md not found, body empty
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-248/test_supersede_resets_frontier0/output/test-piece/04_draft.md
+2026-06-25 18:31:20 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:31:20 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_supersede_resets_frontier0/output/test-piece/02_outline.md not found, body empty
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-248/test_supersede_clears_supersed0/output/test-piece/04_draft.md
+2026-06-25 18:31:20 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-248/test_supersede_handles_empty_s0/output/test-piece/04_draft.md
+2026-06-25 18:31:20 [INFO] quill.piece: Advanced meta.yaml to stage 'brief'
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded from stage 'brief', frontier reset
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'Test Piece' stage 'draft' to /tmp/pytest-of-bob/pytest-248/test_set_trigger_persists0/output/test-piece/04_draft.md
+2026-06-25 18:31:20 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_navigate_to_ready_stage0/output/nav-piece/01_brief.metrics.yaml
+2026-06-25 18:31:20 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_navigate_to_empty_stage_b0/output/nav-lock/02_outline.md not found, body empty
+2026-06-25 18:31:20 [WARNING] quill.piece: Stage file /tmp/pytest-of-bob/pytest-248/test_navigate_to_superseded_st0/output/nav-super/02_outline.md not found, body empty
+2026-06-25 18:31:20 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_navigate_to_superseded_st0/output/nav-super/04_draft.metrics.yaml
+2026-06-25 18:31:20 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_navigate_returns_metrics0/output/nav-metrics/01_brief.metrics.yaml
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'Trigger' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_set_trigger0/output/trigger-piece/01_brief.md
+2026-06-25 18:31:20 [INFO] quill.metrics: Saved metrics to /tmp/pytest-of-bob/pytest-248/test_get_trigger_in_piece_deta0/output/detail-trigger/01_brief.metrics.yaml
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded: removed /tmp/pytest-of-bob/pytest-248/test_supersede_on_earlier_stag0/output/super-piece/04_draft.md
+2026-06-25 18:31:20 [INFO] quill.piece: Advanced meta.yaml to stage 'outline'
+2026-06-25 18:31:20 [INFO] quill.piece: Superseded from stage 'outline', frontier reset
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] ContextAssembler.prepare_stage: 0.004s
+2026-06-25 18:31:20 [INFO] quill.runner: Stage 'outline' → generating (loop 0)
+2026-06-25 18:31:20 [INFO] quill.run_logger: Run log entry: super-piece/outline (state_transition)
+2026-06-25 18:31:20 [INFO] quill.run_logger: Run log entry: super-piece/outline (generate)
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] LLMCaller.run_content_stage: 0.001s
+2026-06-25 18:31:20 [WARNING] quill.runner: Stage 'outline' returned unknown decision: 'error'
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.007s
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'Auto' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_auto_starts_chain0/output/auto-piece/01_brief.md
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.001s
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Flushed 1 entries to /home/bob/projects/quill/output/auto-piece/timing.jsonl
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.001s
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'TA' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_auto_sets_trigger0/output/trigger-auto/01_brief.md
+2026-06-25 18:31:20 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.000s
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.017s
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Flushed 2 entries to /home/bob/projects/quill/output/trigger-auto/timing.jsonl
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.018s
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'Int' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_interrupt_downgrades_trig0/output/int-piece/01_brief.md
+2026-06-25 18:31:20 [INFO] quill.run_manager: Interrupt requested for piece 'int-piece'
+2026-06-25 18:31:20 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'Int' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_interrupt_downgrades_trig0/output/int-piece/01_brief.md
+2026-06-25 18:31:20 [WARNING] quill.chain_orchestrator: Skipping stage 'outline' — no agent prompt in set 'default'
+2026-06-25 18:31:20 [ERROR] quill.run_manager: Run 2be81fee6dd0 failed
+Traceback (most recent call last):
+  File "/home/bob/projects/quill/src/quill/run_manager.py", line 169, in _execute_run
+    results = runner.run_chain(
+        piece_id, from_stage=stage, event_queue=event_queue,
+    )
+  File "/home/bob/projects/quill/src/quill/timeit.py", line 27, in wrapper
+    result = fn(*args, **kwargs)
+  File "/home/bob/projects/quill/src/quill/runner.py", line 230, in run_chain
+    result = self.chain.run(
+        piece_id, self.llm, self.run_stage,
+        from_stage, output_dir, event_queue,
+    )
+  File "/home/bob/projects/quill/src/quill/timeit.py", line 27, in wrapper
+    result = fn(*args, **kwargs)
+  File "/home/bob/projects/quill/src/quill/chain_orchestrator.py", line 103, in run
+    result = run_stage_fn(piece_id, current, output_dir, event_queue=event_queue, trace_id=trace_id, force_advance=True)
+  File "/home/bob/projects/quill/src/quill/timeit.py", line 27, in wrapper
+    result = fn(*args, **kwargs)
+  File "/home/bob/projects/quill/src/quill/runner.py", line 105, in run_stage
+    return self._run_research(piece_id, stage, output_dir, event_queue, force_advance=force_advance)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/bob/projects/quill/src/quill/timeit.py", line 27, in wrapper
+    result = fn(*args, **kwargs)
+  File "/home/bob/projects/quill/src/quill/runner.py", line 263, in _run_research
+    piece = load_piece(piece_dir)
+  File "/home/bob/projects/quill/src/quill/piece.py", line 440, in load_piece
+    raise ValueError(f"No meta.yaml found in {path}")
+ValueError: No meta.yaml found in /home/bob/projects/quill/output/int-piece
+2026-06-25 18:31:20 [INFO] quill.piece: Saved piece 'GR' stage 'brief' to /tmp/pytest-of-bob/pytest-248/test_run_blocked_during_auto0/output/guard-run/01_brief.md
+2026-06-25 18:31:20 [WARNING] quill.chain_orchestrator: Skipping stage 'brief' — no agent prompt in set 'default'
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_stage: 0.001s
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] ChainOrchestrator.run: 0.015s
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Flushed 2 entries to /home/bob/projects/quill/output/guard-run/timing.jsonl
+2026-06-25 18:31:20 [INFO] quill.timeit: [timeit] Runner.run_chain: 0.016s
+2026-06-25 18:31:26 [INFO] quill: Logging initialized — level=INFO, logs_dir=/home/bob/projects/quill/logs, retention=3 days
+2026-06-25 18:31:29 [INFO] quill.pipeline: Loaded pipeline 'default' with 10 stages
+2026-06-25 18:31:29 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/gold-collapse/10_done.md not found, body empty
+2026-06-25 18:31:29 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/seo-practices-2026/10_done.md not found, body empty
+2026-06-25 18:31:29 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/taskforge-async-standups-v2/10_done.md not found, body empty
+2026-06-25 18:31:29 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/taskforge-the-async-standup-revolution/10_done.md not found, body empty
+2026-06-25 18:31:39 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/gold-collapse/10_done.md not found, body empty
+2026-06-25 18:31:39 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/seo-practices-2026/10_done.md not found, body empty
+2026-06-25 18:31:39 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/taskforge-async-standups-v2/10_done.md not found, body empty
+2026-06-25 18:31:39 [WARNING] quill.piece: Stage file /home/bob/projects/quill/output/taskforge-the-async-standup-revolution/10_done.md not found, body empty

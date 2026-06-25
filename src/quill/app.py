@@ -20,6 +20,10 @@ except ImportError:
 
 def create_app() -> Flask:
     """Application factory."""
+    # Initialize logging first — before any other imports trigger log calls
+    from .logging_config import setup_logging
+    setup_logging()
+
     _pkg_dir = Path(__file__).resolve().parent
     app = Flask(
         __name__,

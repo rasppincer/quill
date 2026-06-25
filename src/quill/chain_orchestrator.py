@@ -17,6 +17,7 @@ from .piece import load_piece, _stage_filename
 from .run_manager import RunManager
 from .stage_runner import LLMCaller, _emit
 from .timeit import timeit
+from .logging_config import get_logger
 
 logger = logging.getLogger(__name__)
 

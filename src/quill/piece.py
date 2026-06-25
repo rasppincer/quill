@@ -102,6 +102,14 @@ class Piece:
     _path: Path | None = field(default=None, repr=False)  # directory for new format, file for legacy
     _is_legacy: bool = field(default=False, repr=False)
 
+    @property
+    def log(self):
+        """Get a logger tagged with this piece's ID."""
+        if not hasattr(self, "_log") or self._log is None:
+            from .logging_config import get_piece_logger
+            self._log = get_piece_logger("piece", self.id)
+        return self._log
+
     def to_frontmatter(self) -> dict:
         """Export metadata as a dict for YAML serialization."""
         return {

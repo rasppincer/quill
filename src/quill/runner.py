@@ -24,6 +24,7 @@ from .piece import Piece, load_piece, _stage_filename
 from .metrics_service import MetricsService
 from .prompt_builder import PromptBuilder
 from .stage_runner import LLMCaller, _emit
+from .timeit import timeit, flush_timings, clear_timings
 
 __all__ = ["StageRunner", "RunManager", "StageContext"]
 
@@ -87,6 +88,7 @@ class StageRunner:
     # Stage execution
     # ------------------------------------------------------------------
 
+    @timeit("Runner.run_stage")
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
         event_queue=None, trace_id: str | None = None, force_advance: bool = False,
@@ -213,20 +215,29 @@ class StageRunner:
     # Chain execution
     # ------------------------------------------------------------------
 
+    @timeit("Runner.run_chain")
     def run_chain(
         self, piece_id: str, from_stage: str | None = None,
         output_dir: Path | None = None, event_queue=None,
     ) -> list[AgentDecision]:
         """Run a chain of stages from the current stage to done."""
-        return self.chain.run(
+        clear_timings()
+        result = self.chain.run(
             piece_id, self.llm, self.run_stage,
             from_stage, output_dir, event_queue,
         )
+        # Flush timing data to piece dir
+        from .piece import DEFAULT_OUTPUT_DIR
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        timing_file = base / piece_id / "timing.jsonl"
+        flush_timings(timing_file)
+        return result
 
     # ------------------------------------------------------------------
     # Research stage (special — no agent prompt)
     # ------------------------------------------------------------------
 
+    @timeit("Runner._run_research")
     def _run_research(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
         event_queue=None, force_advance: bool = False,

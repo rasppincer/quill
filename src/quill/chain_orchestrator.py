@@ -15,6 +15,7 @@ from pathlib import Path
 from .agent import AgentDecision, load_agent_config
 from .piece import load_piece, _stage_filename
 from .stage_runner import LLMCaller, _emit
+from .timeit import timeit
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class ChainOrchestrator:
         cfg = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
         return cfg.get("chain_retry", 0)
 
+    @timeit("ChainOrchestrator.run")
     def run(
         self,
         piece_id: str,

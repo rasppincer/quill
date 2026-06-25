@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 from typing import Any
+
+from .timeit import log_timing
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +72,15 @@ class LLMClient:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
+        input_chars = len(system) + len(user)
+        t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-                return body["choices"][0]["message"]["content"]
+                elapsed = time.monotonic() - t0
+                content = body["choices"][0]["message"]["content"]
+                log_timing(f"llm.chat ({self.model}, {input_chars} chars in, {len(content)} chars out)", elapsed)
+                return content
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="replace")
             raise ConnectionError(f"LLM API error {e.code}: {error_body}") from e

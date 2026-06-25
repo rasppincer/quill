@@ -14,6 +14,7 @@ from .agent import AgentDecision, load_agent_config
 from .metrics_service import MetricsService
 from .piece import Piece, load_piece, _FRONTMATTER_RE, _stage_filename
 from .prompt_builder import PromptBuilder, render_prompt
+from .timeit import timeit
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class ContextAssembler:
         self.metrics_svc = MetricsService()
         self.prompt_builder = PromptBuilder()
 
+    @timeit("ContextAssembler.prepare_stage")
     def prepare_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
     ):

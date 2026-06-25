@@ -15,6 +15,7 @@ from .llm import LLMClient
 from .piece import Piece, _stage_filename
 from .prompt_builder import PromptBuilder, render_prompt
 from .run_logger import RunLogger
+from .timeit import timeit, log_timing
 from .token_budget import check_and_truncate, load_context_window
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class LLMCaller:
     # Content stage (two-call: generate + evaluate)
     # ------------------------------------------------------------------
 
+    @timeit("LLMCaller.run_content_stage")
     def run_content_stage(
         self, client: LLMClient, stage: str, piece: Piece,
         sc, event_queue=None, trace_id: str | None = None,
@@ -104,6 +106,7 @@ class LLMCaller:
     # Feedback stage (single call)
     # ------------------------------------------------------------------
 
+    @timeit("LLMCaller.run_feedback_stage")
     def run_feedback_stage(
         self, client: LLMClient, stage: str, piece: Piece,
         sc, event_queue=None, trace_id: str | None = None,
@@ -137,6 +140,7 @@ class LLMCaller:
     # Evaluate (second call for content stages)
     # ------------------------------------------------------------------
 
+    @timeit("LLMCaller.evaluate_output")
     def evaluate_output(
         self, client: LLMClient, stage: str, piece: Piece,
         generated: str, pipeline, input_content: str,

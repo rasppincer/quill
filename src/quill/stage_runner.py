@@ -13,6 +13,7 @@ from pathlib import Path
 from .agent import AgentDecision, parse_agent_response
 from .llm import LLMClient
 from .piece import Piece, _stage_filename
+from .logging_config import get_piece_logger
 from .prompt_builder import PromptBuilder, render_prompt
 from .run_logger import RunLogger
 from .timeit import timeit, log_timing
@@ -64,23 +65,53 @@ class LLMCaller:
         self, client: LLMClient, stage: str, piece: Piece,
         sc, event_queue=None, trace_id: str | None = None,
     ) -> AgentDecision:
-        """Two-call approach: generate content, then evaluate."""
+        """Two-call approach: generate content, then evaluate.
+
+        For draft stage with multi-part outlines, generates each part
+        separately to overcome token limits, then evaluates the full text.
+        """
         gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
-        self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt, trace_id=trace_id)
-        _emit(event_queue, "stage_llm_call", {
-            "stage": stage, "call": "generate", "prompt_chars": len(sc.prompt),
-        })
-        prompt_for_generate, _ = self.apply_token_budget(
-            gen_system, sc.prompt, sc.agent_cfg.max_tokens,
-            call_label="generate", event_queue=event_queue,
-        )
-        try:
-            generated = client.chat(gen_system, prompt_for_generate, piece_id=piece.id)
-        except ConnectionError as e:
-            return AgentDecision(
-                decision="error", critique="", output="",
-                error=str(e), stage=stage,
+
+        # Check if this is a chaptered draft (outline has ## Part N sections)
+        chapters = self._parse_chapters(sc.input_content) if stage == "draft" else []
+
+        # Fallback: try parsing the brief if outline doesn't have chapters
+        if not chapters and stage == "draft":
+            brief_file = piece.stage_dir() / _stage_filename("brief")
+            if brief_file.exists():
+                brief_text = brief_file.read_text(encoding="utf-8")
+                # Strip frontmatter
+                import re as _re
+                m = _re.match(r'^---.*?---\s*', brief_text, _re.DOTALL)
+                brief_body = brief_text[m.end():] if m else brief_text
+                chapters = self._parse_chapters(brief_body)
+
+                # Fallback: parse "- Part N: Title - Description" bullet format
+                if not chapters:
+                    chapters = self._parse_bullet_chapters(brief_body)
+
+        logger.info("Chapter detection for stage='%s': %d chapters found", stage, len(chapters))
+        if chapters and len(chapters) > 1:
+            generated = self._generate_chaptered(
+                client, gen_system, stage, piece, sc, chapters, event_queue, trace_id,
             )
+        else:
+            # Standard single-call generation
+            self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt, trace_id=trace_id)
+            _emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": "generate", "prompt_chars": len(sc.prompt),
+            })
+            prompt_for_generate, _ = self.apply_token_budget(
+                gen_system, sc.prompt, sc.agent_cfg.max_tokens,
+                call_label="generate", event_queue=event_queue,
+            )
+            try:
+                generated = client.chat(gen_system, prompt_for_generate, piece_id=piece.id)
+            except ConnectionError as e:
+                return AgentDecision(
+                    decision="error", critique="", output="",
+                    error=str(e), stage=stage,
+                )
 
         # Persist generated content immediately (survives loop_back)
         piece.write_output(stage, generated)
@@ -219,6 +250,145 @@ class LLMCaller:
             "decision": result.decision, "critique": result.critique[:500],
         }, trace_id=trace_id)
         return result
+
+    # ------------------------------------------------------------------
+    # Chaptered generation (for long-form content)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_chapters(outline_text: str) -> list[dict]:
+        """Parse outline into chapters based on ## Part N / ## Chapter N headers.
+
+        Handles formats like:
+        - ## Part 1: Title
+        - ## I. Part 1: Title
+        - ## Chapter 1: Title
+        - ## 1. Title
+
+        Returns list of {"heading": str, "body": str} dicts.
+        If no chapter headers found, returns empty list.
+        """
+        import re
+        if not outline_text:
+            return []
+
+        # Split on headers that contain Part/Chapter/Section with numbers,
+        # or numbered headers like ## 1. Title or ## I. Title
+        parts = re.split(
+            r'(?=^##\s+(?:[IVX]+\.\s*)?(?:Part|Chapter|Section)\s*\d)',
+            outline_text, flags=re.MULTILINE,
+        )
+        # Fallback: try splitting on ## I. / ## II. / ## III. etc.
+        if len(parts) <= 1:
+            parts = re.split(
+                r'(?=^##\s+[IVX]+\.)',
+                outline_text, flags=re.MULTILINE,
+            )
+
+        # NOTE: Do NOT fall back to ## N. — too many false positives from
+        # outline meta-headers like "## 1. Narrative Arc", "## 2. Character Arcs"
+
+        chapters = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            # Extract heading from first line
+            lines = part.split('\n', 1)
+            heading = lines[0].strip().lstrip('#').strip()
+            body = lines[1].strip() if len(lines) > 1 else ""
+            # Skip separator-style headings (e.g. "=== 02_outline.md ===")
+            if heading.startswith('===') or heading.startswith('---'):
+                continue
+            if body:
+                chapters.append({"heading": heading, "body": body})
+
+        return chapters
+
+    @staticmethod
+    def _parse_bullet_chapters(text: str) -> list[dict]:
+        """Parse bullet-point chapter format: - Part N: Title - Description.
+
+        Also handles:
+        - Chapter N: Title
+        - Part N — Title
+        """
+        import re
+        if not text:
+            return []
+
+        # Find lines matching "- Part N: ..." or "- Chapter N: ..."
+        pattern = re.compile(
+            r'^[-*]\s+(?:Part|Chapter)\s+(\d+)\s*[:\-—]\s*(.+)',
+            re.MULTILINE,
+        )
+        matches = list(pattern.finditer(text))
+        if len(matches) < 2:
+            return []
+
+        chapters = []
+        for i, m in enumerate(matches):
+            heading = f"Part {m.group(1)}: {m.group(2).strip()}"
+            # Get body: text between this match and the next (or end)
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            body = text[start:end].strip()
+            chapters.append({"heading": heading, "body": body})
+
+        return chapters
+
+    def _generate_chaptered(
+        self, client: LLMClient, gen_system: str, stage: str,
+        piece: Piece, sc, chapters: list[dict],
+        event_queue=None, trace_id: str | None = None,
+    ) -> str:
+        """Generate each chapter separately, then concatenate.
+
+        Each chapter gets its own LLM call with the full outline as context
+        but focused instructions for that specific part.
+        """
+        plog = get_piece_logger("stage_runner", piece.id)
+        full_outline = sc.input_content
+        chapter_words = max(1500, int(piece.target_length or 10000) // len(chapters))
+        all_chapters = []
+
+        for i, ch in enumerate(chapters):
+            ch_num = i + 1
+            plog.info("Generating chapter %d/%d: %s", ch_num, len(chapters), ch["heading"])
+            _emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": f"generate_chapter_{ch_num}",
+                "prompt_chars": len(ch["body"]),
+            })
+
+            # Build chapter-specific prompt
+            chapter_prompt = (
+                f"You are writing Chapter {ch_num} of {len(chapters)} for a "
+                f"{piece.genre or 'story'} titled \"{piece.title}\".\n\n"
+                f"## Full Outline\n{full_outline}\n\n"
+                f"## Your Assignment: {ch['heading']}\n\n"
+                f"Write this chapter in full prose. Target ~{chapter_words} words.\n\n"
+                f"Chapter outline:\n{ch['body']}\n\n"
+                f"Requirements:\n"
+                f"- Rich, vivid prose with sensory details\n"
+                f"- Show don't tell — action, dialogue, internal monologue\n"
+                f"- Maintain consistent tone ({piece.tone or 'engaging'})\n"
+                f"- Smooth transitions from previous chapters\n"
+                f"- Do NOT include chapter headings — just the prose\n"
+            )
+
+            self.run_logger.log(piece, stage, f"generate_ch{ch_num}", gen_system, chapter_prompt, trace_id=trace_id)
+
+            try:
+                chapter_text = client.chat(gen_system, chapter_prompt, piece_id=piece.id)
+                all_chapters.append(f"## {ch['heading']}\n\n{chapter_text}")
+                plog.info("Chapter %d done: %d chars", ch_num, len(chapter_text))
+            except ConnectionError as e:
+                plog.error("Chapter %d failed: %s", ch_num, e)
+                all_chapters.append(f"## {ch['heading']}\n\n[Generation failed: {e}]")
+
+        generated = "\n\n---\n\n".join(all_chapters)
+        plog.info("All %d chapters generated: %d total chars", len(chapters), len(generated))
+        return generated
 
 
 def _emit(event_queue, event_type: str, data: dict):

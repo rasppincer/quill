@@ -110,3 +110,32 @@
 ## Backlog (from research stage review)
 
 - [ ] **Source verification stage** — New stage after research that validates whether the URLs in research.md actually contain the claimed content. Prevents the draft agent from citing snippets that misrepresent the source. Could use web_extract to fetch and compare.
+
+## Issues from Ferret Protocol (10k word generation)
+
+### Pipeline state management
+
+- [ ] **Reject doesn't reset stage_states** — When rejecting a piece back to an earlier stage (e.g. done → draft), the stage_states for subsequent stages remain "ready". The advance endpoint sees them as complete and skips through without running agents. Reject needs to clear stage_states for all stages after the target.
+- [ ] **Pipeline skips stages with stale "ready" state** — Related to above. After reject + re-advance, the pipeline auto-advances through review/revise/humanize because their stage_states say "ready". Each advance should re-run the agent if the stage file only has frontmatter (no body content).
+- [ ] **run endpoint only runs on current_stage** — `POST /run` always runs on the piece's current_stage. There's no way to run a specific stage via the API (e.g. "re-run review even though I'm at polish"). Needed for re-running individual stages without reject+advance.
+
+### Chaptered generation
+
+- [ ] **Outline format varies between agent calls** — The outline agent generates different formats: `## I. Part 1: Title`, `## 1. Narrative Arc`, or `## Part 1: Title`. The chapter parser needs 3 fallback regexes. Should standardize the outline prompt to always use `## Part N: Title` format.
+- [ ] **Outline dump becomes first chapter** — When `sc.input_content` contains the outline + brief + previous decisions, `_parse_chapters` splits on `## Part N` and the context assembler's separator (`=== 02_outline.md ===`) becomes the first chapter heading. Fixed with filter but fragile.
+- [ ] **Bullet chapters have empty bodies** — `_parse_bullet_chapters` extracts headings from brief bullets but the body is empty (brief is just a list). The outline content should fill in the chapter bodies. Currently the LLM generates from the heading alone.
+- [ ] **No section layer under chapters** — For 10k+ words, chapters themselves could benefit from scene breaks (### Scene 1, ### Scene 2). Would need another generation layer: chapter → sections → concatenate. Not recursive — hardcoded 2 levels max.
+- [ ] **Research results not passed to chapter generation** — The research stage finds references, but these aren't included in per-chapter prompts. Each chapter gets the outline context but not the research findings.
+- [ ] **No progress feedback during chaptered generation** — 5 chapters × 30-40s = 3 minutes of blocking API response. The user sees no intermediate progress. Should emit SSE events per chapter completion (already has `stage_llm_call` events but UI doesn't show them).
+
+### Word count and quality
+
+- [ ] **Per-chapter word count target too low** — With 5 chapters at `target_length / num_chapters` = 2000 words each, actual output averages ~1700. Need to bump the per-chapter target by 20% (e.g. 2400 for a 10k target).
+- [ ] **Agent evaluates total word count, not per-chapter** — The evaluate call sees the full 8627-word draft and says "too short" (target 10k). But the issue is per-chapter length, not total. The evaluate prompt should note "this was generated as N chapters, each targeting M words."
+- [ ] **debug_prompts clutters output** — Each chapter generates a separate prompt file (generate_ch1-prompt.md, generate_ch2-prompt.md, etc.). Should be a single combined debug file or use a subdirectory.
+
+### Content quality observations
+
+- [ ] **First chapter often starts with weather/atmosphere** — Multiple runs produced "The rain..." or "The midnight air..." openings. The generate prompt should include "start with action or dialogue, not weather description" for thriller genre.
+- [ ] **Character names not carried between chapters** — Each chapter generation is independent. The LLM might use slightly different character descriptions across chapters. Should pass character sheet as persistent context.
+- [ ] **Ending feels rushed** — Part 5 (The Retirement) is the shortest chapter. The LLM tends to compress resolutions. Should add "expand the ending — give each character a final moment" to the retirement chapter prompt.

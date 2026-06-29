@@ -295,6 +295,7 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
 .stage-tab.empty {
     opacity: 0.4;
     cursor: not-allowed;
+    padding: 8px 12px;
 }
 
 .stage-tab.empty:hover {
@@ -318,7 +319,7 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
 .stage-dot.ready { background: var(--accent-green); }
 .stage-dot.generating { background: var(--accent-blue); animation: pulse 1.5s ease-in-out infinite; }
 .stage-dot.superseded { background: var(--accent-orange); }
-.stage-dot.empty { background: var(--bg-tertiary); border: 1px solid var(--border); }
+.stage-dot.empty { background: var(--bg-tertiary); border: 1px solid var(--border); padding: 0; }
 
 .stage-label {
     white-space: nowrap;

@@ -319,7 +319,7 @@ Output: free-form brief text, saved as child piece's `01_brief.md`.
 
 ### Implementation Tasks
 
-- [ ] **Summary stage**: Add to pipeline config, prompt templates (3 flavors), evaluate prompts
+- [x] **Summary stage**: Add to pipeline config, prompt templates (3 flavors), evaluate prompts
 - [ ] **Orchestrator module**: New file `orchestrator.py` — spawns child pieces, monitors completion, manages compressed context
 - [ ] **Chapter brief generator**: Prompt template + LLM call to auto-generate chapter briefs
 - [ ] **Compression step**: After each child completes, read its `10_summary.md`, add to compressed context

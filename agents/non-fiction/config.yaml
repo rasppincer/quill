@@ -36,3 +36,7 @@ stages:
     name: Polish Agent
     description: Final line-level edits, title optimization
     temperature: 0.5
+  summary:
+    name: Summary Agent
+    description: Compressed summary for context passing
+    temperature: 0.3

@@ -21,6 +21,8 @@ stage_inputs:
   polish:
     - humanize.md
     - validate.md
+  summary:
+    - polish.md
 
 stages:
   - key: brief
@@ -115,8 +117,17 @@ stages:
       - title_and_opening
       - final_word_count
       - formatting
-    next: done
+    next: summary
     can_reject_to: validate
+
+  - key: summary
+    name: Summary
+    description: Compressed summary for context passing
+    rules:
+      - preserve_key_elements
+      - tight_compression
+    next: done
+    can_reject_to: polish
 
   - key: done
     name: Done

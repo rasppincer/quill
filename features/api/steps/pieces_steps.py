@@ -106,7 +106,7 @@ def step_piece_at_stage(context, piece_id, stage):
     # The API returns a slugified ID — use it
     context.piece_id = pid
     # Write stage files up to AND including the target stage
-    stages = ["brief", "outline", "draft", "review", "revise", "humanize", "validate", "polish", "done"]
+    stages = ["brief", "outline", "draft", "review", "revise", "humanize", "validate", "polish", "summary", "done"]
     for s in stages:
         write_stage_file(pid, s, f"Content for {s} stage of {title}")
         if s == stage:

@@ -150,11 +150,11 @@ class TestDefaultPipeline:
 
     def test_loads_default(self, pipeline):
         assert pipeline.name == "default"
-        assert len(pipeline.stages) == 10
+        assert len(pipeline.stages) == 11
 
     def test_stage_order(self, pipeline):
         expected = ["brief", "outline", "research", "draft", "review", "revise",
-                     "humanize", "validate", "polish", "done"]
+                     "humanize", "validate", "polish", "summary", "done"]
         assert pipeline.stage_order == expected
 
     def test_brief_leads_to_outline(self, pipeline):
@@ -169,3 +169,40 @@ class TestDefaultPipeline:
 
     def test_validate_can_reject_to_humanize(self, pipeline):
         assert pipeline.can_reject_to("validate", "humanize") is True
+
+    def test_summary_stage_exists(self, pipeline):
+        """Summary stage should be in the pipeline."""
+        stage = pipeline.get_stage("summary")
+        assert stage is not None
+        assert stage.name == "Summary"
+
+    def test_summary_is_content_stage(self, pipeline):
+        """Summary should use two-call (generate → evaluate) mode."""
+        assert pipeline.is_content_stage("summary") is True
+
+    def test_polish_next_is_summary(self, pipeline):
+        """Polish should advance to summary, not done."""
+        assert pipeline.next_stage("polish") == "summary"
+
+    def test_summary_next_is_done(self, pipeline):
+        """Summary should advance to done."""
+        assert pipeline.next_stage("summary") == "done"
+
+    def test_summary_can_reject_to_polish(self, pipeline):
+        """Summary should be able to reject back to polish."""
+        assert pipeline.can_reject_to("summary", "polish") is True
+
+    def test_stage_order_includes_summary(self, pipeline):
+        """Summary should be between polish and done in stage order."""
+        expected = ["brief", "outline", "research", "draft", "review", "revise",
+                     "humanize", "validate", "polish", "summary", "done"]
+        assert pipeline.stage_order == expected
+
+    def test_stage_count_with_summary(self, pipeline):
+        """Pipeline should have 11 stages (10 + summary)."""
+        assert len(pipeline.stages) == 11
+
+    def test_summary_stage_inputs(self, pipeline):
+        """Summary stage should read polish.md as input."""
+        assert "summary" in pipeline.stage_inputs
+        assert "polish.md" in pipeline.stage_inputs["summary"]

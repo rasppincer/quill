@@ -45,3 +45,7 @@ stages:
     name: "Polish Agent"
     description: "Final prose polish — rhythm, word choice, voice"
     temperature: 0.3
+  summary:
+    name: "Summary Agent"
+    description: "Compressed summary for context passing"
+    temperature: 0.3

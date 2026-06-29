@@ -13,6 +13,8 @@ You are a quality evaluator for a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 
 {{METRICS}}
 
+{{CHAPTER_INFO}}
+
 ## Task
 Evaluate the generated {{STAGE}} output against the input. Is it high quality? Does it meet the requirements?
 

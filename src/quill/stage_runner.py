@@ -212,6 +212,20 @@ class LLMCaller:
                 piece, stage, input_content, metrics_str, 0,
                 extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
             )
+
+            # Add chapter context for chaptered drafts
+            if stage == "draft":
+                chapter_count = generated.count("\n## Part ") + generated.count("\n## Chapter ")
+                if chapter_count > 1:
+                    word_count = len(generated.split())
+                    per_chapter = word_count // chapter_count
+                    eval_ctx["CHAPTER_INFO"] = (
+                        f"This draft was generated as {chapter_count} chapters, "
+                        f"each targeting ~{per_chapter} words. "
+                        f"Total: {word_count} words. "
+                        f"Evaluate the overall quality and completeness, not just word count."
+                    )
+
             prompt = render_prompt(eval_template, eval_ctx)
             eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
             self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, trace_id=trace_id)

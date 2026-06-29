@@ -83,6 +83,10 @@ class Piece:
     target_length: str = ""  # e.g. "5000-8000 words"
     constraints: list[str] = field(default_factory=list)
 
+    # Orchestrator: parent-child tracking
+    children: list[str] = field(default_factory=list)  # child piece IDs
+    parent: str = ""  # parent piece ID (empty if top-level)
+
     # Workflow state
     current_stage: str = "brief"
     created: str = ""
@@ -128,6 +132,8 @@ class Piece:
             "agent_set": self.agent_set,
             "trigger": self.trigger,
             "stage_states": self.stage_states,
+            "children": self.children,
+            "parent": self.parent,
         }
 
     def to_markdown(self) -> str:
@@ -471,6 +477,8 @@ def load_piece(path: Path) -> Piece:
             agent_set=meta.get("agent_set", ""),
             trigger=meta.get("trigger", "on_advance"),
             stage_states=meta.get("stage_states", {}) or {},
+            children=meta.get("children", []) or [],
+            parent=meta.get("parent", ""),
             body=body,
             _path=path,
             _is_legacy=False,

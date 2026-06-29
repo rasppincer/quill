@@ -214,6 +214,12 @@ class Orchestrator:
         if not self._has_chapters(piece_dir):
             return None
 
+        # Only orchestrate stages that benefit from per-chapter processing.
+        # Early stages (brief, structure, outline, research) run on the parent only.
+        _CHAPTERED_STAGES = {"draft", "review", "revise", "humanize", "validate", "polish", "state"}
+        if stage not in _CHAPTERED_STAGES:
+            return None
+
         # Load parent piece
         parent = load_piece(piece_dir)
 

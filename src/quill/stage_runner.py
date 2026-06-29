@@ -349,11 +349,15 @@ class LLMCaller:
         """
         plog = get_piece_logger("stage_runner", piece.id)
         full_outline = sc.input_content
-        chapter_words = max(1500, int(piece.target_length or 10000) // len(chapters))
+        chapter_words = max(2000, int(int(piece.target_length or 10000) * 1.2) // len(chapters))
         all_chapters = []
+
+        # Extract character sheet from brief for persistent context
+        character_sheet = self._extract_character_sheet(piece)
 
         for i, ch in enumerate(chapters):
             ch_num = i + 1
+            is_last = (i == len(chapters) - 1)
             plog.info("Generating chapter %d/%d: %s", ch_num, len(chapters), ch["heading"])
             _emit(event_queue, "stage_llm_call", {
                 "stage": stage, "call": f"generate_chapter_{ch_num}",
@@ -365,16 +369,43 @@ class LLMCaller:
                 f"You are writing Chapter {ch_num} of {len(chapters)} for a "
                 f"{piece.genre or 'story'} titled \"{piece.title}\".\n\n"
                 f"## Full Outline\n{full_outline}\n\n"
+            )
+
+            if character_sheet:
+                chapter_prompt += f"## Character Reference\n{character_sheet}\n\n"
+
+            chapter_prompt += (
                 f"## Your Assignment: {ch['heading']}\n\n"
                 f"Write this chapter in full prose. Target ~{chapter_words} words.\n\n"
-                f"Chapter outline:\n{ch['body']}\n\n"
+            )
+
+            if ch["body"]:
+                chapter_prompt += f"Chapter outline:\n{ch['body']}\n\n"
+
+            chapter_prompt += (
                 f"Requirements:\n"
                 f"- Rich, vivid prose with sensory details\n"
                 f"- Show don't tell — action, dialogue, internal monologue\n"
                 f"- Maintain consistent tone ({piece.tone or 'engaging'})\n"
-                f"- Smooth transitions from previous chapters\n"
-                f"- Do NOT include chapter headings — just the prose\n"
             )
+
+            if ch_num == 1:
+                chapter_prompt += (
+                    f"- Start with action, dialogue, or a striking image — "
+                    f"NOT weather description or atmospheric preamble\n"
+                )
+
+            if is_last:
+                chapter_prompt += (
+                    f"- This is the FINAL chapter — give each character a "
+                    f"satisfying conclusion\n"
+                    f"- Expand the ending — don't rush the resolution\n"
+                )
+
+            if ch_num > 1:
+                chapter_prompt += f"- Continue naturally from the previous chapter\n"
+
+            chapter_prompt += f"- Do NOT include chapter headings — just the prose\n"
 
             self.run_logger.log(piece, stage, f"generate_ch{ch_num}", gen_system, chapter_prompt, trace_id=trace_id)
 
@@ -389,6 +420,31 @@ class LLMCaller:
         generated = "\n\n---\n\n".join(all_chapters)
         plog.info("All %d chapters generated: %d total chars", len(chapters), len(generated))
         return generated
+
+    @staticmethod
+    def _extract_character_sheet(piece: Piece) -> str:
+        """Extract character names and descriptions from the brief.
+
+        Returns a formatted string for persistent context across chapters.
+        """
+        import re
+        brief_file = piece.stage_dir() / _stage_filename("brief")
+        if not brief_file.exists():
+            return ""
+
+        text = brief_file.read_text(encoding="utf-8")
+        # Strip frontmatter
+        m = re.match(r'^---.*?---\s*', text, re.DOTALL)
+        body = text[m.end():] if m else text
+
+        # Find the Characters section
+        char_match = re.search(
+            r'## Characters?\s*\n(.*?)(?=\n## |\Z)',
+            body, re.DOTALL | re.IGNORECASE,
+        )
+        if char_match:
+            return char_match.group(1).strip()
+        return ""
 
 
 def _emit(event_queue, event_type: str, data: dict):

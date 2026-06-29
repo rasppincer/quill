@@ -510,6 +510,24 @@ def pieces_reject(piece_id: str):
     old_stage = piece.current_stage
     piece.current_stage = target
 
+    # Reset stage_states for stages after the target
+    if piece.stage_states:
+        stage_order = pipeline.stage_order
+        if target in stage_order:
+            target_idx = stage_order.index(target)
+            stages_to_clear = [s for s in stage_order[target_idx + 1:]
+                               if s in piece.stage_states]
+            for s in stages_to_clear:
+                del piece.stage_states[s]
+                # Clear stage content files
+                stage_file = piece.stage_dir() / _stage_filename(s)
+                if stage_file.exists():
+                    # Write frontmatter only (preserve file, clear body)
+                    meta = piece.to_frontmatter()
+                    fm = yaml.dump(meta, default_flow_style=False,
+                                   allow_unicode=True, sort_keys=False)
+                    stage_file.write_text(f"---\n{fm}---\n", encoding="utf-8")
+
     # Load body from target stage file
     if not piece._is_legacy:
         target_file = piece.stage_dir() / _stage_filename(target)

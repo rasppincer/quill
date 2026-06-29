@@ -8,6 +8,10 @@ research:
   enabled: true
   required: true
 stages:
+  structure:
+    name: Structure Agent
+    description: Auto-segments content into argument sections
+    temperature: 0.3
   outline:
     name: Outline Agent
     description: Creates structured outline from brief with thesis and evidence hooks

@@ -4,6 +4,8 @@ name: default
 description: Multi-stage writing pipeline for long-form content
 
 stage_inputs:
+  structure:
+    - brief.md
   outline:
     - brief.md
   research:
@@ -36,7 +38,16 @@ stages:
       - tone
       - language
       - target_length
+    next: structure
+
+  - key: structure
+    name: Structure
+    description: Auto-segment content based on target length
+    rules:
+      - correct_segment_count
+      - titles_only
     next: outline
+    can_reject_to: brief
 
   - key: outline
     name: Outline
@@ -45,7 +56,9 @@ stages:
       - section_list
       - pacing_notes
     next: research
-    can_reject_to: brief
+    can_reject_to:
+      - brief
+      - structure
 
   - key: research
     name: Research

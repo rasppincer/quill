@@ -77,18 +77,29 @@ class LLMCaller:
 
         # Fallback: try parsing the brief if outline doesn't have chapters
         if not chapters and stage == "draft":
-            brief_file = piece.stage_dir() / _stage_filename("brief")
-            if brief_file.exists():
-                brief_text = brief_file.read_text(encoding="utf-8")
-                # Strip frontmatter
+            # Try structure file first (## Segment N headers)
+            structure_file = piece.stage_dir() / _stage_filename("structure")
+            if structure_file.exists():
+                structure_text = structure_file.read_text(encoding="utf-8")
                 import re as _re
-                m = _re.match(r'^---.*?---\s*', brief_text, _re.DOTALL)
-                brief_body = brief_text[m.end():] if m else brief_text
-                chapters = self._parse_chapters(brief_body)
+                m = _re.match(r'^---.*?---\s*', structure_text, _re.DOTALL)
+                structure_body = structure_text[m.end():] if m else structure_text
+                chapters = self._parse_chapters(structure_body)
 
-                # Fallback: parse "- Part N: Title - Description" bullet format
-                if not chapters:
-                    chapters = self._parse_bullet_chapters(brief_body)
+            # Fall back to brief
+            if not chapters:
+                brief_file = piece.stage_dir() / _stage_filename("brief")
+                if brief_file.exists():
+                    brief_text = brief_file.read_text(encoding="utf-8")
+                    # Strip frontmatter
+                    import re as _re
+                    m = _re.match(r'^---.*?---\s*', brief_text, _re.DOTALL)
+                    brief_body = brief_text[m.end():] if m else brief_text
+                    chapters = self._parse_chapters(brief_body)
+
+                    # Fallback: parse "- Part N: Title - Description" bullet format
+                    if not chapters:
+                        chapters = self._parse_bullet_chapters(brief_body)
 
         logger.info("Chapter detection for stage='%s': %d chapters found", stage, len(chapters))
         if chapters and len(chapters) > 1:
@@ -271,12 +282,13 @@ class LLMCaller:
 
     @staticmethod
     def _parse_chapters(outline_text: str) -> list[dict]:
-        """Parse outline into chapters based on ## Part N / ## Chapter N headers.
+        """Parse outline into chapters based on ## Part N / ## Chapter N / ## Segment N headers.
 
         Handles formats like:
         - ## Part 1: Title
         - ## I. Part 1: Title
         - ## Chapter 1: Title
+        - ## Segment 1: Title
         - ## 1. Title
 
         Returns list of {"heading": str, "body": str} dicts.
@@ -286,10 +298,10 @@ class LLMCaller:
         if not outline_text:
             return []
 
-        # Split on headers that contain Part/Chapter/Section with numbers,
+        # Split on headers that contain Part/Chapter/Section/Segment with numbers,
         # or numbered headers like ## 1. Title or ## I. Title
         parts = re.split(
-            r'(?=^##\s+(?:[IVX]+\.\s*)?(?:Part|Chapter|Section)\s*\d)',
+            r'(?=^##\s+(?:[IVX]+\.\s*)?(?:Part|Chapter|Section|Segment)\s*\d)',
             outline_text, flags=re.MULTILINE,
         )
         # Fallback: try splitting on ## I. / ## II. / ## III. etc.

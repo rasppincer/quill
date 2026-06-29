@@ -27,6 +27,18 @@ Feature: Agent pipeline
     And the response includes "fiction"
     And the response includes "non-fiction"
 
+  Scenario: Brief advances to structure not outline
+    Given a piece "brief-struct" at stage "brief"
+    When I set the piece trigger to "manual"
+    When I advance the piece
+    Then the piece is at stage "structure"
+
+  Scenario: Structure stage has prompt in all flavors
+    When I query agents for stage "structure"
+    Then the response includes "default"
+    And the response includes "fiction"
+    And the response includes "non-fiction"
+
   Scenario: Chain run skips stages without agent prompts
     Given a piece "chain-skip" at stage "brief"
     And the piece has outline.md and draft.md content

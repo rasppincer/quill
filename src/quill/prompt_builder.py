@@ -58,6 +58,17 @@ class PromptBuilder:
             "loop_count": loop_count,
             "is_looping": loop_count > 0,
         }
+        # Structure stage: inject segment calculation variables
+        if stage == "structure":
+            from .structure import calculate_segments, parse_target_length
+            target = parse_target_length(getattr(piece, "target_length", ""))
+            seg = calculate_segments(target)
+            ctx.update({
+                "SEGMENT_COUNT": seg["count"],
+                "SEGMENT_STYLE": seg["style"],
+                "SEGMENT_NAME": seg["name"],
+                "SEGMENT_TARGET": seg["target"],
+            })
         if extra:
             ctx.update(extra)
         return ctx

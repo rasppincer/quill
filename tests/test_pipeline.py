@@ -150,15 +150,15 @@ class TestDefaultPipeline:
 
     def test_loads_default(self, pipeline):
         assert pipeline.name == "default"
-        assert len(pipeline.stages) == 11
+        assert len(pipeline.stages) == 12
 
     def test_stage_order(self, pipeline):
-        expected = ["brief", "outline", "research", "draft", "review", "revise",
+        expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
                      "humanize", "validate", "polish", "summary", "done"]
         assert pipeline.stage_order == expected
 
-    def test_brief_leads_to_outline(self, pipeline):
-        assert pipeline.next_stage("brief") == "outline"
+    def test_brief_leads_to_structure(self, pipeline):
+        assert pipeline.next_stage("brief") == "structure"
 
     def test_done_is_terminal(self, pipeline):
         assert pipeline.next_stage("done") is None
@@ -194,13 +194,13 @@ class TestDefaultPipeline:
 
     def test_stage_order_includes_summary(self, pipeline):
         """Summary should be between polish and done in stage order."""
-        expected = ["brief", "outline", "research", "draft", "review", "revise",
+        expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
                      "humanize", "validate", "polish", "summary", "done"]
         assert pipeline.stage_order == expected
 
     def test_stage_count_with_summary(self, pipeline):
-        """Pipeline should have 11 stages (10 + summary)."""
-        assert len(pipeline.stages) == 11
+        """Pipeline should have 12 stages (including summary and structure)."""
+        assert len(pipeline.stages) == 12
 
     def test_summary_stage_inputs(self, pipeline):
         """Summary stage should read polish.md as input."""

@@ -13,6 +13,10 @@ research:
   required: false  # fiction: user can skip research
 
 stages:
+  structure:
+    name: "Structure Agent"
+    description: "Auto-segments fiction into narrative arcs"
+    temperature: 0.3
   outline:
     name: "Outline Agent"
     description: "Generates fiction outline — narrative structure, character arcs, pacing"

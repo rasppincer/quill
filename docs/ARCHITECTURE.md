@@ -12,8 +12,18 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 │  API Server (Flask, port 8325)              │  app.py (thin glue)
 │  Blueprints: pieces, agents, runs, export   │  blueprints/*.py
 ├─────────────────────────────────────────────┤
-│  Agent Runner                               │  runner.py
-│  Two-call: generate → evaluate → decide     │
+│  Agent Runner                               │  runner.py (facade)
+│  ┌─────────────────────────────────────┐    │
+│  │ StageRunner (LLMCaller)             │    │  stage_runner.py
+│  │ Two-call: generate → evaluate       │    │
+│  │ Chaptered generation for long-form  │    │
+│  ├─────────────────────────────────────┤    │
+│  │ ChainOrchestrator                   │    │  chain_orchestrator.py
+│  │ Auto pipeline, interrupt, chain     │    │
+│  ├─────────────────────────────────────┤    │
+│  │ ContextAssembler                    │    │  context_assembler.py
+│  │ Prompt composition, stage inputs    │    │
+│  └─────────────────────────────────────┘    │
 ├─────────────────────────────────────────────┤
 │  LLM Client                                 │  llm.py
 │  OpenAI-compatible, urllib, zero deps       │
@@ -26,6 +36,13 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 ├─────────────────────────────────────────────┤
 │  Piece Storage                              │  piece.py
 │  Directory-per-piece, meta.yaml + stage .md │
+│  Stage states, trigger, can_navigate        │
+├─────────────────────────────────────────────┤
+│  Logging                                    │  logging_config.py
+│  Per-piece logs, common log, 3-day rotation │
+├─────────────────────────────────────────────┤
+│  Instrumentation                            │  timeit.py
+│  @timeit decorator, LLM call timing         │
 └─────────────────────────────────────────────┘
 ```
 
@@ -64,8 +81,42 @@ Stages without explicit inputs fall back to reading the previous stage's output.
 ### Transitions
 
 - **Advance**: moves to next stage, preserves old stage file
-- **Reject**: reverts to allowed previous stage
+- **Reject**: reverts to allowed previous stage, clears stage_states and file bodies for stages after target
 - **Loop**: content stages can loop back on negative evaluation (max_loops configurable per flavor)
+
+### Stage States
+
+Each stage has a state tracked in `meta.yaml`:
+
+```yaml
+stage_states:
+  brief: ready
+  outline: ready
+  research: ready
+  draft: generating
+```
+
+States: `empty` (not reached), `generating` (agent running), `ready` (completed), `superseded` (stale — earlier stage re-run).
+
+### Trigger Modes
+
+Per-piece trigger setting controls agent behavior on advance:
+
+- **`manual`** (default): advance moves to next stage, agent does NOT run
+- **`on_advance`**: advance moves + runs agent automatically
+- **`auto`**: chain mode — runs all remaining stages without user intervention
+
+### Chaptered Generation
+
+For long-form content (10k+ words), the draft stage detects multi-part outlines and generates each chapter separately:
+
+1. Parse outline/brief for `## Part N: Title` headers
+2. Extract character sheet from brief for persistent context
+3. Generate each chapter as separate LLM call (~2000 words each)
+4. Concatenate chapters into single draft file
+5. Evaluate the full draft with chapter context in the evaluate prompt
+
+Chapter detection falls back through: outline headers → brief headers → brief bullet points (`- Part N: Description`).
 
 ## Agent System
 
@@ -175,18 +226,20 @@ Each piece lives in its own directory under `output/`:
 ```
 quill/output/
 └── <piece-id>/
-    ├── meta.yaml              ← source of truth (current_stage, metadata, loops)
+    ├── meta.yaml              ← source of truth (current_stage, metadata, loops, stage_states, trigger)
     ├── 01_brief.md            ← brief content (with YAML frontmatter)
     ├── 02_outline.md          ← structure, arcs, pacing map
-    ├── research.md            ← web research results (if research stage ran)
-    ├── 03_draft.md            ← the actual prose
-    ├── 03_draft.decision.md   ← evaluation of draft (JSON decision + critique)
-    ├── 04_review.md           ← reviewer annotations + feedback
-    ├── 05_revise.md           ← draft revised per review feedback
-    ├── 05_revise.decision.md  ← evaluation of revision
-    ├── 06_humanize.md         ← de-AI'd version
-    ├── 07_validate.md         ← fact-checked version
-    ├── 08_polish.md           ← final line edits
+    ├── 02_outline.decision.md ← evaluation of outline
+    ├── 03_research.md         ← web research results (if research stage ran)
+    ├── 04_draft.md            ← the actual prose (chaptered: ## Part N headers)
+    ├── 04_draft.decision.md   ← evaluation of draft (JSON decision + critique)
+    ├── 04_draft.generate_ch1-prompt.md  ← debug: per-chapter prompts
+    ├── 05_review.md           ← reviewer annotations + feedback
+    ├── 06_revise.md           ← draft revised per review feedback
+    ├── 06_revise.decision.md  ← evaluation of revision
+    ├── 07_humanize.md         ← de-AI'd version
+    ├── 08_validate.md         ← fact-checked version
+    ├── 09_polish.md           ← final line edits
     ├── 09_done.md             ← published version
     ├── *.metrics.yaml         ← per-stage readability metrics
     └── run-log.jsonl          ← append-only run history
@@ -195,6 +248,21 @@ quill/output/
 Content stages produce two files:
 - `{stage}.md` — generated content (persisted immediately after generate call)
 - `{stage}.decision.md` — evaluation result (decision + critique)
+
+### Logging
+
+Two-tier logging in `logs/`:
+
+```
+logs/
+├── quill.log                    ← common log (startup, config, non-piece events)
+├── quill.log.2026-06-27         ← rotated (3 days retention)
+└── pieces/
+    ├── my-story_20260627.log    ← per-piece log (stage transitions, LLM calls)
+    └── ...
+```
+
+`PieceLogHandler` routes records with `piece_id` to per-piece files. `TimedRotatingFileHandler` for daily rotation. Old piece logs auto-cleaned after 3 days. No stdout — logs only. `QUILL_LOG_LEVEL` env var (default INFO).
 
 ## Observability
 

@@ -116,7 +116,7 @@
 ### Pipeline state management
 
 - [x] **Reject doesn't reset stage_states** — Fixed: reject clears stage_states + stage files for stages after target.
-- [ ] **Pipeline skips stages with stale "ready" state** — After reject + re-advance, pipeline auto-advances through stages because stage_states say "ready". Each advance should re-run agent if stage file only has frontmatter.
+- [x] **Pipeline skips stages with stale "ready" state** — Verified: reject clears stage_states + file bodies. Re-advance runs agents on all stages. Note: reject only allows one-step-back transitions (draft→outline, outline→brief).
 - [x] **run endpoint only runs on current_stage** — Already had `stage` and `chain` parameters.
 
 ### Chaptered generation

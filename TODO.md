@@ -345,7 +345,7 @@ Output: free-form brief text, saved as child piece's `01_brief.md`.
 - [x] **Error handling**: If a chapter fails (agent error, max loops), orchestrator retries or skips with warning
 - [x] **Progress**: SSE events for orchestrator progress (chapter 3/10, stage draft)
 - [x] **Dashboard**: Parent piece shows child pieces in the stage content viewer (clickable links)
-- [ ] **Tests**: pytest for orchestrator logic + NarrativeState parsing, behave for full multi-chapter flow
+- [x] **Tests**: pytest for orchestrator logic + NarrativeState parsing, behave for full multi-chapter flow
 
 ### Design Decisions
 

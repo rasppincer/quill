@@ -153,3 +153,105 @@ class TestForwardOutlines:
         orch = Orchestrator.__new__(Orchestrator)
         outlines = orch._extract_forward_outlines("", current_index=0, lookahead=2)
         assert outlines == []
+
+
+# ---------------------------------------------------------------------------
+# Chapter extraction from structure output
+# ---------------------------------------------------------------------------
+
+
+class TestExtractChapters:
+    """Test extracting chapter list from structure output."""
+
+    def test_extract_segment_headers(self):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        structure_text = """---
+id: test-piece
+---
+
+## Segment 1: The Setup
+## Segment 2: The Training
+## Segment 3: The Heist"""
+        chapters = orch._extract_chapters(structure_text)
+        assert len(chapters) == 3
+        assert chapters[0]["title"] == "The Setup"
+        assert chapters[1]["title"] == "The Training"
+        assert chapters[2]["title"] == "The Heist"
+
+    def test_extract_part_headers(self):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        structure_text = """## Part 1: Beginning
+## Part 2: Middle
+## Part 3: End"""
+        chapters = orch._extract_chapters(structure_text)
+        assert len(chapters) == 3
+        assert chapters[0]["title"] == "Beginning"
+
+    def test_extract_empty(self):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        assert orch._extract_chapters("") == []
+        assert orch._extract_chapters(None) == []
+
+    def test_extract_with_frontmatter(self):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        structure_text = """---
+id: test
+current_stage: structure
+---
+
+## Segment 1: Alpha
+## Segment 2: Beta"""
+        chapters = orch._extract_chapters(structure_text)
+        assert len(chapters) == 2
+        assert chapters[0]["title"] == "Alpha"
+
+
+# ---------------------------------------------------------------------------
+# has_chapters detection
+# ---------------------------------------------------------------------------
+
+
+class TestHasChapters:
+    """Test detecting whether a piece has chapters."""
+
+    def test_has_chapters_with_structure_file(self, tmp_path):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        piece_dir = tmp_path / "test-piece"
+        piece_dir.mkdir()
+        # Write meta.yaml
+        (piece_dir / "meta.yaml").write_text(
+            "id: test-piece\ntitle: Test\ncurrent_stage: draft\n"
+        )
+        # Write structure file
+        (piece_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n## Segment 3: C\n"
+        )
+        assert orch._has_chapters(piece_dir) is True
+
+    def test_no_chapters_without_structure(self, tmp_path):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        piece_dir = tmp_path / "test-piece"
+        piece_dir.mkdir()
+        (piece_dir / "meta.yaml").write_text(
+            "id: test-piece\ntitle: Test\ncurrent_stage: draft\n"
+        )
+        assert orch._has_chapters(piece_dir) is False
+
+    def test_no_chapters_single_segment(self, tmp_path):
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        piece_dir = tmp_path / "test-piece"
+        piece_dir.mkdir()
+        (piece_dir / "meta.yaml").write_text(
+            "id: test-piece\ntitle: Test\ncurrent_stage: draft\n"
+        )
+        (piece_dir / "02_structure.md").write_text(
+            "## Segment 1: The Only Chapter\n"
+        )
+        assert orch._has_chapters(piece_dir) is False  # single segment = not chaptered

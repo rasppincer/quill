@@ -126,3 +126,46 @@ class Orchestrator:
         """Strip YAML frontmatter from text."""
         m = _FRONTMATTER_RE.match(text)
         return text[m.end():] if m else text
+
+    @staticmethod
+    def _extract_chapters(structure_text: str | None) -> list[dict]:
+        """Extract chapter list from structure output.
+
+        Parses ## Segment N: Title, ## Part N: Title, ## Chapter N: Title headers.
+
+        Returns:
+            list of {"index": int, "title": str} dicts (0-based index)
+        """
+        if not structure_text:
+            return []
+
+        # Strip frontmatter
+        m = _FRONTMATTER_RE.match(structure_text)
+        body = structure_text[m.end():] if m else structure_text
+
+        headers = re.findall(
+            r'^##\s+(?:Segment|Part|Chapter)\s*\d+[:\s]+(.+)',
+            body,
+            re.MULTILINE,
+        )
+
+        return [
+            {"index": i, "title": title.strip()}
+            for i, title in enumerate(headers)
+        ]
+
+    @staticmethod
+    def _has_chapters(piece_dir: Path) -> bool:
+        """Check if a piece has multiple chapters (from structure output).
+
+        Returns True if structure.md exists and has 2+ segment headers.
+        Single-segment pieces are not considered chaptered.
+        """
+        from .piece import _stage_filename
+        structure_file = piece_dir / _stage_filename("structure")
+        if not structure_file.exists():
+            return False
+
+        text = structure_file.read_text(encoding="utf-8")
+        chapters = Orchestrator._extract_chapters(text)
+        return len(chapters) >= 2

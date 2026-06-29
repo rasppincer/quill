@@ -6,6 +6,7 @@ Feature: Agent pipeline
   Background:
     Given a clean Quill instance
 
+  @slow
   Scenario: Chain run processes all stages with agent prompts
     Given a piece "chain-test" at stage "brief"
     And the piece has outline.md and draft.md content

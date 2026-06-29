@@ -90,6 +90,10 @@ class Piece:
 
     # Agent configuration
     agent_set: str = ""  # empty = auto-detect
+    trigger: str = "on_advance"  # manual | on_advance | auto
+
+    # Stage state tracking
+    stage_states: dict[str, str] = field(default_factory=dict)
 
     # Content (everything after the frontmatter of the CURRENT stage file)
     body: str = ""
@@ -97,6 +101,14 @@ class Piece:
     # File location
     _path: Path | None = field(default=None, repr=False)  # directory for new format, file for legacy
     _is_legacy: bool = field(default=False, repr=False)
+
+    @property
+    def log(self):
+        """Get a logger tagged with this piece's ID."""
+        if not hasattr(self, "_log") or self._log is None:
+            from .logging_config import get_piece_logger
+            self._log = get_piece_logger("piece", self.id)
+        return self._log
 
     def to_frontmatter(self) -> dict:
         """Export metadata as a dict for YAML serialization."""
@@ -114,6 +126,8 @@ class Piece:
             "created": self.created,
             "updated": self.updated,
             "agent_set": self.agent_set,
+            "trigger": self.trigger,
+            "stage_states": self.stage_states,
         }
 
     def to_markdown(self) -> str:
@@ -202,19 +216,28 @@ class Piece:
             return path
 
         # New directory-per-piece format
-        base = output_dir or DEFAULT_OUTPUT_DIR
-        d = base / self.id
+        if self._path and self._path.is_dir():
+            d = self._path
+        else:
+            base = output_dir or DEFAULT_OUTPUT_DIR
+            d = base / self.id
         d.mkdir(parents=True, exist_ok=True)
 
         # Save stage file
         path = d / _stage_filename(self.current_stage)
         path.write_text(self.to_markdown(), encoding="utf-8")
 
-        # Save/update meta.yaml
+        # Save/update meta.yaml (merge with existing to preserve stage_states, loops, etc.)
         meta_path = d / "meta.yaml"
-        meta_data = self.to_frontmatter()
+        existing_meta = {}
+        if meta_path.exists():
+            try:
+                existing_meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+        existing_meta.update(self.to_frontmatter())
         meta_path.write_text(
-            yaml.dump(meta_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            yaml.dump(existing_meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
             encoding="utf-8",
         )
 
@@ -256,6 +279,83 @@ class Piece:
             encoding="utf-8",
         )
         logger.info("Advanced meta.yaml to stage '%s'", next_stage)
+
+    # ── Stage state management ───────────────────────────────────────
+
+    def get_stage_state(self, stage: str) -> str:
+        """Get the state of a stage: empty | generating | ready | superseded.
+
+        Reads from meta.yaml stage_states dict. Unknown stages default to 'empty'.
+        """
+        return self.stage_states.get(stage, "empty")
+
+    def set_stage_state(self, stage: str, state: str):
+        """Set the state of a stage and persist to meta.yaml."""
+        self.stage_states[stage] = state
+        self._save_stage_states()
+
+    def supersede_from(self, stage: str):
+        """Mark all stages after `stage` as superseded, reset frontier, clear content.
+
+        The given stage itself is NOT superseded — it's the new frontier.
+        """
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+
+        if stage not in pipeline.stage_order:
+            return
+
+        idx = pipeline.stage_order.index(stage)
+        later_stages = pipeline.stage_order[idx + 1:]
+
+        for s in later_stages:
+            self.stage_states[s] = "superseded"
+            # Clear content file
+            f = self.stage_dir() / _stage_filename(s)
+            if f.exists():
+                f.unlink()
+                logger.info("Superseded: removed %s", f)
+            # Clear decision file
+            decision_f = self.stage_dir() / _stage_filename(s, ".decision.md")
+            if decision_f.exists():
+                decision_f.unlink()
+
+        self.current_stage = stage
+        self._save_stage_states()
+        self.advance_to(stage)
+        logger.info("Superseded from stage '%s', frontier reset", stage)
+
+    def can_navigate(self, stage: str) -> bool:
+        """Check if a stage is viewable. Empty stages are locked.
+
+        Fallback: if stage not in stage_states, allow up to current_stage
+        (backward compat with pieces created before stage_states).
+        """
+        state = self.get_stage_state(stage)
+        if state != "empty":
+            return True
+        # Stage not in stage_states — fall back to current_stage as frontier
+        try:
+            from .pipeline import load_pipeline
+            pipeline = load_pipeline("default")
+            if stage in pipeline.stage_order and self.current_stage in pipeline.stage_order:
+                return pipeline.stage_order.index(stage) <= pipeline.stage_order.index(self.current_stage)
+        except Exception:
+            pass
+        return False
+
+    def _save_stage_states(self):
+        """Persist stage_states to meta.yaml."""
+        meta_path = self.stage_dir() / "meta.yaml"
+        if meta_path.exists():
+            meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
+        else:
+            meta = {}
+        meta["stage_states"] = self.stage_states
+        meta_path.write_text(
+            yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def _clean_content(content: str) -> str:
@@ -320,6 +420,8 @@ def _load_from_text(text: str, path: Path) -> Piece:
         created=meta.get("created", ""),
         updated=meta.get("updated", ""),
         agent_set=meta.get("agent_set", ""),
+        trigger=meta.get("trigger", "on_advance"),
+        stage_states=meta.get("stage_states", {}) or {},
         body=body,
         _path=path,
     )
@@ -367,6 +469,8 @@ def load_piece(path: Path) -> Piece:
             created=meta.get("created", ""),
             updated=meta.get("updated", ""),
             agent_set=meta.get("agent_set", ""),
+            trigger=meta.get("trigger", "on_advance"),
+            stage_states=meta.get("stage_states", {}) or {},
             body=body,
             _path=path,
             _is_legacy=False,

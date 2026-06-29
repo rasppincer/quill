@@ -11,11 +11,16 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 from typing import Any
 
+from .timeit import log_timing
+from .logging_config import get_logger
+
 logger = logging.getLogger(__name__)
+_common_log = get_logger("llm")
 
 
 class LLMClient:
@@ -30,7 +35,8 @@ class LLMClient:
         self.max_tokens = max_tokens
 
     def chat(self, system: str, user: str, temperature: float | None = None,
-             max_tokens: int | None = None, response_format: dict | None = None) -> str:
+             max_tokens: int | None = None, response_format: dict | None = None,
+             piece_id: str | None = None) -> str:
         """Send a chat completion request.
 
         Args:
@@ -69,10 +75,24 @@ class LLMClient:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
+        input_chars = len(system) + len(user)
+        t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-                return body["choices"][0]["message"]["content"]
+                elapsed = time.monotonic() - t0
+                content = body["choices"][0]["message"]["content"]
+                log_timing(f"llm.chat ({self.model}, {input_chars} chars in, {len(content)} chars out)", elapsed)
+
+                # Log to appropriate logger
+                log_msg = f"LLM call: model={self.model}, in={input_chars} chars, out={len(content)} chars, elapsed={elapsed:.1f}s"
+                if piece_id:
+                    from .logging_config import get_piece_logger
+                    get_piece_logger("llm", piece_id).info(log_msg)
+                else:
+                    _common_log.info(log_msg)
+
+                return content
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="replace")
             raise ConnectionError(f"LLM API error {e.code}: {error_body}") from e

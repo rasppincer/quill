@@ -134,6 +134,7 @@ def pieces_create():
     )
 
     path = piece.save()
+    piece.set_stage_state("brief", "ready")
     return jsonify({"id": piece.id, "title": piece.title, "stage": piece.current_stage, "path": str(path)}), 201
 
 
@@ -406,6 +407,10 @@ def pieces_advance(piece_id: str):
     if RunManager().is_piece_running(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' has a running job — wait for it to complete"}), 409
 
+    # Block advance during auto mode
+    if piece.trigger == "auto" and RunManager().is_piece_running(piece_id):
+        return jsonify({"error": "Piece is in auto mode — cannot advance manually"}), 409
+
     # Brief stage requires user-written content before advancing
     if piece.current_stage == "brief":
         stage_file = piece.stage_dir() / _stage_filename("brief")
@@ -452,12 +457,29 @@ def pieces_advance(piece_id: str):
     if old_stage_file.exists():
         maybe_recompute(old_stage_file)
 
-    return jsonify({
+    result_data = {
         "id": piece.id,
         "previous_stage": old_stage,
         "current_stage": piece.current_stage,
         "progress": pipeline.progress(piece.current_stage),
-    })
+    }
+
+    # If trigger is on_advance or auto, run agent on the new stage
+    if piece.trigger in ("on_advance", "auto"):
+        from ..runner import StageRunner
+        import uuid as _uuid
+        agent_set = piece.agent_set or "default"
+        runner = StageRunner(agent_set=agent_set)
+        trace_id = str(_uuid.uuid4())
+        agent_result = runner.run_stage(piece_id, piece.current_stage, trace_id=trace_id)
+        result_data["agent"] = {
+            "stage": agent_result.stage,
+            "decision": agent_result.decision,
+            "critique": agent_result.critique[:500] if agent_result.critique else "",
+            "error": agent_result.error,
+        }
+
+    return jsonify(result_data)
 
 
 @bp.route("/api/pieces/<piece_id>/reject", methods=["POST"])
@@ -488,6 +510,24 @@ def pieces_reject(piece_id: str):
     old_stage = piece.current_stage
     piece.current_stage = target
 
+    # Reset stage_states for stages after the target
+    if piece.stage_states:
+        stage_order = pipeline.stage_order
+        if target in stage_order:
+            target_idx = stage_order.index(target)
+            stages_to_clear = [s for s in stage_order[target_idx + 1:]
+                               if s in piece.stage_states]
+            for s in stages_to_clear:
+                del piece.stage_states[s]
+                # Clear stage content files
+                stage_file = piece.stage_dir() / _stage_filename(s)
+                if stage_file.exists():
+                    # Write frontmatter only (preserve file, clear body)
+                    meta = piece.to_frontmatter()
+                    fm = yaml.dump(meta, default_flow_style=False,
+                                   allow_unicode=True, sort_keys=False)
+                    stage_file.write_text(f"---\n{fm}---\n", encoding="utf-8")
+
     # Load body from target stage file
     if not piece._is_legacy:
         target_file = piece.stage_dir() / _stage_filename(target)
@@ -505,3 +545,66 @@ def pieces_reject(piece_id: str):
         "reason": data.get("reason", ""),
         "progress": pipeline.progress(piece.current_stage),
     })
+
+
+# ---------------------------------------------------------------------------
+# Stage navigation
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/stages/<stage>")
+def pieces_stage_navigate(piece_id: str, stage: str):
+    """Navigate to a specific stage — returns content + metrics.
+
+    Only stages with state != 'empty' are navigable.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    if not piece.can_navigate(stage):
+        return jsonify({"error": f"Stage '{stage}' has not yet been reached"}), 404
+
+    stage_file = piece.stage_dir() / _stage_filename(stage)
+    body = ""
+    if stage_file.exists():
+        text = stage_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        body = text[m.end():] if m else text
+
+    metrics = maybe_recompute(stage_file) if stage_file.exists() else None
+
+    return jsonify({
+        "piece_id": piece_id,
+        "stage": stage,
+        "state": piece.get_stage_state(stage),
+        "content": body,
+        "metrics": metrics,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Trigger management
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/trigger", methods=["POST"])
+def pieces_set_trigger(piece_id: str):
+    """Set the trigger mode for a piece.
+
+    JSON body:
+        trigger: manual | on_advance | auto
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    trigger = data.get("trigger", "").strip()
+    if trigger not in ("manual", "on_advance", "auto"):
+        return jsonify({"error": f"Invalid trigger '{trigger}'. Must be: manual, on_advance, auto"}), 400
+
+    piece.trigger = trigger
+    piece.save()
+
+    return jsonify({"id": piece.id, "trigger": piece.trigger})

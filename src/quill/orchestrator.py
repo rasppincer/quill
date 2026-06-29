@@ -44,7 +44,6 @@ class Orchestrator:
         chapter_index: int,
         total_chapters: int,
         stage: str,
-        chapter_content: str,
         prior_states: list[NarrativeState],
         prior_full_texts: dict[int, str],
         forward_outlines: list[str],
@@ -56,14 +55,14 @@ class Orchestrator:
             chapter_index: 0-based index of the current chapter
             total_chapters: total number of chapters
             stage: pipeline stage being executed
-            chapter_content: current chapter's content for this stage
             prior_states: NarrativeState objects for distant chapters (1..N-2)
             prior_full_texts: {chapter_index: full_text} for close neighbor (N-1)
             forward_outlines: outline sketches for chapters N+1..N+2
             parent_brief: the parent piece's brief text
 
         Returns:
-            dict of template variables for prompt rendering
+            dict of template variables for prompt rendering.
+            Does NOT include CONTENT — that comes from stage inputs.
         """
         # Build prior context section
         prior_parts = []
@@ -91,7 +90,6 @@ class Orchestrator:
         return {
             "CHAPTER_INDEX": chapter_index + 1,
             "TOTAL_CHAPTERS": total_chapters,
-            "CONTENT": chapter_content,
             "PRIOR_CONTEXT": prior_context,
             "FORWARD_OUTLINES": forward_text,
             "PARENT_BRIEF": parent_brief,
@@ -273,14 +271,12 @@ class Orchestrator:
                 )
 
             # Build sliding context
-            chapter_content = self._read_chapter_content(child_dir, stage)
             forward = self._extract_forward_outlines(structure_text, i, lookahead=2)
 
             ctx = self._build_sliding_context(
                 chapter_index=i,
                 total_chapters=len(chapters),
                 stage=stage,
-                chapter_content=chapter_content,
                 prior_states=narrative_states,
                 prior_full_texts=prior_full_texts,
                 forward_outlines=forward,

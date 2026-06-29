@@ -23,7 +23,6 @@ class TestSlidingContext:
             chapter_index=0,
             total_chapters=5,
             stage="draft",
-            chapter_content="Chapter 1 content...",
             prior_states=[],
             prior_full_texts={},
             forward_outlines=["Chapter 2 outline", "Chapter 3 outline"],
@@ -31,7 +30,7 @@ class TestSlidingContext:
         )
         assert ctx["CHAPTER_INDEX"] == 1
         assert ctx["TOTAL_CHAPTERS"] == 5
-        assert "Chapter 1 content..." in ctx["CONTENT"]
+        assert "CONTENT" not in ctx
         assert ctx["PRIOR_CONTEXT"] == ""
         assert "Chapter 2 outline" in ctx["FORWARD_OUTLINES"]
 
@@ -43,14 +42,13 @@ class TestSlidingContext:
             chapter_index=1,
             total_chapters=5,
             stage="revise",
-            chapter_content="Chapter 2 content...",
             prior_states=[],
             prior_full_texts={0: "Full text of chapter 1..."},
             forward_outlines=["Chapter 3 outline"],
             parent_brief="A story about gold...",
         )
+        assert "CONTENT" not in ctx
         assert "Full text of chapter 1..." in ctx["PRIOR_CONTEXT"]
-        assert "Chapter 2 content..." in ctx["CONTENT"]
 
     def test_far_chapter_gets_narrative_state(self):
         """Chapter 4 gets NarrativeState for chapters 1-2, full text for chapter 3."""
@@ -70,19 +68,17 @@ class TestSlidingContext:
             chapter_index=3,
             total_chapters=6,
             stage="humanize",
-            chapter_content="Chapter 4 content...",
             prior_states=[ns1, ns2],
             prior_full_texts={2: "Full text of chapter 3..."},
             forward_outlines=["Chapter 5 outline", "Chapter 6 outline"],
             parent_brief="A story about gold...",
         )
+        assert "CONTENT" not in ctx
         # Distant chapters (1-2) in NarrativeState
         assert "Aris" in ctx["PRIOR_CONTEXT"]
         assert "suspicious" in ctx["PRIOR_CONTEXT"]
         # Close neighbor (3) in full text
         assert "Full text of chapter 3..." in ctx["PRIOR_CONTEXT"]
-        # Current chapter
-        assert "Chapter 4 content..." in ctx["CONTENT"]
 
     def test_last_chapter_no_forward(self):
         """Last chapter has no forward outlines."""
@@ -92,7 +88,6 @@ class TestSlidingContext:
             chapter_index=4,
             total_chapters=5,
             stage="polish",
-            chapter_content="Chapter 5 content...",
             prior_states=[],
             prior_full_texts={3: "Full text of chapter 4..."},
             forward_outlines=[],
@@ -108,15 +103,12 @@ class TestSlidingContext:
             chapter_index=0,
             total_chapters=3,
             stage="state",
-            chapter_content="Polished chapter 1...",
             prior_states=[],
             prior_full_texts={},
             forward_outlines=[],
             parent_brief="A story about gold...",
         )
-        assert "Polished chapter 1..." in ctx["CONTENT"]
-
-
+        assert "CONTENT" not in ctx
 # ---------------------------------------------------------------------------
 # Forward outline extraction
 # ---------------------------------------------------------------------------

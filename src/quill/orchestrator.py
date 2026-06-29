@@ -128,6 +128,14 @@ class Orchestrator:
         return text[m.end():] if m else text
 
     @staticmethod
+    def _get_segment_target(target_length: str) -> int:
+        """Get the per-segment word target from piece's target_length."""
+        from .structure import calculate_segments, parse_target_length
+        parsed = parse_target_length(target_length)
+        seg = calculate_segments(parsed)
+        return seg["target"]
+
+    @staticmethod
     def _extract_chapters(structure_text: str | None) -> list[dict]:
         """Extract chapter list from structure output.
 
@@ -225,6 +233,27 @@ class Orchestrator:
         for i, chapter in enumerate(chapters):
             child_id = child_ids[i]
             child_dir = base / child_id
+
+            # Generate chapter brief if not already present
+            brief_file = child_dir / "01_brief.md"
+            if not brief_file.exists() or not brief_file.read_text(encoding="utf-8").strip():
+                self._generate_chapter_brief(
+                    child_dir=child_dir,
+                    chapter_index=i,
+                    total_chapters=len(chapters),
+                    chapter_title=chapter["title"],
+                    parent_outline=self._strip_frontmatter(
+                        (piece_dir / _stage_filename("outline")).read_text(encoding="utf-8")
+                        if (piece_dir / _stage_filename("outline")).exists() else ""
+                    ),
+                    structure_text=structure_text,
+                    prior_states=narrative_states,
+                    piece_title=parent.title,
+                    genre=parent.genre,
+                    type=parent.type,
+                    language=parent.language,
+                    segment_target=self._get_segment_target(parent.target_length),
+                )
 
             # Build sliding context
             chapter_content = self._read_chapter_content(child_dir, stage)
@@ -336,6 +365,114 @@ class Orchestrator:
             child_ids.append(child_id)
 
         return child_ids
+
+    def _generate_chapter_brief(
+        self,
+        child_dir: Path,
+        chapter_index: int,
+        total_chapters: int,
+        chapter_title: str,
+        parent_outline: str,
+        structure_text: str,
+        prior_states: list[NarrativeState],
+        piece_title: str,
+        genre: str,
+        type: str,
+        language: str,
+        segment_target: int,
+    ) -> str:
+        """Generate a chapter brief using the LLM.
+
+        Args:
+            child_dir: child piece directory to write brief.md
+            chapter_index: 0-based chapter index
+            total_chapters: total number of chapters
+            chapter_title: title from structure output
+            parent_outline: parent piece's outline text (body, no frontmatter)
+            structure_text: full structure output text
+            prior_states: NarrativeState from completed chapters
+            piece_title: parent piece title
+            genre, type, language: piece metadata
+            segment_target: target word count per segment
+
+        Returns:
+            The generated brief text.
+        """
+        from .agent import load_model_config
+        from .llm import LLMClient
+        from .prompt_builder import render_prompt
+
+        # Build prior context
+        prior_context = ""
+        if prior_states:
+            merged = NarrativeState.merge(prior_states)
+            prior_context = (
+                f"## Context from Previous Chapters\n\n"
+                f"```yaml\n{merged.to_yaml()}```"
+            )
+
+        # Load prompt template
+        from .agent import AGENTS_DIR
+        template_path = AGENTS_DIR / self.agent_set / "chapter_brief.prompt.md"
+        if not template_path.exists():
+            # Fall back to default
+            template_path = AGENTS_DIR / "default" / "chapter_brief.prompt.md"
+
+        template = template_path.read_text(encoding="utf-8")
+
+        # Strip frontmatter from structure text for the prompt
+        structure_body = self._strip_frontmatter(structure_text)
+
+        # Build context
+        ctx = {
+            "TITLE": piece_title,
+            "GENRE": genre,
+            "TYPE": type,
+            "LANGUAGE": language,
+            "CHAPTER_INDEX": chapter_index + 1,
+            "TOTAL_CHAPTERS": total_chapters,
+            "CHAPTER_TITLE": chapter_title,
+            "SEGMENT_TARGET": segment_target,
+            "PARENT_OUTLINE": parent_outline,
+            "STRUCTURE": structure_body,
+            "PRIOR_CONTEXT": prior_context,
+        }
+
+        prompt = render_prompt(template, ctx)
+
+        # Call LLM
+        model_cfg = load_model_config()
+        client = LLMClient(
+            api_base=model_cfg.get("api_base", "https://api.openai.com/v1"),
+            api_key=model_cfg.get("api_key", ""),
+            model=model_cfg.get("model", "gpt-4o"),
+            temperature=0.7,
+            max_tokens=2048,
+        )
+
+        system = (
+            f"You are a chapter brief writer for a {genre} {type} in {language}. "
+            f"Write detailed, specific briefs that guide an AI writer. "
+            f"Do NOT include JSON or decision blocks — just write the brief."
+        )
+
+        logger.info(
+            "Orchestrator: generating brief for chapter %d/%d '%s'",
+            chapter_index + 1, total_chapters, chapter_title,
+        )
+
+        brief_text = client.chat(system, prompt)
+
+        # Write brief to child piece
+        brief_file = child_dir / "01_brief.md"
+        brief_file.write_text(brief_text, encoding="utf-8")
+
+        logger.info(
+            "Orchestrator: wrote brief for chapter %d (%d chars)",
+            chapter_index + 1, len(brief_text),
+        )
+
+        return brief_text
 
     def _read_chapter_content(self, child_dir: Path, stage: str) -> str:
         """Read the current content for a chapter at a given stage."""

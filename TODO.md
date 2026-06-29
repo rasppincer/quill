@@ -338,7 +338,7 @@ Output: free-form brief text, saved as child piece's `01_brief.md`.
 
 - [x] **State stage**: Add to pipeline config, prompt templates (3 flavors), structured YAML output
 - [x] **Parent-child tracking**: Meta.yaml field `children: [piece-id-1, ...]` on parent; `parent: piece-id` on children
-- [ ] **Chapter brief generator**: Prompt template + LLM call to auto-generate chapter briefs
+- [x] **Chapter brief generator**: Prompt template + LLM call to auto-generate chapter briefs
 - [x] **NarrativeState parser**: Parse `10_state.yaml` into structured object, merge across chapters
 - [x] **Orchestrator module**: New file `orchestrator.py` — per-stage, per-chapter execution with sliding context
 - [x] **Assembly**: Concatenate per-chapter stage results → parent's stage file (view artifact)

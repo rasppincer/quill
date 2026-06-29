@@ -332,3 +332,65 @@ class TestOrchestratorRunStage:
             meta = yaml.safe_load(meta_file.read_text())
             assert meta["parent"] == "parent-piece"
             assert meta["trigger"] == "auto"
+
+
+# ---------------------------------------------------------------------------
+# Assembly — concatenate per-chapter results into parent stage file
+# ---------------------------------------------------------------------------
+
+
+class TestAssembly:
+    """Test concatenating per-chapter outputs into parent stage file."""
+
+    def test_assemble_stage_outputs(self, tmp_path):
+        """Should concatenate chapter outputs into parent's stage file."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        # Create 3 child directories with stage output
+        for i in range(3):
+            child_dir = tmp_path / f"parent-chapter-{i + 1}"
+            child_dir.mkdir()
+            (child_dir / "05_draft.md").write_text(
+                f"---\nid: parent-chapter-{i + 1}\n---\n\nChapter {i + 1} draft content."
+            )
+
+        child_ids = ["parent-chapter-1", "parent-chapter-2", "parent-chapter-3"]
+        orch._assemble_outputs(child_ids, "draft", tmp_path)
+
+        # Verify parent's stage file (written to base/parent/)
+        parent_file = tmp_path / "parent" / "05_draft.md"
+        assert parent_file.exists()
+        content = parent_file.read_text()
+        assert "Chapter 1 draft content." in content
+        assert "Chapter 2 draft content." in content
+        assert "Chapter 3 draft content." in content
+
+    def test_assemble_empty_children(self, tmp_path):
+        """Assembly with no children should not create a file."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+        orch._assemble_outputs([], "draft", tmp_path)
+        assert not (tmp_path / "parent" / "05_draft.md").exists()
+
+    def test_assemble_missing_child_file(self, tmp_path):
+        """Assembly should skip children without the stage file."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        # Child 1 has output, child 2 does not
+        child1 = tmp_path / "parent-chapter-1"
+        child1.mkdir()
+        (child1 / "05_draft.md").write_text("Chapter 1 content.")
+
+        child2 = tmp_path / "parent-chapter-2"
+        child2.mkdir()
+        # No draft.md
+
+        orch._assemble_outputs(
+            ["parent-chapter-1", "parent-chapter-2"], "draft", tmp_path,
+        )
+        parent_file = tmp_path / "parent" / "05_draft.md"
+        assert parent_file.exists()
+        content = parent_file.read_text()
+        assert "Chapter 1 content." in content

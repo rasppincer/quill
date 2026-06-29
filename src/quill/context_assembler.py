@@ -30,11 +30,15 @@ class ContextAssembler:
     @timeit("ContextAssembler.prepare_stage")
     def prepare_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
+        extra: dict | None = None,
     ):
         """Load pipeline, piece, agent config, and render the prompt.
 
         Returns a StageContext namedtuple. Raises ValueError if the piece
         or agent config is not found.
+
+        Args:
+            extra: Additional template variables (e.g., orchestrator sliding context).
         """
         from .pipeline import load_pipeline
         from .runner import StageContext
@@ -62,7 +66,7 @@ class ContextAssembler:
             PromptBuilder.resolve_input_stages(stage, pipeline),
         )
         ctx = self.prompt_builder.build_context(
-            piece, stage, input_content, metrics_context, loop_count,
+            piece, stage, input_content, metrics_context, loop_count, extra=extra,
         )
         prompt = render_prompt(agent_cfg.prompt_template, ctx)
 

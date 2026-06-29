@@ -93,12 +93,17 @@ class StageRunner:
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
         event_queue=None, trace_id: str | None = None, force_advance: bool = False,
+        extra_context: dict | None = None,
     ) -> AgentDecision:
         """Execute a pipeline stage.
 
         Assembles context, checks limits, delegates to LLMCaller for
         LLM calls, then handles the decision (loop_back/advance) and
         state transitions.
+
+        Args:
+            extra_context: Additional template variables injected into the
+                prompt context (used by orchestrator for sliding window).
         """
         # Research is a special stage
         if stage == "research":
@@ -106,7 +111,7 @@ class StageRunner:
 
         # Assemble context
         try:
-            sc = self.assembler.prepare_stage(piece_id, stage, output_dir)
+            sc = self.assembler.prepare_stage(piece_id, stage, output_dir, extra=extra_context)
         except ValueError as e:
             return AgentDecision(
                 decision="error", critique="", output="", error=str(e),

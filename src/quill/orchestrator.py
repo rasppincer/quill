@@ -271,6 +271,9 @@ class Orchestrator:
         parent.children = child_ids
         parent.save()
 
+        # Assemble per-chapter outputs into parent's stage file (view artifact)
+        self._assemble_outputs(child_ids, stage, base)
+
         logger.info(
             "Orchestrator: completed stage '%s' on %d chapters", stage, len(chapters),
         )
@@ -378,8 +381,8 @@ class Orchestrator:
     ) -> "AgentDecision":
         """Run a pipeline stage on a child piece with orchestrator context.
 
-        Uses the existing StageRunner, passing orchestrator context as extra
-        template variables.
+        Uses the existing StageRunner, passing orchestrator sliding context
+        as extra template variables.
         """
         from .runner import StageRunner
         from .agent import AgentDecision
@@ -389,6 +392,7 @@ class Orchestrator:
         try:
             result = runner.run_stage(
                 child_id, stage, output_dir=base,
+                extra_context=context,
             )
             return result
         except Exception as e:
@@ -403,3 +407,56 @@ class Orchestrator:
                 error=str(e),
                 stage=stage,
             )
+
+    @staticmethod
+    def _assemble_outputs(
+        child_ids: list[str], stage: str, base: Path,
+    ) -> None:
+        """Concatenate per-chapter stage outputs into the parent's stage file.
+
+        This is a VIEW artifact — the orchestrator does not read it for
+        subsequent stages. It exists for display/export purposes.
+
+        Args:
+            child_ids: list of child piece IDs
+            stage: pipeline stage whose outputs to concatenate
+            base: output directory
+        """
+        from .piece import _stage_filename
+
+        if not child_ids:
+            return
+
+        stage_file = _stage_filename(stage)
+        parts = []
+
+        for child_id in child_ids:
+            child_file = base / child_id / stage_file
+            if child_file.exists():
+                text = child_file.read_text(encoding="utf-8")
+                # Strip frontmatter
+                m = _FRONTMATTER_RE.match(text)
+                body = text[m.end():] if m else text
+                if body.strip():
+                    parts.append(body.strip())
+
+        if not parts:
+            return
+
+        # Write assembled output to parent (at base level)
+        # The parent piece directory is the base itself for child pieces
+        # But the parent's own directory is one level up from children
+        # For now, write to the parent piece directory
+        # (parent_id is derived from child_id pattern: parent-chapter-N)
+        parent_id = child_ids[0].rsplit("-chapter-", 1)[0]
+        parent_dir = base / parent_id
+        if not parent_dir.exists():
+            parent_dir.mkdir(parents=True, exist_ok=True)
+
+        assembled = "\n\n---\n\n".join(parts)
+        output_file = parent_dir / stage_file
+        output_file.write_text(assembled, encoding="utf-8")
+
+        logger.info(
+            "Orchestrator: assembled %d chapters into %s", len(parts), output_file,
+        )

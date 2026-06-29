@@ -19,6 +19,25 @@ Create a structured outline from the brief above. Focus on:
 
 ## Output Format
 
+Use `## Part N: Title` headers for each major section. Example:
+
+```
+## Part 1: Introduction
+[thesis, context, hook]
+
+## Part 2: Core Argument
+[main points, evidence, analysis]
+
+## Part 3: Supporting Evidence
+[data, case studies, expert quotes]
+
+## Part 4: Counterarguments
+[opposing views, rebuttals]
+
+## Part 5: Conclusion
+[summary, implications, call to action]
+```
+
 Write the complete outline first. Then, at the very end, add a JSON decision block.
 
 Example:

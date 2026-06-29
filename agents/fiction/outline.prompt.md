@@ -19,6 +19,22 @@ Create a structured narrative outline from the brief above. Focus on:
 
 ## Output Format
 
+Use `## Part N: Title` headers for each major section. Example:
+
+```
+## Part 1: The Setup
+[plot points, character introductions, setting]
+
+## Part 2: The Conflict
+[inciting incident, rising tension]
+
+## Part 3: The Climax
+[turning point, confrontation]
+
+## Part 4: The Resolution
+[falling action, denouement]
+```
+
 Write the complete outline first. Then, at the very end, add a JSON decision block.
 
 Example:

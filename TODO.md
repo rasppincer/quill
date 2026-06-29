@@ -342,8 +342,8 @@ Output: free-form brief text, saved as child piece's `01_brief.md`.
 - [x] **NarrativeState parser**: Parse `10_state.yaml` into structured object, merge across chapters
 - [x] **Orchestrator module**: New file `orchestrator.py` — per-stage, per-chapter execution with sliding context
 - [x] **Assembly**: Concatenate per-chapter stage results → parent's stage file (view artifact)
-- [ ] **Error handling**: If a chapter fails (agent error, max loops), orchestrator retries or skips with warning
-- [ ] **Progress**: SSE events for orchestrator progress (chapter 3/10, stage draft)
+- [x] **Error handling**: If a chapter fails (agent error, max loops), orchestrator retries or skips with warning
+- [x] **Progress**: SSE events for orchestrator progress (chapter 3/10, stage draft)
 - [ ] **Dashboard**: Parent piece shows child pieces in the stage content viewer (clickable links)
 - [ ] **Tests**: pytest for orchestrator logic + NarrativeState parsing, behave for full multi-chapter flow
 

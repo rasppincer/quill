@@ -154,7 +154,7 @@ class TestDefaultPipeline:
 
     def test_stage_order(self, pipeline):
         expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
-                     "humanize", "validate", "polish", "summary", "done"]
+                     "humanize", "validate", "polish", "state", "done"]
         assert pipeline.stage_order == expected
 
     def test_brief_leads_to_structure(self, pipeline):
@@ -170,39 +170,39 @@ class TestDefaultPipeline:
     def test_validate_can_reject_to_humanize(self, pipeline):
         assert pipeline.can_reject_to("validate", "humanize") is True
 
-    def test_summary_stage_exists(self, pipeline):
-        """Summary stage should be in the pipeline."""
-        stage = pipeline.get_stage("summary")
+    def test_state_stage_exists(self, pipeline):
+        """State stage should be in the pipeline."""
+        stage = pipeline.get_stage("state")
         assert stage is not None
-        assert stage.name == "Summary"
+        assert stage.name == "State"
 
-    def test_summary_is_content_stage(self, pipeline):
-        """Summary should use two-call (generate → evaluate) mode."""
-        assert pipeline.is_content_stage("summary") is True
+    def test_state_is_content_stage(self, pipeline):
+        """State should use two-call (generate → evaluate) mode."""
+        assert pipeline.is_content_stage("state") is True
 
-    def test_polish_next_is_summary(self, pipeline):
-        """Polish should advance to summary, not done."""
-        assert pipeline.next_stage("polish") == "summary"
+    def test_polish_next_is_state(self, pipeline):
+        """Polish should advance to state, not done."""
+        assert pipeline.next_stage("polish") == "state"
 
-    def test_summary_next_is_done(self, pipeline):
-        """Summary should advance to done."""
-        assert pipeline.next_stage("summary") == "done"
+    def test_state_next_is_done(self, pipeline):
+        """State should advance to done."""
+        assert pipeline.next_stage("state") == "done"
 
-    def test_summary_can_reject_to_polish(self, pipeline):
-        """Summary should be able to reject back to polish."""
-        assert pipeline.can_reject_to("summary", "polish") is True
+    def test_state_can_reject_to_polish(self, pipeline):
+        """State should be able to reject back to polish."""
+        assert pipeline.can_reject_to("state", "polish") is True
 
-    def test_stage_order_includes_summary(self, pipeline):
-        """Summary should be between polish and done in stage order."""
+    def test_stage_order_includes_state(self, pipeline):
+        """State should be between polish and done in stage order."""
         expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
-                     "humanize", "validate", "polish", "summary", "done"]
+                     "humanize", "validate", "polish", "state", "done"]
         assert pipeline.stage_order == expected
 
-    def test_stage_count_with_summary(self, pipeline):
-        """Pipeline should have 12 stages (including summary and structure)."""
+    def test_stage_count_with_state(self, pipeline):
+        """Pipeline should have 12 stages (including state and structure)."""
         assert len(pipeline.stages) == 12
 
-    def test_summary_stage_inputs(self, pipeline):
-        """Summary stage should read polish.md as input."""
-        assert "summary" in pipeline.stage_inputs
-        assert "polish.md" in pipeline.stage_inputs["summary"]
+    def test_state_stage_inputs(self, pipeline):
+        """State stage should read polish.md as input."""
+        assert "state" in pipeline.stage_inputs
+        assert "polish.md" in pipeline.stage_inputs["state"]

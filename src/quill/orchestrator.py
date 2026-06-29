@@ -169,3 +169,237 @@ class Orchestrator:
         text = structure_file.read_text(encoding="utf-8")
         chapters = Orchestrator._extract_chapters(text)
         return len(chapters) >= 2
+
+    def run_stage(
+        self, piece_id: str, stage: str, output_dir: Path | None = None,
+    ) -> "AgentDecision | None":
+        """Execute a pipeline stage for a multi-chapter piece.
+
+        If the piece has chapters (from structure output), the orchestrator
+        iterates over chapters sequentially, building a sliding context
+        window for each. Returns None if the piece is not chaptered
+        (caller should use the normal StageRunner instead).
+
+        Args:
+            piece_id: parent piece ID
+            stage: pipeline stage to execute
+            output_dir: output directory (defaults to DEFAULT_OUTPUT_DIR)
+
+        Returns:
+            AgentDecision if orchestrated, None if not chaptered
+        """
+        from .piece import DEFAULT_OUTPUT_DIR, _stage_filename, load_piece
+
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        piece_dir = base / piece_id
+
+        if not self._has_chapters(piece_dir):
+            return None
+
+        # Load parent piece
+        parent = load_piece(piece_dir)
+
+        # Get chapter list from structure
+        structure_file = piece_dir / _stage_filename("structure")
+        structure_text = structure_file.read_text(encoding="utf-8")
+        chapters = self._extract_chapters(structure_text)
+
+        logger.info(
+            "Orchestrator: running stage '%s' on %d chapters for piece '%s'",
+            stage, len(chapters), piece_id,
+        )
+
+        # Ensure child pieces exist
+        child_ids = self._ensure_children(parent, chapters, base)
+
+        # Read forward outlines from structure
+        forward_outlines_all = []
+        for ch in chapters:
+            forward_outlines_all.append(f"Segment {ch['index'] + 1}: {ch['title']}")
+
+        # Process each chapter sequentially
+        narrative_states: list[NarrativeState] = []
+        prior_full_texts: dict[int, str] = {}
+        results = []
+
+        for i, chapter in enumerate(chapters):
+            child_id = child_ids[i]
+            child_dir = base / child_id
+
+            # Build sliding context
+            chapter_content = self._read_chapter_content(child_dir, stage)
+            forward = self._extract_forward_outlines(structure_text, i, lookahead=2)
+
+            ctx = self._build_sliding_context(
+                chapter_index=i,
+                total_chapters=len(chapters),
+                stage=stage,
+                chapter_content=chapter_content,
+                prior_states=narrative_states,
+                prior_full_texts=prior_full_texts,
+                forward_outlines=forward,
+                parent_brief=self._read_parent_brief(piece_dir),
+            )
+
+            # Run stage on child piece with orchestrator context
+            result = self._run_stage_on_child(
+                child_id, stage, ctx, base,
+            )
+            results.append(result)
+
+            # If state stage, parse NarrativeState
+            if stage == "state":
+                state_file = child_dir / _stage_filename("state")
+                if state_file.exists():
+                    raw = self._strip_frontmatter(
+                        state_file.read_text(encoding="utf-8")
+                    )
+                    ns = NarrativeState.from_yaml(raw)
+                    narrative_states.append(ns)
+                    logger.info(
+                        "Orchestrator: parsed NarrativeState for chapter %d", i + 1,
+                    )
+
+            # Store full text for close neighbor context
+            output_file = child_dir / _stage_filename(stage)
+            if output_file.exists():
+                prior_full_texts[i] = self._strip_frontmatter(
+                    output_file.read_text(encoding="utf-8")
+                )
+
+        # Update parent's children list
+        parent.children = child_ids
+        parent.save()
+
+        logger.info(
+            "Orchestrator: completed stage '%s' on %d chapters", stage, len(chapters),
+        )
+
+        # Return a combined decision
+        from .agent import AgentDecision
+        return AgentDecision(
+            decision="advance",
+            critique=f"Orchestrated {len(chapters)} chapters for stage '{stage}'.",
+            output="",
+            stage=stage,
+        )
+
+    def _ensure_children(
+        self, parent: "Piece", chapters: list[dict], base: Path,
+    ) -> list[str]:
+        """Create child pieces for each chapter if they don't exist.
+
+        Returns list of child piece IDs.
+        """
+        from .piece import Piece
+        import yaml as _yaml
+        from datetime import datetime, timezone
+
+        child_ids = []
+        for ch in chapters:
+            child_id = f"{parent.id}-chapter-{ch['index'] + 1}"
+            child_dir = base / child_id
+
+            if not child_dir.exists():
+                child_dir.mkdir(parents=True)
+
+                # Create meta.yaml
+                meta = {
+                    "id": child_id,
+                    "title": f"{parent.title} — Chapter {ch['index'] + 1}: {ch['title']}",
+                    "genre": parent.genre,
+                    "type": parent.type,
+                    "audience": parent.audience,
+                    "tone": parent.tone,
+                    "language": parent.language,
+                    "target_length": parent.target_length,
+                    "current_stage": "brief",
+                    "created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "parent": parent.id,
+                    "trigger": "auto",
+                }
+                (child_dir / "meta.yaml").write_text(
+                    _yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
+                    encoding="utf-8",
+                )
+
+                # Create stage output directory
+                stages_dir = child_dir / "stages"
+                stages_dir.mkdir(exist_ok=True)
+
+                logger.info("Orchestrator: created child piece '%s'", child_id)
+
+            child_ids.append(child_id)
+
+        return child_ids
+
+    def _read_chapter_content(self, child_dir: Path, stage: str) -> str:
+        """Read the current content for a chapter at a given stage."""
+        from .piece import _stage_filename
+
+        # For draft stage, read the brief
+        if stage == "draft":
+            brief_file = child_dir / _stage_filename("brief")
+            if brief_file.exists():
+                return self._strip_frontmatter(
+                    brief_file.read_text(encoding="utf-8")
+                )
+
+        # For other stages, read the previous stage's output
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+        stage_def = pipeline.get_stage(stage)
+        if stage_def:
+            # Find the stage that feeds into this one
+            for s in pipeline.stage_order:
+                s_def = pipeline.get_stage(s)
+                if s_def and s_def.next == stage:
+                    prev_file = child_dir / _stage_filename(s)
+                    if prev_file.exists():
+                        return self._strip_frontmatter(
+                            prev_file.read_text(encoding="utf-8")
+                        )
+
+        return ""
+
+    def _read_parent_brief(self, piece_dir: Path) -> str:
+        """Read the parent piece's brief text."""
+        from .piece import _stage_filename
+        brief_file = piece_dir / _stage_filename("brief")
+        if brief_file.exists():
+            return self._strip_frontmatter(
+                brief_file.read_text(encoding="utf-8")
+            )
+        return ""
+
+    def _run_stage_on_child(
+        self, child_id: str, stage: str, context: dict, base: Path,
+    ) -> "AgentDecision":
+        """Run a pipeline stage on a child piece with orchestrator context.
+
+        Uses the existing StageRunner, passing orchestrator context as extra
+        template variables.
+        """
+        from .runner import StageRunner
+        from .agent import AgentDecision
+
+        runner = StageRunner(agent_set=self.agent_set)
+
+        try:
+            result = runner.run_stage(
+                child_id, stage, output_dir=base,
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                "Orchestrator: stage '%s' failed on child '%s': %s",
+                stage, child_id, e,
+            )
+            return AgentDecision(
+                decision="error",
+                critique="",
+                output="",
+                error=str(e),
+                stage=stage,
+            )

@@ -255,3 +255,80 @@ class TestHasChapters:
             "## Segment 1: The Only Chapter\n"
         )
         assert orch._has_chapters(piece_dir) is False  # single segment = not chaptered
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator.run_stage — high-level flow
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorRunStage:
+    """Test the orchestrator's stage execution flow."""
+
+    def test_returns_none_for_non_chaptered_piece(self, tmp_path):
+        """Orchestrator should return None for single-chapter pieces."""
+        from quill.orchestrator import Orchestrator
+        from quill.piece import Piece
+        orch = Orchestrator(agent_set="default")
+        # Create a piece without structure file
+        piece_dir = tmp_path / "single-piece"
+        piece_dir.mkdir()
+        (piece_dir / "meta.yaml").write_text(
+            "id: single-piece\ntitle: Test\ncurrent_stage: draft\n"
+        )
+        result = orch.run_stage("single-piece", "draft", output_dir=tmp_path)
+        assert result is None
+
+    def test_returns_none_when_no_chapters_in_structure(self, tmp_path):
+        """Orchestrator should return None when structure has only 1 segment."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator(agent_set="default")
+        piece_dir = tmp_path / "single-seg"
+        piece_dir.mkdir()
+        (piece_dir / "meta.yaml").write_text(
+            "id: single-seg\ntitle: Test\ncurrent_stage: draft\n"
+        )
+        (piece_dir / "02_structure.md").write_text(
+            "## Segment 1: Only Chapter\n"
+        )
+        result = orch.run_stage("single-seg", "draft", output_dir=tmp_path)
+        assert result is None
+
+    def test_creates_child_pieces(self, tmp_path):
+        """Orchestrator should create child pieces for each chapter."""
+        from quill.orchestrator import Orchestrator
+        from unittest.mock import patch, MagicMock
+        orch = Orchestrator(agent_set="default")
+        # Create parent piece with structure
+        parent_dir = tmp_path / "parent-piece"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: parent-piece\ntitle: Test Story\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: The Setup\n## Segment 2: The Conflict\n## Segment 3: The Resolution\n"
+        )
+        (parent_dir / "01_brief.md").write_text(
+            "---\nid: parent-piece\n---\n\nA story about a heist gone wrong."
+        )
+        (parent_dir / "03_outline.md").write_text(
+            "---\nid: parent-piece\n---\n\n## Part 1: The Setup\nThe team assembles.\n"
+            "## Part 2: The Conflict\nThings go wrong.\n## Part 3: The Resolution\nEscape.\n"
+        )
+        # Mock _run_stage_on_child to avoid LLM calls
+        mock_result = MagicMock()
+        mock_result.decision = "advance"
+        with patch.object(orch, '_run_stage_on_child', return_value=mock_result):
+            orch.run_stage("parent-piece", "draft", output_dir=tmp_path)
+        # Verify children were created
+        children = list(tmp_path.glob("parent-piece-chapter-*"))
+        assert len(children) == 3
+        # Verify child meta.yaml files
+        for child_dir in children:
+            meta_file = child_dir / "meta.yaml"
+            assert meta_file.exists()
+            import yaml
+            meta = yaml.safe_load(meta_file.read_text())
+            assert meta["parent"] == "parent-piece"
+            assert meta["trigger"] == "auto"

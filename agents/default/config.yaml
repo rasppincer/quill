@@ -8,6 +8,10 @@ research:
   enabled: true
   required: false
 stages:
+  structure:
+    name: Structure Agent
+    description: Auto-segments content based on target length
+    temperature: 0.3
   outline:
     name: Outline Agent
     description: Generates structured outline from brief

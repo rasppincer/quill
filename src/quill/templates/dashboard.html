@@ -107,9 +107,17 @@ async function loadPieces() {
         return;
     }
 
-    tbody.innerHTML = data.pieces.map(p => `
+    tbody.innerHTML = data.pieces.map(p => {
+        let titleHtml = `<a href="${SCRIPT_ROOT}/pieces/${esc(p.id)}" style="color:var(--accent-blue);text-decoration:none;font-weight:600">${esc(p.title)}</a>`;
+        if (p.parent) {
+            titleHtml += ` <span style="font-size:10px;color:var(--text-muted)" title="Chapter of ${esc(p.parent)}">📖</span>`;
+        }
+        if (p.children && p.children.length > 0) {
+            titleHtml += ` <span style="font-size:10px;color:var(--accent-purple)" title="${p.children.length} chapters">📚${p.children.length}</span>`;
+        }
+        return `
         <tr>
-            <td><a href="${SCRIPT_ROOT}/pieces/${esc(p.id)}" style="color:var(--accent-blue);text-decoration:none;font-weight:600">${esc(p.title)}</a></td>
+            <td>${titleHtml}</td>
             <td style="color:var(--text-secondary)">${esc(p.genre)}</td>
             <td><span class="badge ${p.current_stage}">${esc(p.current_stage)}</span></td>
             <td style="min-width:120px">
@@ -121,7 +129,7 @@ async function loadPieces() {
             <td style="color:var(--text-muted);font-size:12px">${esc(p.updated || '')}</td>
             <td><a href="${SCRIPT_ROOT}/pieces/${esc(p.id)}" class="btn sm">View</a></td>
         </tr>
-    `).join('');
+    `;}).join('');
 }
 
 function showCreateModal() {

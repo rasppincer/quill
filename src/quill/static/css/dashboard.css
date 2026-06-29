@@ -232,6 +232,7 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
     flex-shrink: 0;
     width: 12px;
     text-align: center;
+}
 
 /* ── Stage tabs (navigable pipeline) ─────────────────── */
 .stage-tabs {

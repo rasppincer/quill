@@ -329,6 +329,17 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
     text-align: center;
 }
 
+.stage-chapter-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: var(--accent-purple);
+    color: #fff;
+    font-weight: 600;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
 /* ── Buttons ────────────────────────────────────────── */
 .btn {
     display: inline-flex;

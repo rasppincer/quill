@@ -583,6 +583,58 @@ def pieces_stage_navigate(piece_id: str, stage: str):
     })
 
 
+@bp.route("/api/pieces/<piece_id>/chapters")
+def pieces_chapters(piece_id: str):
+    """Get chapter breakdown for a piece's draft stage.
+
+    Returns chapter metadata: number, title, word count, preview.
+    Used by the UI to show chapter structure for chaptered drafts.
+    """
+    import re
+
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    stage_file = piece.stage_dir() / _stage_filename("draft")
+    if not stage_file.exists():
+        return jsonify({"chapters": [], "total_words": 0})
+
+    text = stage_file.read_text(encoding="utf-8")
+    m = _FRONTMATTER_RE.match(text)
+    body = text[m.end():] if m else text
+
+    # Split on ## Part / ## Chapter headers
+    parts = re.split(r'(?=^## (?:Part|Chapter)\s*\d)', body, flags=re.MULTILINE)
+
+    chapters = []
+    total_words = 0
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        lines = part.split('\n', 1)
+        heading = lines[0].strip().lstrip('#').strip()
+        content = lines[1].strip() if len(lines) > 1 else ""
+        words = len(content.split())
+        total_words += words
+        # Skip separator-style headings
+        if heading.startswith('===') or heading.startswith('---'):
+            continue
+        chapters.append({
+            "number": len(chapters) + 1,
+            "title": heading,
+            "words": words,
+            "preview": content[:200] + "..." if len(content) > 200 else content,
+        })
+
+    return jsonify({
+        "chapters": chapters,
+        "total_words": total_words,
+        "chapter_count": len(chapters),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Trigger management
 # ---------------------------------------------------------------------------

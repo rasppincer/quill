@@ -26,6 +26,9 @@
              title="{{ stage.name }} ({{ state }})">
             <span class="stage-dot {{ state }}"></span>
             <span class="stage-label">{{ stage.name }}</span>
+            {% if stage.key == 'draft' %}
+                <span id="draft-chapter-badge" class="stage-chapter-badge" style="display:none"></span>
+            {% endif %}
         </div>
         {% if not loop.last %}<div class="stage-arrow">→</div>{% endif %}
     {% endfor %}
@@ -143,6 +146,15 @@
 </div>
 {% endif %}
 
+<!-- Chapter breakdown (shown for draft stage with chapters) -->
+<div id="chapter-breakdown" style="display:none;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">📖 Chapter Breakdown</h3>
+        <span id="chapter-summary" style="font-size:13px;color:var(--text-muted)"></span>
+    </div>
+    <div id="chapter-list" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>
+
 <!-- Stage content viewer -->
 <div class="section">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -247,6 +259,14 @@ async function navigateToStage(stage) {
             contentDiv.innerHTML = '<div style="color:var(--text-muted)">(empty — run agent to generate content)</div>';
         }
 
+        // Chapter breakdown for draft stage
+        const chapterDiv = document.getElementById('chapter-breakdown');
+        if (stage === 'draft' && raw.trim()) {
+            loadChapterBreakdown(chapterDiv);
+        } else if (chapterDiv) {
+            chapterDiv.style.display = 'none';
+        }
+
         // State badge
         const badge = document.getElementById('stage-state-badge');
         const state = data.state || 'empty';
@@ -284,6 +304,82 @@ async function navigateToStage(stage) {
     } catch (e) {
         contentDiv.innerHTML = `<div style="color:var(--accent-red)">Error loading content: ${e.message}</div>`;
     }
+}
+
+// ── Chapter breakdown ────────────────────────────────────────────
+
+async function loadChapterBreakdown(container) {
+    if (!container) return;
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/chapters`);
+        const data = await resp.json();
+
+        if (!data.chapters || data.chapters.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        document.getElementById('chapter-summary').textContent =
+            `${data.chapter_count} chapters · ${data.total_words.toLocaleString()} words`;
+
+        const list = document.getElementById('chapter-list');
+        list.innerHTML = data.chapters.map(ch => {
+            const pct = data.total_words > 0 ? Math.round(ch.words / data.total_words * 100) : 0;
+            const barColor = pct >= 20 ? 'var(--accent-green)' : pct >= 10 ? 'var(--accent-blue)' : 'var(--accent-orange)';
+            return `
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px 16px;cursor:pointer"
+                     onclick="scrollToChapter(${ch.number})"
+                     title="${ch.preview.replace(/"/g, '&quot;')}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span style="color:var(--accent-purple);font-weight:600;font-size:13px">Ch ${ch.number}</span>
+                            <span style="font-size:14px;font-weight:500">${ch.title}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span style="font-size:13px;color:var(--text-muted)">${ch.words.toLocaleString()} words</span>
+                            <span style="font-size:12px;color:${barColor}">${pct}%</span>
+                        </div>
+                    </div>
+                    <div style="background:var(--bg-primary);border-radius:4px;height:6px;overflow:hidden">
+                        <div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s ease"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.style.display = 'none';
+    }
+}
+
+function scrollToChapter(chapterNum) {
+    const contentDiv = document.getElementById('stage-content');
+    if (!contentDiv) return;
+    // Find the chapter heading in the rendered markdown
+    const headings = contentDiv.querySelectorAll('h2');
+    for (const h of headings) {
+        if (h.textContent.match(new RegExp(`Part ${chapterNum}|Chapter ${chapterNum}`))) {
+            h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Flash highlight
+            h.style.background = 'rgba(188,140,255,0.15)';
+            setTimeout(() => { h.style.background = ''; }, 2000);
+            return;
+        }
+    }
+}
+
+async function loadChapterBadge() {
+    const badge = document.getElementById('draft-chapter-badge');
+    if (!badge) return;
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/chapters`);
+        const data = await resp.json();
+        if (data.chapter_count && data.chapter_count > 1) {
+            badge.textContent = `${data.chapter_count}ch`;
+            badge.title = `${data.chapter_count} chapters · ${data.total_words.toLocaleString()} words`;
+            badge.style.display = 'inline';
+        }
+    } catch (e) { /* no chapters */ }
 }
 
 // ── Trigger ───────────────────────────────────────────────────────
@@ -544,6 +640,9 @@ async function saveBrief() {
 document.addEventListener('DOMContentLoaded', async function() {
     // Load initial stage content
     navigateToStage(CURRENT_STAGE);
+
+    // Load chapter badge for draft stage
+    loadChapterBadge();
 
     // Check if auto pipeline is running
     try {

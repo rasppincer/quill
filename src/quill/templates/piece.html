@@ -5,6 +5,11 @@
 {% block content %}
 <div style="margin-bottom:8px">
     <a href="{{ url_for('dashboard.dashboard') }}" style="color:var(--text-muted);text-decoration:none;font-size:13px">← Back to pieces</a>
+    {% if piece.parent %}
+    <span style="margin-left:12px">
+        <a href="{{ url_for('dashboard.dashboard_piece', piece_id=piece.parent) }}" style="color:var(--accent-blue);text-decoration:none;font-size:13px">↑ {{ piece.parent }}</a>
+    </span>
+    {% endif %}
 </div>
 
 <h2 id="piece-title" onclick="startRename()" style="cursor:pointer" title="Click to rename">{{ piece.title }}</h2>
@@ -52,6 +57,18 @@
         <div class="label">Trigger</div>
         <div class="value" id="trigger-display">{{ piece.trigger or 'on_advance' }}</div>
     </div>
+    {% if piece.parent %}
+    <div class="card">
+        <div class="label">Parent</div>
+        <div class="value"><a href="{{ url_for('dashboard.dashboard_piece', piece_id=piece.parent) }}" style="color:var(--accent-blue);text-decoration:none;font-size:13px">{{ piece.parent }}</a></div>
+    </div>
+    {% endif %}
+    {% if piece.children %}
+    <div class="card">
+        <div class="label">Chapters</div>
+        <div class="value purple">{{ piece.children|length }}</div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Actions -->
@@ -117,6 +134,21 @@
     </div>
     <div id="agent-critique" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap"></div>
 </div>
+
+<!-- Chapter pieces (orchestrator children) -->
+{% if piece.children %}
+<div class="section">
+    <h3 style="margin:0">📚 Chapters ({{ piece.children|length }})</h3>
+    <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">
+        {% for child_id in piece.children %}
+        <a href="{{ url_for('dashboard.dashboard_piece', piece_id=child_id) }}" style="display:block;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:var(--text-primary);font-size:13px;transition:border-color 0.2s" onmouseover="this.style.borderColor='var(--accent-purple)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-weight:600;margin-bottom:2px">{{ child_id.split('-chapter-')[-1]|replace('-', ' ')|title }}</div>
+            <div style="color:var(--text-muted);font-size:11px">{{ child_id }}</div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Run Log -->
 <div class="section">

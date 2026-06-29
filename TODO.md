@@ -121,7 +121,7 @@
 
 ### Chaptered generation
 
-- [ ] **Outline format varies between agent calls** — Should standardize outline prompt to always use `## Part N: Title` format.
+- [x] **Outline format varies between agent calls** — Fixed: all outline prompts now specify `## Part N: Title` format. — Should standardize outline prompt to always use `## Part N: Title` format.
 - [x] **Outline dump becomes first chapter** — Fixed: separator headings filtered out.
 - [x] **Bullet chapters have empty bodies** — Fixed: falls back to outline content.
 - [ ] **No section layer under chapters** — For 10k+ words, chapters could use scene breaks. Hardcoded 2 levels max.

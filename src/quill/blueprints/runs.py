@@ -71,6 +71,23 @@ def pieces_run(piece_id: str):
                 piece.supersede_from(target_stage)
 
         trace_id = str(uuid.uuid4())
+
+        # Try orchestrator first (for multi-chapter pieces)
+        from ..orchestrator import Orchestrator
+        orch = Orchestrator(agent_set=agent_set)
+        orch_result = orch.run_stage(piece_id, target_stage, output_dir=None)
+        if orch_result is not None:
+            return jsonify({
+                "piece_id": piece_id,
+                "stage": orch_result.stage,
+                "decision": orch_result.decision,
+                "critique": orch_result.critique,
+                "loop_count": 0,
+                "error": orch_result.error,
+                "orchestrated": True,
+            })
+
+        # Fall back to normal StageRunner
         result = runner.run_stage(piece_id, target_stage, trace_id=trace_id)
         return jsonify({
             "piece_id": piece_id,

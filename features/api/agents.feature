@@ -11,18 +11,18 @@ Feature: Agent pipeline
     Given a piece "chain-test" at stage "brief"
     And the piece has outline.md and draft.md content
     When I run the agent chain from "outline" with agent set "fiction"
-    Then the chain runs "outline", "draft", "review", "revise", "humanize", "validate", "polish", "summary"
+    Then the chain runs "outline", "draft", "review", "revise", "humanize", "validate", "polish", "state"
     And the piece reaches stage "done"
 
-  Scenario: Polish advances to summary not done
+  Scenario: Polish advances to state not done
     Given a piece "polish-next" at stage "polish"
     And the piece has content in all stages through polish
     When I set the piece trigger to "manual"
     When I advance the piece
-    Then the piece is at stage "summary"
+    Then the piece is at stage "state"
 
-  Scenario: Summary stage has prompt in all flavors
-    When I query agents for stage "summary"
+  Scenario: State stage has prompt in all flavors
+    When I query agents for stage "state"
     Then the response includes "default"
     And the response includes "fiction"
     And the response includes "non-fiction"

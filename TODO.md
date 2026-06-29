@@ -242,45 +242,77 @@ Titles only. No body content. Outline stage fills in the details.
 
 ### Overview
 
-Instead of generating all chapters within a single piece's draft stage, each chapter becomes its own Quill piece running through the full pipeline independently. This solves the context window problem for long-form content (20k-50k+ words).
+For long-form content (20k-50k+ words), the orchestrator processes each stage per-chapter with a sliding context window. This avoids monolithic LLM calls and maintains narrative continuity.
 
-Parent piece: the full story (brief → structure → outline → orchestrator → assembly → done)
-Child pieces: one per chapter (brief → outline → research → draft → review → revise → humanize → polish → summary → done)
+Pipeline: `brief → structure → outline → research → draft → review → revise → humanize → polish → state → done`
 
-### Pipeline Changes
+The orchestrator is the parent piece's execution engine for EVERY stage — not just draft. When the parent reaches any stage, the orchestrator iterates over chapters with sliding context.
 
-**New stage: `summary`** — added after `polish` in the pipeline. Content stage (two-call). Generates a compressed summary of the polished output. Used by the orchestrator as context for neighboring chapters.
+### State Stage (replaces Summary)
 
-Pipeline becomes: `brief → structure → outline → research → draft → review → revise → humanize → polish → summary → done`
+Stage `state` outputs structured YAML (not prose). Used by the orchestrator to build NarrativeState.
 
-Summary stage:
-- mode: `content`
-- Prompt: "Summarize this {type} in 500-800 words. Preserve: character names and states, plot threads (resolved and unresolved), world rules, tone, key events."
-- Output: `10_summary.md` — compressed version of the piece
-- Evaluate: checks summary captures key elements, not too long/short
+Output (`10_state.yaml`):
+```yaml
+characters:
+  - name: "Dr. Aris"
+    state: "suspicious, sleep-deprived"
+    location: "main lab"
+plot_threads:
+  - description: "Anomaly growth rate"
+    status: "open"
+    tension: "high"
+world_rules:
+  - "Gold reserves below critical threshold"
+tone: "tense, paranoid"
+key_events:
+  - "Aris found the pattern in the data"
+```
 
-### Orchestrator Flow
+Flavor variations:
+- **fiction**: adds `stakes` field, `relationships` per character, `foreshadowing` per plot thread
+- **non-fiction**: replaces with `thesis`, `key_evidence`, `structure`, `conclusions`, `caveats`, `sources`
 
-1. Parent piece reaches "draft" stage
-2. Orchestrator reads structure output (`02_structure.md`) — N segment titles
-3. For each segment:
-   a. Generate chapter brief: prompt LLM with "given outline X, context XX, and segment name Y, write the outline for segment Y" (fast, ~10s)
-   b. Create child piece via API with auto-generated brief, trigger=auto
-   c. Auto mode runs child through full pipeline (brief → outline → ... → summary)
-   d. When child reaches "summary" stage, read its `10_summary.md`
-   e. Add summary to compressed context for next chapters
-4. When all children complete, assemble: concatenate `09_polish.md` from each child → parent's draft
-5. Parent's draft is now the full polished story
+### Orchestrator Flow (per-stage, per-chapter)
 
-### Context Budget per Chapter
+When parent piece reaches stage S:
+1. Orchestrator detects chapters exist (from structure output)
+2. For each chapter N (sequentially — ch1 fully through pipeline before ch2):
+   a. Assemble sliding context:
+      - `[1..N-2]` — NarrativeState parsed from each (from their `10_state.yaml`)
+      - `[N-1]` — full text of stage S output (e.g., revised text)
+      - `[N]` — chapter N's current content for stage S
+      - `[N+1..N+2]` — outline sketches from structure output
+      - `[parent]` — character sheet, world rules from parent brief
+      - `[NarrativeState]` — cumulative across all prior chapters
+   b. Run stage S on chapter N with assembled context → produces artifact_S_N
+   c. If S == state: parse NarrativeState from artifact_S_N, merge into cumulative
+   d. Store artifact_S_N on child piece
+3. Concatenate [artifact_S_1, artifact_S_2, ..., artifact_S_N]
+   → write to parent's stage S file (e.g., `06_revise.md`)
+   → **this is a VIEW artifact, not an input artifact**
+4. When parent reaches stage S+1:
+   - Orchestrator does NOT read parent's concatenated `06_revise.md`
+   - Reads per-chapter artifacts from child pieces instead
 
-When generating brief/outline for chapter N:
-- Full text of parent outline (the chapter plan)
-- Full text of structure output (segment titles)
-- Compressed summaries of chapters N-2, N-1 (from their `10_summary.md`)
-- Outline descriptions of chapters N+1, N+2 (from structure output, not yet generated)
-- Character sheet from parent brief
-- Total: ~12-15k tokens, fits in 32k window with room for output
+### NarrativeState
+
+Structured YAML parsed from each chapter's `10_state.yaml`. Built by code (no extra LLM call) — the state stage already extracts the needed data.
+
+Cumulative NarrativeState for chapter N = merge of states from chapters 1..N-1.
+
+Used as context for distant chapters (1..N-2). Close neighbor (N-1) always uses full text to avoid seams.
+
+### Context Budget per Chapter (stage S)
+
+When processing stage S for chapter N:
+- NarrativeState summaries of chapters 1..N-2 (~200-400 words each)
+- Full text of stage S output for chapter N-1 (~2000 words)
+- Chapter N's content for stage S (~2000 words)
+- Outline sketches for chapters N+1, N+2 (~200 words each)
+- Character sheet from parent brief (~500 words)
+- Cumulative NarrativeState (~500-1000 words)
+- Total: ~6-8k tokens, fits in 32k window with room for output
 
 ### Chapter Brief Generation
 
@@ -293,7 +325,7 @@ And the segment plan:
 {structure_output}
 
 And context from previous chapters:
-{compressed_summaries}
+{narrative_state}
 
 Write a detailed brief for "{segment_name}" (Segment {N} of {total}).
 Include: what happens, which characters appear, emotional arc, key scenes.
@@ -302,43 +334,28 @@ Target: ~{segment_target} words.
 
 Output: free-form brief text, saved as child piece's `01_brief.md`.
 
-### Parent Piece Stages
-
-| Stage | Behavior |
-|---|---|
-| brief | User writes the story premise (free-form) |
-| structure | Auto: generates segment titles based on target_length |
-| outline | Auto: narrative arc, character arcs, pacing per segment |
-| draft | Orchestrator: spawns N child pieces, monitors, assembles |
-| review | Agent reviews the assembled draft |
-| revise | Agent revises the assembled draft |
-| humanize | Agent de-AI's the assembled draft |
-| polish | Agent final edits |
-| summary | Agent generates compressed summary of the full story |
-| done | Published |
-
 ### Implementation Tasks
 
-- [x] **Summary stage**: Add to pipeline config, prompt templates (3 flavors), evaluate prompts
-- [ ] **Orchestrator module**: New file `orchestrator.py` — spawns child pieces, monitors completion, manages compressed context
+- [x] **State stage**: Add to pipeline config, prompt templates (3 flavors), structured YAML output
+- [ ] **Parent-child tracking**: Meta.yaml field `children: [piece-id-1, ...]` on parent; `parent: piece-id` on children
 - [ ] **Chapter brief generator**: Prompt template + LLM call to auto-generate chapter briefs
-- [ ] **Compression step**: After each child completes, read its `10_summary.md`, add to compressed context
-- [ ] **Assembly step**: Concatenate `09_polish.md` from all children → parent's draft
-- [ ] **Parent-child tracking**: Meta.yaml field `children: [piece-id-1, piece-id-2, ...]` on parent; `parent: piece-id` on children
+- [ ] **NarrativeState parser**: Parse `10_state.yaml` into structured object, merge across chapters
+- [ ] **Orchestrator module**: New file `orchestrator.py` — per-stage, per-chapter execution with sliding context
+- [ ] **Assembly**: Concatenate per-chapter stage results → parent's stage file (view artifact)
+- [ ] **Error handling**: If a chapter fails (agent error, max loops), orchestrator retries or skips with warning
+- [ ] **Progress**: SSE events for orchestrator progress (chapter 3/10, stage draft)
 - [ ] **Dashboard**: Parent piece shows child pieces in the stage content viewer (clickable links)
-- [ ] **Error handling**: If a child piece fails (agent error, max loops), orchestrator retries or skips with warning
-- [ ] **Progress**: SSE events for orchestrator progress (child 3/10 completing)
-- [ ] **Tests**: pytest for orchestrator logic, behave for full multi-piece flow
+- [ ] **Tests**: pytest for orchestrator logic + NarrativeState parsing, behave for full multi-chapter flow
 
 ### Design Decisions
 
-- Each chapter is a first-class piece — independently re-runnable, logged, metrics tracked
-- Summary stage is a standard pipeline stage, not orchestrator-specific — useful for any piece
-- Chapter brief generation is a simple prompt call, not a full pipeline stage
-- Compressed context is asymmetric: detailed summaries for completed chapters, outline sketches for future ones
-- Parent piece's "draft" stage is an assembly step, not a generation step — it concatenates child outputs
-- No parallel execution in v1 — chapters run sequentially (each needs previous chapter's summary)
-- v2: parallel execution for chapters that don't depend on each other (e.g., chapters 1-3 can run in parallel once outline is done)
+- Sequential processing: chapter 1 goes fully through pipeline before chapter 2 starts (best sliding context)
+- Orchestrator handles ALL stages per-chapter — not just draft. Review, revise, humanize, polish all get per-chapter treatment
+- Parent's concatenated stage files are VIEW/EXPORT artifacts — orchestrator reads per-chapter child artifacts for context
+- Close neighbor (N-1) always uses full text, never summary — prevents seams
+- NarrativeState is built from structured state output (YAML) — no extra LLM call, code concatenation
+- State stage outputs structured YAML, not prose — machine-parseable for orchestrator
+- No parallel execution in v1 — chapters run sequentially (each needs previous chapter's full text)
 
 ## Security
 

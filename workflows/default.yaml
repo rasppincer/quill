@@ -23,7 +23,7 @@ stage_inputs:
   polish:
     - humanize.md
     - validate.md
-  summary:
+  state:
     - polish.md
 
 stages:
@@ -130,15 +130,15 @@ stages:
       - title_and_opening
       - final_word_count
       - formatting
-    next: summary
+    next: state
     can_reject_to: validate
 
-  - key: summary
-    name: Summary
-    description: Compressed summary for context passing
+  - key: state
+    name: State
+    description: Narrative state extraction for orchestrator context
     rules:
-      - preserve_key_elements
-      - tight_compression
+      - valid_yaml
+      - required_fields
     next: done
     can_reject_to: polish
 

@@ -131,7 +131,7 @@
 ### Word count and quality
 
 - [x] **Per-chapter word count target too low** — Fixed: bumped to `max(2000, target * 1.2 / chapters)`.
-- [ ] **Agent evaluates total word count, not per-chapter** — Evaluate prompt should note "generated as N chapters, each targeting M words."
+- [x] **Agent evaluates total word count, not per-chapter** — Fixed: evaluate prompt includes chapter count, per-chapter target, and "evaluate overall quality, not just word count."
 - [ ] **debug_prompts clutters output** — Chapter prompts should go to subdirectory.
 
 ### Content quality observations

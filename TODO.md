@@ -237,3 +237,105 @@ Titles only. No body content. Outline stage fills in the details.
 - Outline stage stays — structure gives the skeleton, outline fills in narrative/argument details per segment.
 - Draft stage's chaptered generation consumes structure output as its chapter list (falls back to outline headers → brief bullets if structure stage didn't run).
 - No user override for segment count in v1. Auto-calculate from target_length. v2 adds manual override for the 2-5k range.
+
+## Feature: Chapter Orchestrator (multi-piece pipeline)
+
+### Overview
+
+Instead of generating all chapters within a single piece's draft stage, each chapter becomes its own Quill piece running through the full pipeline independently. This solves the context window problem for long-form content (20k-50k+ words).
+
+Parent piece: the full story (brief → structure → outline → orchestrator → assembly → done)
+Child pieces: one per chapter (brief → outline → research → draft → review → revise → humanize → polish → summary → done)
+
+### Pipeline Changes
+
+**New stage: `summary`** — added after `polish` in the pipeline. Content stage (two-call). Generates a compressed summary of the polished output. Used by the orchestrator as context for neighboring chapters.
+
+Pipeline becomes: `brief → structure → outline → research → draft → review → revise → humanize → polish → summary → done`
+
+Summary stage:
+- mode: `content`
+- Prompt: "Summarize this {type} in 500-800 words. Preserve: character names and states, plot threads (resolved and unresolved), world rules, tone, key events."
+- Output: `10_summary.md` — compressed version of the piece
+- Evaluate: checks summary captures key elements, not too long/short
+
+### Orchestrator Flow
+
+1. Parent piece reaches "draft" stage
+2. Orchestrator reads structure output (`02_structure.md`) — N segment titles
+3. For each segment:
+   a. Generate chapter brief: prompt LLM with "given outline X, context XX, and segment name Y, write the outline for segment Y" (fast, ~10s)
+   b. Create child piece via API with auto-generated brief, trigger=auto
+   c. Auto mode runs child through full pipeline (brief → outline → ... → summary)
+   d. When child reaches "summary" stage, read its `10_summary.md`
+   e. Add summary to compressed context for next chapters
+4. When all children complete, assemble: concatenate `09_polish.md` from each child → parent's draft
+5. Parent's draft is now the full polished story
+
+### Context Budget per Chapter
+
+When generating brief/outline for chapter N:
+- Full text of parent outline (the chapter plan)
+- Full text of structure output (segment titles)
+- Compressed summaries of chapters N-2, N-1 (from their `10_summary.md`)
+- Outline descriptions of chapters N+1, N+2 (from structure output, not yet generated)
+- Character sheet from parent brief
+- Total: ~12-15k tokens, fits in 32k window with room for output
+
+### Chapter Brief Generation
+
+Simple prompt, fast on LAN LLM (~10s):
+```
+Given the story outline:
+{parent_outline}
+
+And the segment plan:
+{structure_output}
+
+And context from previous chapters:
+{compressed_summaries}
+
+Write a detailed brief for "{segment_name}" (Segment {N} of {total}).
+Include: what happens, which characters appear, emotional arc, key scenes.
+Target: ~{segment_target} words.
+```
+
+Output: free-form brief text, saved as child piece's `01_brief.md`.
+
+### Parent Piece Stages
+
+| Stage | Behavior |
+|---|---|
+| brief | User writes the story premise (free-form) |
+| structure | Auto: generates segment titles based on target_length |
+| outline | Auto: narrative arc, character arcs, pacing per segment |
+| draft | Orchestrator: spawns N child pieces, monitors, assembles |
+| review | Agent reviews the assembled draft |
+| revise | Agent revises the assembled draft |
+| humanize | Agent de-AI's the assembled draft |
+| polish | Agent final edits |
+| summary | Agent generates compressed summary of the full story |
+| done | Published |
+
+### Implementation Tasks
+
+- [ ] **Summary stage**: Add to pipeline config, prompt templates (3 flavors), evaluate prompts
+- [ ] **Orchestrator module**: New file `orchestrator.py` — spawns child pieces, monitors completion, manages compressed context
+- [ ] **Chapter brief generator**: Prompt template + LLM call to auto-generate chapter briefs
+- [ ] **Compression step**: After each child completes, read its `10_summary.md`, add to compressed context
+- [ ] **Assembly step**: Concatenate `09_polish.md` from all children → parent's draft
+- [ ] **Parent-child tracking**: Meta.yaml field `children: [piece-id-1, piece-id-2, ...]` on parent; `parent: piece-id` on children
+- [ ] **Dashboard**: Parent piece shows child pieces in the stage content viewer (clickable links)
+- [ ] **Error handling**: If a child piece fails (agent error, max loops), orchestrator retries or skips with warning
+- [ ] **Progress**: SSE events for orchestrator progress (child 3/10 completing)
+- [ ] **Tests**: pytest for orchestrator logic, behave for full multi-piece flow
+
+### Design Decisions
+
+- Each chapter is a first-class piece — independently re-runnable, logged, metrics tracked
+- Summary stage is a standard pipeline stage, not orchestrator-specific — useful for any piece
+- Chapter brief generation is a simple prompt call, not a full pipeline stage
+- Compressed context is asymmetric: detailed summaries for completed chapters, outline sketches for future ones
+- Parent piece's "draft" stage is an assembly step, not a generation step — it concatenates child outputs
+- No parallel execution in v1 — chapters run sequentially (each needs previous chapter's summary)
+- v2: parallel execution for chapters that don't depend on each other (e.g., chapters 1-3 can run in parallel once outline is done)

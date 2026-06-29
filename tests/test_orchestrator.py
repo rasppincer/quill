@@ -316,7 +316,7 @@ class TestOrchestratorRunStage:
             "---\nid: parent-piece\n---\n\n## Part 1: The Setup\nThe team assembles.\n"
             "## Part 2: The Conflict\nThings go wrong.\n## Part 3: The Resolution\nEscape.\n"
         )
-        # Mock _run_stage_on_child to avoid LLM calls
+        # Mock _run_stage_on_child to avoid LLM calls for stage execution
         mock_result = MagicMock()
         mock_result.decision = "advance"
         with patch.object(orch, '_run_stage_on_child', return_value=mock_result):
@@ -394,3 +394,99 @@ class TestAssembly:
         assert parent_file.exists()
         content = parent_file.read_text()
         assert "Chapter 1 content." in content
+
+
+# ---------------------------------------------------------------------------
+# Chapter brief generator
+# ---------------------------------------------------------------------------
+
+
+class TestChapterBriefGenerator:
+    """Test auto-generating chapter briefs."""
+
+    def test_generate_brief_writes_file(self, tmp_path):
+        """Should write a brief.md file for a child piece."""
+        from quill.orchestrator import Orchestrator
+        from unittest.mock import patch, MagicMock
+
+        orch = Orchestrator(agent_set="default")
+
+        # Mock the LLM client to return a brief
+        mock_brief = (
+            "# Chapter 1: The Setup\n\n"
+            "Dr. Aris arrives at the lab to find the anomaly data has changed. "
+            "The readings show a pattern that shouldn't exist. Elena is missing "
+            "from the morning shift — no one has heard from her since yesterday."
+        )
+
+        with patch("quill.llm.LLMClient") as MockLLM:
+            mock_client = MagicMock()
+            mock_client.chat.return_value = mock_brief
+            MockLLM.return_value = mock_client
+
+            orch._generate_chapter_brief(
+                child_dir=tmp_path,
+                chapter_index=0,
+                total_chapters=3,
+                chapter_title="The Setup",
+                parent_outline="## Part 1: The Setup\nThe team assembles.\n## Part 2: The Conflict\nThings go wrong.",
+                structure_text="## Segment 1: The Setup\n## Segment 2: The Conflict\n## Segment 3: The Resolution",
+                prior_states=[],
+                piece_title="Test Story",
+                genre="fiction",
+                type="story",
+                language="en",
+                segment_target=2000,
+            )
+
+        brief_file = tmp_path / "01_brief.md"
+        assert brief_file.exists()
+        content = brief_file.read_text()
+        assert "Dr. Aris" in content
+
+    def test_generate_brief_includes_prior_context(self, tmp_path):
+        """Second chapter's brief should include NarrativeState from chapter 1."""
+        from quill.orchestrator import Orchestrator
+        from quill.narrative_state import NarrativeState
+        from unittest.mock import patch, MagicMock
+
+        orch = Orchestrator(agent_set="default")
+        ns = NarrativeState(
+            characters=[{"name": "Aris", "state": "suspicious"}],
+            tone="tense",
+            key_events=["Aris found the pattern"],
+        )
+
+        mock_brief = "Chapter 2 brief with Aris context."
+
+        with patch("quill.llm.LLMClient") as MockLLM:
+            mock_client = MagicMock()
+            mock_client.chat.return_value = mock_brief
+            MockLLM.return_value = mock_client
+
+            orch._generate_chapter_brief(
+                child_dir=tmp_path,
+                chapter_index=1,
+                total_chapters=3,
+                chapter_title="The Conflict",
+                parent_outline="## Part 1: Setup\n## Part 2: Conflict\n## Part 3: Resolution",
+                structure_text="## Segment 1: Setup\n## Segment 2: Conflict\n## Segment 3: Resolution",
+                prior_states=[ns],
+                piece_title="Test Story",
+                genre="fiction",
+                type="story",
+                language="en",
+                segment_target=2000,
+            )
+
+        # Verify the LLM was called with prior context
+        call_args = mock_client.chat.call_args
+        prompt = call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("prompt", "")
+        assert "suspicious" in prompt or "Aris" in prompt
+
+    def test_brief_prompt_template_exists(self):
+        """All 3 flavors should have chapter_brief.prompt.md."""
+        from pathlib import Path
+        for flavor in ["default", "fiction", "non-fiction"]:
+            path = Path(f"agents/{flavor}/chapter_brief.prompt.md")
+            assert path.exists(), f"Missing {path}"

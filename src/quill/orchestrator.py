@@ -27,6 +27,12 @@ from .piece import Piece, load_piece, _stage_filename, _FRONTMATTER_RE
 logger = logging.getLogger(__name__)
 
 
+def _get_emit():
+    """Import _emit from stage_runner (avoids circular import at module level)."""
+    from .stage_runner import _emit
+    return _emit
+
+
 class Orchestrator:
     """Manages per-stage, per-chapter execution for multi-chapter pieces."""
 
@@ -180,6 +186,7 @@ class Orchestrator:
 
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
+        event_queue=None, max_retries: int = 1, skip_failures: bool = False,
     ) -> "AgentDecision | None":
         """Execute a pipeline stage for a multi-chapter piece.
 
@@ -192,11 +199,16 @@ class Orchestrator:
             piece_id: parent piece ID
             stage: pipeline stage to execute
             output_dir: output directory (defaults to DEFAULT_OUTPUT_DIR)
+            event_queue: optional queue for SSE progress events
+            max_retries: number of retries per failed chapter (0 = no retry)
+            skip_failures: if True, continue to next chapter on failure
 
         Returns:
             AgentDecision if orchestrated, None if not chaptered
         """
         from .piece import DEFAULT_OUTPUT_DIR, _stage_filename, load_piece
+
+        _emit = _get_emit()
 
         base = output_dir or DEFAULT_OUTPUT_DIR
         piece_dir = base / piece_id
@@ -217,22 +229,27 @@ class Orchestrator:
             stage, len(chapters), piece_id,
         )
 
+        _emit(event_queue, "orchestrator_start", {
+            "stage": stage, "total_chapters": len(chapters), "piece_id": piece_id,
+        })
+
         # Ensure child pieces exist
         child_ids = self._ensure_children(parent, chapters, base)
-
-        # Read forward outlines from structure
-        forward_outlines_all = []
-        for ch in chapters:
-            forward_outlines_all.append(f"Segment {ch['index'] + 1}: {ch['title']}")
 
         # Process each chapter sequentially
         narrative_states: list[NarrativeState] = []
         prior_full_texts: dict[int, str] = {}
         results = []
+        failed_chapters = []
 
         for i, chapter in enumerate(chapters):
             child_id = child_ids[i]
             child_dir = base / child_id
+
+            _emit(event_queue, "orchestrator_chapter_start", {
+                "stage": stage, "chapter_index": i, "total_chapters": len(chapters),
+                "chapter_title": chapter["title"], "child_id": child_id,
+            })
 
             # Generate chapter brief if not already present
             brief_file = child_dir / "01_brief.md"
@@ -270,14 +287,39 @@ class Orchestrator:
                 parent_brief=self._read_parent_brief(piece_dir),
             )
 
-            # Run stage on child piece with orchestrator context
-            result = self._run_stage_on_child(
-                child_id, stage, ctx, base,
-            )
+            # Run stage on child with retry logic
+            result = None
+            for attempt in range(max_retries + 1):
+                result = self._run_stage_on_child(child_id, stage, ctx, base)
+                if result.decision != "error":
+                    break
+                if attempt < max_retries:
+                    logger.warning(
+                        "Orchestrator: chapter %d '%s' failed (attempt %d/%d), retrying: %s",
+                        i + 1, chapter["title"], attempt + 1, max_retries + 1, result.error,
+                    )
+
             results.append(result)
 
-            # If state stage, parse NarrativeState
-            if stage == "state":
+            if result.decision == "error":
+                failed_chapters.append(i + 1)
+                _emit(event_queue, "orchestrator_chapter_error", {
+                    "stage": stage, "chapter_index": i,
+                    "chapter_title": chapter["title"], "error": result.error,
+                })
+                if not skip_failures:
+                    logger.error(
+                        "Orchestrator: chapter %d '%s' failed after %d attempts, aborting",
+                        i + 1, chapter["title"], max_retries + 1,
+                    )
+                    return result
+                logger.warning(
+                    "Orchestrator: chapter %d '%s' failed, skipping (skip_failures=True)",
+                    i + 1, chapter["title"],
+                )
+
+            # If state stage, parse NarrativeState (even if chapter had errors)
+            if stage == "state" and result.decision != "error":
                 state_file = child_dir / _stage_filename("state")
                 if state_file.exists():
                     raw = self._strip_frontmatter(
@@ -290,11 +332,18 @@ class Orchestrator:
                     )
 
             # Store full text for close neighbor context
-            output_file = child_dir / _stage_filename(stage)
-            if output_file.exists():
-                prior_full_texts[i] = self._strip_frontmatter(
-                    output_file.read_text(encoding="utf-8")
-                )
+            if result.decision != "error":
+                output_file = child_dir / _stage_filename(stage)
+                if output_file.exists():
+                    prior_full_texts[i] = self._strip_frontmatter(
+                        output_file.read_text(encoding="utf-8")
+                    )
+
+            _emit(event_queue, "orchestrator_chapter_complete", {
+                "stage": stage, "chapter_index": i,
+                "chapter_title": chapter["title"],
+                "decision": result.decision, "child_id": child_id,
+            })
 
         # Update parent's children list
         parent.children = child_ids
@@ -304,14 +353,21 @@ class Orchestrator:
         self._assemble_outputs(child_ids, stage, base)
 
         logger.info(
-            "Orchestrator: completed stage '%s' on %d chapters", stage, len(chapters),
+            "Orchestrator: completed stage '%s' on %d chapters (%d failed)",
+            stage, len(chapters), len(failed_chapters),
         )
+
+        _emit(event_queue, "orchestrator_complete", {
+            "stage": stage, "total_chapters": len(chapters),
+            "failed_chapters": failed_chapters, "piece_id": piece_id,
+        })
 
         # Return a combined decision
         from .agent import AgentDecision
         return AgentDecision(
             decision="advance",
-            critique=f"Orchestrated {len(chapters)} chapters for stage '{stage}'.",
+            critique=f"Orchestrated {len(chapters)} chapters for stage '{stage}'."
+                     + (f" {len(failed_chapters)} failed." if failed_chapters else ""),
             output="",
             stage=stage,
         )

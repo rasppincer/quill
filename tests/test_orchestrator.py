@@ -490,3 +490,173 @@ class TestChapterBriefGenerator:
         for flavor in ["default", "fiction", "non-fiction"]:
             path = Path(f"agents/{flavor}/chapter_brief.prompt.md")
             assert path.exists(), f"Missing {path}"
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+
+class TestErrorHandling:
+    """Test orchestrator error handling and retry logic."""
+
+    def test_retries_failed_chapter(self, tmp_path):
+        """Should retry a failed chapter before giving up."""
+        from quill.orchestrator import Orchestrator
+        from unittest.mock import patch, MagicMock, call
+
+        orch = Orchestrator(agent_set="default")
+
+        # Create parent with structure
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: parent\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n"
+        )
+        (parent_dir / "01_brief.md").write_text("Brief")
+        (parent_dir / "03_outline.md").write_text("Outline")
+
+        # Mock: first call fails, second succeeds
+        mock_fail = MagicMock()
+        mock_fail.decision = "error"
+        mock_fail.error = "LLM timeout"
+        mock_ok = MagicMock()
+        mock_ok.decision = "advance"
+
+        call_count = {"n": 0}
+        def side_effect(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] <= 1:
+                return mock_fail
+            return mock_ok
+
+        with patch.object(orch, '_run_stage_on_child', side_effect=side_effect), \
+             patch.object(orch, '_generate_chapter_brief', return_value="Brief"):
+            result = orch.run_stage("parent", "draft", output_dir=tmp_path, max_retries=1)
+
+        # Should have retried — 2 calls for chapter 1, 1 for chapter 2
+        assert call_count["n"] >= 2
+
+    def test_skip_failed_chapter(self, tmp_path):
+        """Should skip failed chapters when skip_failures=True."""
+        from quill.orchestrator import Orchestrator
+        from quill.agent import AgentDecision
+        from unittest.mock import patch, MagicMock
+
+        orch = Orchestrator(agent_set="default")
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: parent\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n## Segment 3: C\n"
+        )
+        (parent_dir / "01_brief.md").write_text("Brief")
+        (parent_dir / "03_outline.md").write_text("Outline")
+
+        # First chapter always fails, others succeed
+        def side_effect(child_id, stage, context, base):
+            if "chapter-1" in child_id:
+                return AgentDecision(decision="error", error="fail", critique="", output="", stage=stage)
+            return AgentDecision(decision="advance", critique="", output="", stage=stage)
+
+        with patch.object(orch, '_run_stage_on_child', side_effect=side_effect), \
+             patch.object(orch, '_generate_chapter_brief', return_value="Brief"):
+            result = orch.run_stage(
+                "parent", "draft", output_dir=tmp_path,
+                max_retries=0, skip_failures=True,
+            )
+
+        # Should still complete (not raise)
+        assert result is not None
+        assert result.decision == "advance"
+
+    def test_raises_on_fatal_failure(self, tmp_path):
+        """Should raise when all retries exhausted and skip_failures=False."""
+        from quill.orchestrator import Orchestrator
+        from quill.agent import AgentDecision
+        from unittest.mock import patch, MagicMock
+
+        orch = Orchestrator(agent_set="default")
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: parent\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n"
+        )
+        (parent_dir / "01_brief.md").write_text("Brief")
+        (parent_dir / "03_outline.md").write_text("Outline")
+
+        mock_fail = AgentDecision(
+            decision="error", error="LLM down", critique="", output="", stage="draft"
+        )
+
+        with patch.object(orch, '_run_stage_on_child', return_value=mock_fail), \
+             patch.object(orch, '_generate_chapter_brief', return_value="Brief"):
+            result = orch.run_stage(
+                "parent", "draft", output_dir=tmp_path,
+                max_retries=0, skip_failures=False,
+            )
+
+        # Should return error decision
+        assert result.decision == "error"
+
+
+# ---------------------------------------------------------------------------
+# Progress events
+# ---------------------------------------------------------------------------
+
+
+class TestProgressEvents:
+    """Test orchestrator SSE progress events."""
+
+    def test_emits_chapter_events(self, tmp_path):
+        """Should emit orchestrator_chapter_start and orchestrator_chapter_complete."""
+        from quill.orchestrator import Orchestrator
+        from unittest.mock import patch, MagicMock
+        from queue import Queue
+
+        orch = Orchestrator(agent_set="default")
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: parent\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n"
+        )
+        (parent_dir / "01_brief.md").write_text("Brief")
+        (parent_dir / "03_outline.md").write_text("Outline")
+
+        mock_result = MagicMock()
+        mock_result.decision = "advance"
+
+        event_queue = Queue()
+        with patch.object(orch, '_run_stage_on_child', return_value=mock_result), \
+             patch.object(orch, '_generate_chapter_brief', return_value="Brief"):
+            orch.run_stage(
+                "parent", "draft", output_dir=tmp_path, event_queue=event_queue,
+            )
+
+        events = []
+        while not event_queue.empty():
+            events.append(event_queue.get())
+
+        event_types = [e["type"] for e in events]
+        assert "orchestrator_start" in event_types
+        assert "orchestrator_chapter_start" in event_types
+        assert "orchestrator_chapter_complete" in event_types
+        assert "orchestrator_complete" in event_types

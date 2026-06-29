@@ -139,3 +139,101 @@
 - [x] **First chapter often starts with weather/atmosphere** — Fixed: ch1 prompt says "Start with action/dialogue, NOT weather."
 - [x] **Character names not carried between chapters** — Fixed: character sheet extracted from brief, passed to all chapters.
 - [x] **Ending feels rushed** — Fixed: final chapter prompt says "Expand the ending — give each character a conclusion."
+
+## Feature: Automated Structure Stage
+
+### Overview
+
+New pipeline stage `structure` between `brief` and `outline`. Automatically segments content based on target_length. Abstract — works for chapters (long-form) and paragraphs (short-form). User writes a free-form brief; the stage handles segmentation.
+
+Pipeline: `brief → structure → outline → research → draft → review → revise → humanize → validate → polish → done`
+
+### Segment Style (auto-calculated)
+
+| Target Length | Style | Segment Target |
+|---|---|---|
+| < 2000 words | paragraphs | ~300 words each |
+| ≥ 2000 words | chapters | ~2000 words each |
+
+Formula: `segments = ceil(target_length / segment_target)`
+
+Segment style stored in `meta.yaml` as `segment_style: "chapters"` or `segment_style: "paragraphs"`. Passed to prompt templates as `{{SEGMENT_STYLE}}` and `{{SEGMENT_NAME}}` (e.g., "chapters" / "paragraphs").
+
+Future: user override for 2-5k range (single piece vs segmented flow). Not in v1.
+
+### Structure Stage Behavior
+
+1. Stage reads brief + target_length from meta.yaml
+2. Calculates `segment_count = ceil(target_length / segment_target)`
+3. Builds prompt: "Generate exactly N segment titles for a {genre} {type} titled '{title}'. Use `## Segment N: Title` format. No descriptions — titles only."
+4. LLM returns N `## Segment N: Title` headers
+5. Output saved to `02_structure.md` (with frontmatter)
+6. Evaluate call checks: correct count, titles match brief, no duplicates
+7. Decision: advance or loop_back
+
+### Output Format (`02_structure.md`)
+
+```markdown
+---
+id: piece-id
+current_stage: structure
+---
+
+## Segment 1: The Setup
+## Segment 2: The Training
+## Segment 3: The Heist
+## Segment 4: The Escape
+## Segment 5: The Retirement
+```
+
+Titles only. No body content. Outline stage fills in the details.
+
+### Implementation Tasks
+
+- [ ] **Pipeline config**: Add `structure` stage to `workflows/default.yaml` between brief and outline
+  - mode: `content` (two-call: generate + evaluate)
+  - next: `outline`
+  - can_reject_to: `["brief"]`
+  - stage_inputs: `[brief.md]`
+
+- [ ] **Stage runner**: Structure stage uses standard two-call approach
+  - Generate call: LLM produces segment titles
+  - Evaluate call: LLM checks count and quality
+  - No special-casing in runner — same as outline/draft
+
+- [ ] **Prompt templates**: `agents/{flavor}/structure.prompt.md` for each flavor
+  - Template vars: `{{TITLE}}`, `{{GENRE}}`, `{{TYPE}}`, `{{LANGUAGE}}`, `{{CONTENT}}` (brief), `{{SEGMENT_COUNT}}`, `{{SEGMENT_STYLE}}`, `{{SEGMENT_NAME}}`, `{{SEGMENT_TARGET}}`
+  - Fiction flavor: narrative arc segments, character-driven titles
+  - Default flavor: logical sections, argument-driven titles
+  - Non-fiction flavor: thesis-supporting sections
+
+- [ ] **Evaluate prompt**: `agents/{flavor}/structure.evaluate.prompt.md`
+  - Checks: segment count matches `{{SEGMENT_COUNT}}`, titles are distinct, titles align with brief, no body content (titles only)
+
+- [ ] **Segment calculation**: In `context_assembler.py` or `runner.py`
+  - Read `target_length` from piece meta.yaml
+  - Calculate `segment_count` and `segment_style`
+  - Inject into render context as `{{SEGMENT_COUNT}}`, `{{SEGMENT_STYLE}}`, `{{SEGMENT_NAME}}`, `{{SEGMENT_TARGET}}`
+
+- [ ] **Draft stage consumes structure**: Update draft's chapter detection to also check `02_structure.md` for `## Segment N` headers (in addition to brief bullets and outline headers)
+
+- [ ] **Piece creation modal**: Make target_length required (currently optional)
+  - Add validation: minimum 500, no maximum
+  - Default to 2000 if not provided? Or hard-block without it?
+
+- [ ] **Dashboard**: Structure stage shows in pipeline tabs like any other stage
+  - Content viewer shows segment titles
+  - Run Agent / Advance work normally
+
+- [ ] **Tests**: 
+  - pytest: segment calculation logic, structure prompt rendering, draft consumes structure output
+  - behave: structure stage in pipeline flow, advance/reject/loop_back
+
+- [ ] **Agent sets**: Add structure.prompt.md and structure.evaluate.prompt.md to all 3 flavors (default, fiction, non-fiction)
+
+### Design Decisions
+
+- Structure stage is abstract: "segments" not "chapters". The prompt template uses `{{SEGMENT_NAME}}` which resolves to "chapters" or "paragraphs" based on target_length.
+- Outline stage stays — structure gives the skeleton, outline fills in narrative/argument details per segment.
+- Draft stage's chaptered generation consumes structure output as its chapter list (falls back to outline headers → brief bullets if structure stage didn't run).
+- No user override for segment count in v1. Auto-calculate from target_length. v2 adds manual override for the 2-5k range.

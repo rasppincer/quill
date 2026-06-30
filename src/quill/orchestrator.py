@@ -240,6 +240,9 @@ class Orchestrator:
         # Ensure child pieces exist
         child_ids = self._ensure_children(parent, chapters, base)
 
+        # Propagate parent context to child directories
+        self._propagate_parent_context(piece_dir, child_ids, base)
+
         # Process each chapter sequentially
         narrative_states: list[NarrativeState] = []
         prior_full_texts: dict[int, str] = {}
@@ -424,6 +427,32 @@ class Orchestrator:
 
         return child_ids
 
+    def _propagate_parent_context(
+        self, piece_dir: Path, child_ids: list[str], base: Path,
+    ) -> None:
+        """Copy parent context files (outline, research) to child directories.
+
+        This ensures stage_inputs config works for child pieces —
+        stages like draft need outline.md and research.md as inputs.
+        """
+        from .piece import _stage_filename
+
+        context_stages = ["outline", "research"]
+        for stage_name in context_stages:
+            src = piece_dir / _stage_filename(stage_name)
+            if src.exists():
+                for child_id in child_ids:
+                    dst = base / child_id / _stage_filename(stage_name)
+                    if not dst.exists():
+                        dst.write_text(
+                            src.read_text(encoding="utf-8"),
+                            encoding="utf-8",
+                        )
+                        logger.info(
+                            "Orchestrator: propagated %s to %s",
+                            src.name, child_id,
+                        )
+
     def _generate_chapter_brief(
         self,
         child_dir: Path,
@@ -439,28 +468,11 @@ class Orchestrator:
         language: str,
         segment_target: int,
     ) -> str:
-        """Generate a chapter brief using the LLM.
-
-        Args:
-            child_dir: child piece directory to write brief.md
-            chapter_index: 0-based chapter index
-            total_chapters: total number of chapters
-            chapter_title: title from structure output
-            parent_outline: parent piece's outline text (body, no frontmatter)
-            structure_text: full structure output text
-            prior_states: NarrativeState from completed chapters
-            piece_title: parent piece title
-            genre, type, language: piece metadata
-            segment_target: target word count per segment
-
-        Returns:
-            The generated brief text.
-        """
+        """Generate a chapter brief using the LLM."""
         from .agent import load_model_config
         from .llm import LLMClient
         from .prompt_builder import render_prompt
 
-        # Build prior context
         prior_context = ""
         if prior_states:
             merged = NarrativeState.merge(prior_states)
@@ -469,43 +481,30 @@ class Orchestrator:
                 f"```yaml\n{merged.to_yaml()}```"
             )
 
-        # Load prompt template
         from .agent import AGENTS_DIR
         template_path = AGENTS_DIR / self.agent_set / "chapter_brief.prompt.md"
         if not template_path.exists():
-            # Fall back to default
             template_path = AGENTS_DIR / "default" / "chapter_brief.prompt.md"
 
         template = template_path.read_text(encoding="utf-8")
-
-        # Strip frontmatter from structure text for the prompt
         structure_body = self._strip_frontmatter(structure_text)
 
-        # Build context
         ctx = {
-            "TITLE": piece_title,
-            "GENRE": genre,
-            "TYPE": type,
-            "LANGUAGE": language,
-            "CHAPTER_INDEX": chapter_index + 1,
-            "TOTAL_CHAPTERS": total_chapters,
-            "CHAPTER_TITLE": chapter_title,
-            "SEGMENT_TARGET": segment_target,
-            "PARENT_OUTLINE": parent_outline,
-            "STRUCTURE": structure_body,
-            "PRIOR_CONTEXT": prior_context,
+            "TITLE": piece_title, "GENRE": genre, "TYPE": type,
+            "LANGUAGE": language, "CHAPTER_INDEX": chapter_index + 1,
+            "TOTAL_CHAPTERS": total_chapters, "CHAPTER_TITLE": chapter_title,
+            "SEGMENT_TARGET": segment_target, "PARENT_OUTLINE": parent_outline,
+            "STRUCTURE": structure_body, "PRIOR_CONTEXT": prior_context,
         }
 
         prompt = render_prompt(template, ctx)
 
-        # Call LLM
         model_cfg = load_model_config()
         client = LLMClient(
             api_base=model_cfg.get("api_base", "https://api.openai.com/v1"),
             api_key=model_cfg.get("api_key", ""),
             model=model_cfg.get("model", "gpt-4o"),
-            temperature=0.7,
-            max_tokens=2048,
+            temperature=0.7, max_tokens=2048,
         )
 
         system = (
@@ -519,9 +518,18 @@ class Orchestrator:
             chapter_index + 1, total_chapters, chapter_title,
         )
 
+        # Dump debug prompt
+        debug_file = child_dir / "01_brief.generate-prompt.md"
+        debug_file.write_text(
+            f"# Debug: chapter brief generate prompt\n"
+            f"# Chapter {chapter_index + 1}/{total_chapters}: {chapter_title}\n\n"
+            f"## System\n{system}\n\n"
+            f"## User\n{prompt}\n",
+            encoding="utf-8",
+        )
+
         brief_text = client.chat(system, prompt)
 
-        # Write brief to child piece
         brief_file = child_dir / "01_brief.md"
         brief_file.write_text(brief_text, encoding="utf-8")
 

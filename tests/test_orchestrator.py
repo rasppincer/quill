@@ -389,6 +389,217 @@ class TestAssembly:
 
 
 # ---------------------------------------------------------------------------
+# Context propagation
+# ---------------------------------------------------------------------------
+
+
+class TestContextPropagation:
+    """Test that parent context files are copied to child directories."""
+
+    def test_outline_propagated_to_children(self, tmp_path):
+        """outline.md should be copied from parent to each child."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "03_outline.md").write_text("# Outline\n\nPart 1: Setup\nPart 2: Conflict")
+
+        child_ids = ["parent-chapter-1", "parent-chapter-2"]
+        for cid in child_ids:
+            (tmp_path / cid).mkdir()
+
+        orch._propagate_parent_context(parent_dir, child_ids, tmp_path)
+
+        for cid in child_ids:
+            outline = tmp_path / cid / "03_outline.md"
+            assert outline.exists(), f"outline.md not propagated to {cid}"
+            assert "Part 1: Setup" in outline.read_text()
+
+    def test_research_propagated_to_children(self, tmp_path):
+        """research.md should be copied from parent to each child."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "04_research.md").write_text("# Research\n\nSource 1\nSource 2")
+
+        child_ids = ["parent-chapter-1"]
+        (tmp_path / "parent-chapter-1").mkdir()
+
+        orch._propagate_parent_context(parent_dir, child_ids, tmp_path)
+
+        research = tmp_path / "parent-chapter-1" / "04_research.md"
+        assert research.exists()
+        assert "Source 1" in research.read_text()
+
+    def test_does_not_overwrite_existing(self, tmp_path):
+        """Should not overwrite existing files in child directories."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / "03_outline.md").write_text("Parent outline")
+
+        child_dir = tmp_path / "parent-chapter-1"
+        child_dir.mkdir()
+        (child_dir / "03_outline.md").write_text("Child outline (custom)")
+
+        orch._propagate_parent_context(parent_dir, ["parent-chapter-1"], tmp_path)
+
+        assert (child_dir / "03_outline.md").read_text() == "Child outline (custom)"
+
+    def test_missing_parent_file_skipped(self, tmp_path):
+        """Should skip files that don't exist in parent."""
+        from quill.orchestrator import Orchestrator
+        orch = Orchestrator.__new__(Orchestrator)
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        # No outline.md or research.md
+
+        child_dir = tmp_path / "parent-chapter-1"
+        child_dir.mkdir()
+
+        orch._propagate_parent_context(parent_dir, ["parent-chapter-1"], tmp_path)
+
+        assert not (child_dir / "03_outline.md").exists()
+        assert not (child_dir / "04_research.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# Chapter brief debug prompt
+# ---------------------------------------------------------------------------
+
+
+class TestChapterBriefDebugPrompt:
+    """Test that chapter brief generation dumps debug prompts."""
+
+    def test_debug_prompt_dumped(self, tmp_path):
+        """_generate_chapter_brief should write 01_brief.generate-prompt.md."""
+        from quill.orchestrator import Orchestrator
+        from unittest.mock import patch, MagicMock
+
+        orch = Orchestrator(agent_set="default")
+
+        mock_brief = "A brief about chapter 1."
+
+        with patch("quill.llm.LLMClient") as MockLLM:
+            mock_client = MagicMock()
+            mock_client.chat.return_value = mock_brief
+            MockLLM.return_value = mock_client
+
+            orch._generate_chapter_brief(
+                child_dir=tmp_path,
+                chapter_index=0, total_chapters=3,
+                chapter_title="The Setup",
+                parent_outline="## Part 1: Setup\nThe team assembles.",
+                structure_text="## Segment 1: The Setup\n## Segment 2: The Conflict",
+                prior_states=[],
+                piece_title="Test Story", genre="fiction",
+                type="story", language="en", segment_target=2000,
+            )
+
+        debug_file = tmp_path / "01_brief.generate-prompt.md"
+        assert debug_file.exists(), "Debug prompt not dumped"
+        content = debug_file.read_text()
+        assert "## System" in content
+        assert "## User" in content
+        assert "The Setup" in content
+        assert len(content) > 200, "Debug prompt too short — likely missing content"
+
+
+# ---------------------------------------------------------------------------
+# Feedback output on loop_back
+# ---------------------------------------------------------------------------
+
+
+class TestFeedbackOutputOnLoopBack:
+    """Test that feedback stages write output even on loop_back."""
+
+    def test_review_output_written_on_loop_back(self, tmp_path):
+        """review.md should exist even when review returns loop_back."""
+        from quill.piece import Piece, _stage_filename
+        import yaml
+
+        # Create a piece
+        piece_dir = tmp_path / "test-piece"
+        piece_dir.mkdir()
+        (piece_dir / "meta.yaml").write_text(yaml.dump({
+            "id": "test-piece", "title": "Test",
+            "genre": "fiction", "type": "story",
+            "language": "en", "current_stage": "review",
+        }))
+        (piece_dir / "stages").mkdir()
+
+        # Write a draft file
+        (piece_dir / _stage_filename("draft")).write_text("Draft content here.")
+
+        # Load the piece
+        piece = Piece(id="test-piece", _path=piece_dir)
+
+        # Simulate what runner does on loop_back for feedback stage
+        critique = "The pacing is too slow in the middle section."
+        piece.write_output("review", critique)
+
+        review_file = piece_dir / _stage_filename("review")
+        assert review_file.exists(), "review.md not written"
+        assert "pacing is too slow" in review_file.read_text()
+
+
+# ---------------------------------------------------------------------------
+# Stage inputs available in child directories
+# ---------------------------------------------------------------------------
+
+
+class TestStageInputsInChildDirs:
+    """Test that child directories have the files needed by stage_inputs."""
+
+    def test_draft_inputs_available_after_propagation(self, tmp_path):
+        """After propagation, child should have outline.md and research.md."""
+        from quill.orchestrator import Orchestrator
+        from quill.piece import _stage_filename
+
+        orch = Orchestrator.__new__(Orchestrator)
+
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        (parent_dir / _stage_filename("outline")).write_text("# Outline")
+        (parent_dir / _stage_filename("research")).write_text("# Research")
+        (parent_dir / _stage_filename("brief")).write_text("# Brief")
+
+        child_dir = tmp_path / "parent-chapter-1"
+        child_dir.mkdir()
+        (child_dir / _stage_filename("brief")).write_text("# Chapter brief")
+
+        orch._propagate_parent_context(parent_dir, ["parent-chapter-1"], tmp_path)
+
+        # draft stage_inputs: [outline.md, brief.md, research.md]
+        assert (child_dir / _stage_filename("outline")).exists()
+        assert (child_dir / _stage_filename("brief")).exists()
+        assert (child_dir / _stage_filename("research")).exists()
+
+    def test_revise_inputs_after_review(self, tmp_path):
+        """After review runs, revise should find draft.md and review.md."""
+        from quill.piece import _stage_filename
+
+        child_dir = tmp_path / "parent-chapter-1"
+        child_dir.mkdir()
+
+        # Simulate: draft was written by draft stage
+        (child_dir / _stage_filename("draft")).write_text("Draft content")
+        # Simulate: review was written by review stage (even on loop_back)
+        (child_dir / _stage_filename("review")).write_text("Review critique here")
+
+        # revise stage_inputs: [draft.md, review.md]
+        assert (child_dir / _stage_filename("draft")).exists()
+        assert (child_dir / _stage_filename("review")).exists()
+        assert "Review critique" in (child_dir / _stage_filename("review")).read_text()
+
+
+# ---------------------------------------------------------------------------
 # Chapter brief generator
 # ---------------------------------------------------------------------------
 

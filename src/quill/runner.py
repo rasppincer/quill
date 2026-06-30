@@ -185,6 +185,9 @@ class StageRunner:
             piece.set_loop_count(stage, loop_count + 1)
             if not is_content:
                 piece.write_decision(stage, decision.decision, decision.critique)
+                # Write feedback output even on loop_back so subsequent stages
+                # can see the critique (e.g., revise needs review.md)
+                piece.write_output(stage, self._format_feedback(decision.critique))
             plog.info("Stage '%s' → loop_back (loop %d/%d)", stage, loop_count + 1, agent_cfg.max_loops)
             logger.info("Stage '%s' loop_back (loop %d/%d)",
                         stage, loop_count + 1, agent_cfg.max_loops)

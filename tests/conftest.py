@@ -175,3 +175,23 @@ def sample_piece_with_review(sample_piece):
     review_content = "The draft needs a stronger opening and better pacing."
     (sample_piece / _stage_filename("review")).write_text(review_content, encoding="utf-8")
     return sample_piece
+
+
+@pytest.fixture
+def client(tmp_output, tmp_agents, monkeypatch):
+    """Flask test client with isolated output and agent dirs."""
+    from quill.app import app as flask_app
+    monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+    monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+    monkeypatch.setattr("quill.agent.MODEL_CONFIG_FILE", tmp_agents / "model.yaml")
+
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as c:
+        yield c
+
+
+@pytest.fixture
+def client_with_piece(client, sample_piece, tmp_output, monkeypatch):
+    """Test client that already has a piece created."""
+    monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+    return client

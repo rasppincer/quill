@@ -275,6 +275,51 @@ def pieces_get(piece_id: str):
     return jsonify(d)
 
 
+@bp.route("/api/pieces/<piece_id>", methods=["DELETE"])
+def pieces_delete(piece_id: str):
+    """Delete a piece/project from database and filesystem."""
+    from ..models import Project, DocumentNode
+    from ..db import db_session
+    from ..piece import DEFAULT_OUTPUT_DIR
+    from ..runner import RunManager
+    import shutil
+    import os
+
+    session = db_session()
+    
+    project = session.query(Project).filter_by(id=piece_id).first()
+    node = session.query(DocumentNode).filter_by(id=piece_id).first()
+    
+    if not project and not node:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    if RunManager().is_piece_running(piece_id):
+        return jsonify({"error": "Cannot delete piece while it has a running agent job"}), 409
+
+    try:
+        if project:
+            session.delete(project)
+        if node:
+            session.delete(node)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        return jsonify({"error": f"Failed to delete database records: {str(e)}"}), 500
+
+    try:
+        path = DEFAULT_OUTPUT_DIR / piece_id
+        if path.exists() and path.is_dir():
+            shutil.rmtree(path)
+            
+        legacy_path = DEFAULT_OUTPUT_DIR / f"{piece_id}.md"
+        if legacy_path.exists() and legacy_path.is_file():
+            os.remove(legacy_path)
+    except Exception as e:
+        logger.warning("Failed to delete filesystem directory for piece '%s': %s", piece_id, e)
+        
+    return jsonify({"status": "deleted", "id": piece_id})
+
+
 @bp.route("/api/pieces/<piece_id>/rename", methods=["POST"])
 def pieces_rename(piece_id: str):
     """Rename a piece (update title in meta.yaml and all stage files).

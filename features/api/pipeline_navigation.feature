@@ -177,7 +177,7 @@ Feature: Pipeline navigation and stage lifecycle
     Then the stage content for "outline" is returned
 
   @slow
-  Scenario: Auto trigger — run agent button is disabled while running
+  Scenario: Auto trigger — cannot manually run agent while auto running
     Given a piece "auto-disabled" at stage "brief"
     And the piece has brief.md content
     When I set the piece trigger to "auto"
@@ -187,7 +187,7 @@ Feature: Pipeline navigation and stage lifecycle
     Then I get an error containing "auto mode"
 
   @slow
-  Scenario: Auto trigger — advance button is disabled while running
+  Scenario: Auto trigger — cannot manually advance stage while auto running
     Given a piece "auto-noadv" at stage "brief"
     And the piece has brief.md content
     When I set the piece trigger to "auto"

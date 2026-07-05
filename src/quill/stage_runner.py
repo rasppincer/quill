@@ -174,7 +174,7 @@ class LLMCaller:
         decision = parse_agent_response(response)
         decision.output = response
         self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, {
-            "decision": decision.decision, "critique": decision.critique[:500],
+            "decision": decision.decision, "critique": (decision.critique or "")[:500],
         }, trace_id=trace_id)
         return decision
 
@@ -272,7 +272,7 @@ class LLMCaller:
 
         result = parse_agent_response(eval_response)
         self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
-            "decision": result.decision, "critique": result.critique[:500],
+            "decision": result.decision, "critique": (result.critique or "")[:500],
         }, trace_id=trace_id)
         return result
 
@@ -375,7 +375,9 @@ class LLMCaller:
         """
         plog = get_piece_logger("stage_runner", piece.id)
         full_outline = sc.input_content
-        chapter_words = max(2000, int(int(piece.target_length or 10000) * 1.2) // len(chapters))
+        from .structure import parse_target_length
+        target = parse_target_length(piece.target_length) or 10000
+        chapter_words = max(2000, int(target * 1.2) // len(chapters))
         all_chapters = []
 
         # Extract character sheet from brief for persistent context

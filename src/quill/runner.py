@@ -218,7 +218,7 @@ class StageRunner:
 
         _emit(event_queue, "stage_complete", {
             "stage": stage, "decision": decision.decision,
-            "critique": decision.critique[:500],
+            "critique": (decision.critique or "")[:500],
             "loop_count": loop_count, "error": decision.error,
         })
 

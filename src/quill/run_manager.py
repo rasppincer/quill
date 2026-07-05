@@ -175,7 +175,7 @@ class RunManager:
                         {
                             "stage": r.stage,
                             "decision": r.decision,
-                            "critique": r.critique[:500] + "..." if len(r.critique) > 500 else r.critique,
+                            "critique": (r.critique or "")[:500] + "..." if len(r.critique or "") > 500 else (r.critique or ""),
                             "loop_count": r.loop_count,
                             "error": r.error,
                         }

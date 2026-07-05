@@ -40,3 +40,9 @@ src/instance/
 
 # Superpowers
 .agent/
+.superpowers/
+.codex/
+.worktrees/
+
+# Node dependencies
+node_modules/

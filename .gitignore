@@ -31,3 +31,9 @@ output/
 
 # Logs (rotated, local only)
 logs/
+
+# Databases & local instance files
+*.db
+*.sqlite3
+instance/
+src/instance/

@@ -7,14 +7,14 @@ Configure database connections, session management, and database initialization 
 The initial backend will use SQLite for simplicity and local execution, with the option to swap to PostgreSQL. Alembic will manage schema versioning.
 
 ## Tasks
-- [ ] Set up database configuration using environment variables (`DATABASE_URL`).
-- [ ] Create `src/quill/db.py` to initialize SQL engine and sessionmaker.
-- [ ] Initialize Alembic migration scripts and create initial migration.
-- [ ] Add db initialization hooks to Flask application startup.
+- [x] Set up database configuration using environment variables (`DATABASE_URL`).
+- [x] Create `src/quill/db.py` to initialize SQL engine and sessionmaker.
+- [x] Initialize Alembic migration scripts and create initial migration.
+- [x] Add db initialization hooks to Flask application startup.
 
 ## Success Criteria
-- [ ] Running Flask server automatically creates the SQLite database if it doesn't exist.
-- [ ] Database migrations can be run successfully via CLI commands (`flask db upgrade`).
+- [x] Running Flask server automatically creates the SQLite database if it doesn't exist.
+- [x] Database migrations can be run successfully via CLI commands (`flask db upgrade`).
 
 ## Priority
 High

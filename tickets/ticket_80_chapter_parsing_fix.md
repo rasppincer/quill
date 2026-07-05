@@ -18,4 +18,5 @@ During draft stage loops, `sc.input_content` contains the previous draft attempt
 High
 
 ---
-**Next Expected Ticket Number**: None
+**Next Expected Ticket Number**: 81
+

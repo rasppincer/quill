@@ -8,6 +8,8 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "SQLAlchemy>=2.0",
+    "flask-sqlalchemy>=3.0",
+    "flask-migrate>=4.0",
 ]
 
 [project.optional-dependencies]

@@ -5,6 +5,7 @@ All routes are organized into blueprints under ``blueprints/``.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from flask import Flask, request
@@ -31,6 +32,22 @@ def create_app() -> Flask:
         static_folder=str(_pkg_dir / "static"),
     )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
+
+    # Database configuration
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL") or "sqlite:///quill.db"
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    # Initialize database and migrations
+    from .db import db
+    from flask_migrate import Migrate
+    db.init_app(app)
+    Migrate(app, db)
+
+    # Automatic database initialization
+    import sys
+    if not any(arg in sys.argv for arg in ("db", "alembic")):
+        with app.app_context():
+            db.create_all()
 
     # Register blueprints
     from .blueprints.pieces import bp as pieces_bp

@@ -267,3 +267,127 @@ class TestToDict:
         piece = load_piece(sample_piece)
         d = piece.to_dict()
         assert d["body_length"] == len(piece.body)
+
+
+# ---------------------------------------------------------------------------
+# Database Persistence
+# ---------------------------------------------------------------------------
+
+
+class TestDatabasePersistence:
+    """Test saving and loading pieces directly to/from the SQL database."""
+
+    def test_save_and_load_top_level_project(self, tmp_path):
+        from quill.models import Project, DocumentNode, StageState
+        from quill.db import db_session
+
+        p = Piece(
+            id="db-project",
+            title="DB Project",
+            genre="non-fiction",
+            type="essay",
+            audience="academics",
+            tone="formal",
+            language="en",
+            target_length="2000 words",
+            constraints=["be concise"],
+            current_stage="brief",
+            body="This is a test essay brief.",
+        )
+        # Disable dual-write to only test DB
+        p.dual_write = False
+        p.save()
+
+        # Query DB directly to verify
+        session = db_session()
+        proj = session.query(Project).filter_by(id="db-project").first()
+        assert proj is not None
+        assert proj.title == "DB Project"
+        assert proj.genre == "non-fiction"
+        assert proj.constraints == ["be concise"]
+        assert proj.current_stage == "brief"
+
+        node = session.query(DocumentNode).filter_by(id="db-project").first()
+        assert node is not None
+        assert node.title == "DB Project"
+        assert node.node_type == "project"
+
+        st_state = session.query(StageState).filter_by(document_node_id="db-project", stage="brief").first()
+        assert st_state is not None
+        assert st_state.body == "This is a test essay brief."
+        assert st_state.state == "empty"
+
+        # Load back via load_piece
+        loaded = load_piece(tmp_path / "db-project")
+        assert loaded.id == "db-project"
+        assert loaded.title == "DB Project"
+        assert loaded.body == "This is a test essay brief."
+        assert loaded.current_stage == "brief"
+        assert loaded.genre == "non-fiction"
+        assert loaded.type == "essay"
+
+    def test_save_and_load_child_chapter(self, tmp_path):
+        from quill.models import DocumentNode, StageState
+        from quill.db import db_session
+
+        # Save parent first (to satisfy ForeignKey projects.id)
+        parent = Piece(id="parent-story", title="Parent Story", genre="fiction")
+        parent.dual_write = False
+        parent.save()
+
+        child = Piece(
+            id="parent-story-chapter-1",
+            title="Chapter 1: The Beginning",
+            parent="parent-story",
+            current_stage="draft",
+            body="Chapter 1 content goes here.",
+        )
+        child.dual_write = False
+        child.save()
+
+        # Query DB directly
+        session = db_session()
+        node = session.query(DocumentNode).filter_by(id="parent-story-chapter-1").first()
+        assert node is not None
+        assert node.title == "Chapter 1: The Beginning"
+        assert node.project_id == "parent-story"
+        assert node.parent_id == "parent-story"
+
+        st_state = session.query(StageState).filter_by(document_node_id="parent-story-chapter-1", stage="draft").first()
+        assert st_state is not None
+        assert st_state.body == "Chapter 1 content goes here."
+
+        # Load child back
+        loaded_child = load_piece(tmp_path / "parent-story-chapter-1")
+        assert loaded_child.id == "parent-story-chapter-1"
+        assert loaded_child.parent == "parent-story"
+        assert loaded_child.body == "Chapter 1 content goes here."
+        assert loaded_child.current_stage == "draft"
+
+    def test_advance_and_supersede_db(self):
+        from quill.models import StageState
+        from quill.db import db_session
+
+        p = Piece(id="flow-test", title="Flow Test", current_stage="brief", body="Brief content.")
+        p.dual_write = False
+        p.save()
+
+        # Advance to outline
+        p.advance_to("outline")
+        p.write_output("outline", "Outline content.")
+        p.save()
+
+        session = db_session()
+        st_brief = session.query(StageState).filter_by(document_node_id="flow-test", stage="brief").first()
+        st_outline = session.query(StageState).filter_by(document_node_id="flow-test", stage="outline").first()
+        assert st_brief.body == "Brief content."
+        assert st_outline.body == "Outline content."
+
+        # Supersede back to brief
+        p.supersede_from("brief")
+
+        # Re-query
+        st_outline_new = session.query(StageState).filter_by(document_node_id="flow-test", stage="outline").first()
+        assert st_outline_new.state == "superseded"
+        assert st_outline_new.body is None
+

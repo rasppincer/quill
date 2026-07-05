@@ -1,10 +1,25 @@
 """Shared fixtures for Quill test suite."""
 
+import os
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
 import pytest
 from pathlib import Path
 
 import yaml
 from quill.piece import _stage_filename
+
+
+@pytest.fixture(autouse=True)
+def init_db():
+    """Initialize in-memory database tables for every test."""
+    from quill.db import engine, db_session
+    from quill.models import Base
+    Base.metadata.create_all(bind=engine)
+    yield
+    db_session.remove()
+    Base.metadata.drop_all(bind=engine)
+
 
 
 @pytest.fixture

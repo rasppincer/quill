@@ -264,6 +264,16 @@ logs/
 
 `PieceLogHandler` routes records with `piece_id` to per-piece files. `TimedRotatingFileHandler` for daily rotation. Old piece logs auto-cleaned after 3 days. No stdout — logs only. `QUILL_LOG_LEVEL` env var (default INFO).
 
+## Database Schema
+
+Quill uses a relational database schema (implemented via SQLAlchemy in [models.py](file:///home/bob/projects/quill/src/quill/models.py)) to replace `meta.yaml` and filesystem-based frontmatter/metrics tracking:
+
+- **Project**: Holds top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set).
+- **DocumentNode**: Represents files, chapters, or scenes in a hierarchical tree structure with self-referential parent-child relationships.
+- **StageState**: Tracks workflow state (generating, ready, superseded), loop counts, content body, and evaluation decisions/critiques for each stage of a `DocumentNode`.
+- **Metrics**: Holds per-stage mechanical readability scores and word counts, with labels for current vs baseline snapshots to support loop guardrails.
+- **AgentLog**: Append-only execution record of LLM calls, prompts, character/token counts, costs, and critiques.
+
 ## Observability
 
 - **Run log**: JSONL per piece, every LLM call logged with timestamp, stage, char counts

@@ -105,6 +105,9 @@
     <button class="btn danger" id="interrupt-btn" onclick="interruptAuto()" style="display:none;margin-left:8px">
         ⏹ Interrupt
     </button>
+    <button class="btn danger" id="delete-piece-btn" onclick="deleteCurrentPiece()" style="margin-left:8px" title="Delete this piece permanently">
+        🗑 Delete
+    </button>
 
     <!-- Export -->
     <button class="btn" id="export-gdocs-btn" onclick="exportGDocs()" style="margin-left:auto" title="Export to Google Docs">
@@ -742,6 +745,33 @@ async function advance() {
         setTimeout(() => location.reload(), 500);
     } else {
         if (btn) { btn.disabled = false; btn.textContent = `Advance →`; }
+    }
+}
+
+async function deleteCurrentPiece() {
+    if (!confirm(`Are you sure you want to permanently delete this piece? This cannot be undone.`)) {
+        return;
+    }
+    const btn = document.getElementById('delete-piece-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Deleting...';
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'deleted') {
+            toast('Piece deleted successfully', 'success');
+            setTimeout(() => {
+                window.location.href = `${SCRIPT_ROOT}/`;
+            }, 1000);
+        } else {
+            toast(data.error || 'Failed to delete piece', 'error');
+            btn.disabled = false;
+            btn.textContent = '🗑 Delete';
+        }
+    } catch (e) {
+        toast(`Error: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = '🗑 Delete';
     }
 }
 

@@ -62,6 +62,10 @@ def create_app() -> Flask:
     app.register_blueprint(export_bp)
     app.register_blueprint(dashboard_bp)
 
+    # Register CLI commands
+    from .cli import sync_legacy_command
+    app.cli.add_command(sync_legacy_command)
+
     return app
 
 

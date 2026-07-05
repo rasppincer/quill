@@ -37,3 +37,6 @@ logs/
 *.sqlite3
 instance/
 src/instance/
+
+# Superpowers
+.agent/

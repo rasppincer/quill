@@ -172,6 +172,17 @@ GET  /api/pieces/<id>/runs/<run_id>/events — SSE live progress stream
 GET  /api/pieces/<id>/prompt/<stage> — debug: show composed prompt
 ```
 
+## CLI Commands
+
+### Sync Legacy Pieces
+To import existing pieces stored under the `output/` directory into the SQLite database:
+```bash
+PYTHONPATH=src .venv/bin/flask --app quill.app sync-legacy [--force]
+```
+Options:
+* `--force` / `-f`: Force update/overwrite existing database records from filesystem files.
+* Safe by default: Checks the database first and skips any pieces that are actively in progress (stage state is `generating`).
+
 ## Dashboard
 
 Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:

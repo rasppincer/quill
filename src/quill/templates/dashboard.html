@@ -127,7 +127,12 @@ async function loadPieces() {
                 </div>
             </td>
             <td style="color:var(--text-muted);font-size:12px">${esc(p.updated || '')}</td>
-            <td><a href="${SCRIPT_ROOT}/pieces/${esc(p.id)}" class="btn sm">View</a></td>
+            <td>
+                <div style="display:flex;gap:8px">
+                    <a href="${SCRIPT_ROOT}/pieces/${esc(p.id)}" class="btn sm">View</a>
+                    <button class="btn sm danger" onclick="deletePiece(event, '${esc(p.id)}', '${esc(p.title)}')">Delete</button>
+                </div>
+            </td>
         </tr>
     `;}).join('');
 }
@@ -156,6 +161,28 @@ async function createPiece(e) {
         toast(`Created "${result.title}"`, 'success');
         closeModal();
         loadPieces();
+    }
+}
+
+async function deletePiece(event, id, title) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm(`Are you sure you want to permanently delete "${title}"? This cannot be undone.`)) {
+        return;
+    }
+    try {
+        const response = await fetch(`${SCRIPT_ROOT}/api/pieces/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (response.ok && data.status === 'deleted') {
+            toast(`Deleted "${title}"`, 'success');
+            loadPieces();
+        } else {
+            toast(data.error || 'Failed to delete piece', 'error');
+        }
+    } catch (e) {
+        toast(`Error: ${e.message}`, 'error');
     }
 }
 

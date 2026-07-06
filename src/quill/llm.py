@@ -32,6 +32,7 @@ class LLMClient:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.last_model_used = None
 
     def chat(self, system: str, user: str, temperature: float | None = None,
              max_tokens: int | None = None, response_format: dict | type[BaseModel] | None = None,
@@ -82,6 +83,7 @@ class LLMClient:
                 response_format=response_format,
                 num_retries=3,
             )
+            self.last_model_used = getattr(response, "model", None)
             elapsed = time.monotonic() - t0
             content = response.choices[0].message.content or ""
             

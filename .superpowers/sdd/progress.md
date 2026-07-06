@@ -5,3 +5,9 @@
 - [x] Task 3: Simplify StageRunner and Remove Evaluate/Loop-Back Loops
 - [x] Task 4: Bypass Transition Validation
 - [x] Task 5: Add Custom Prompt Execution Support
+
+# PIVOT Phase 3: Frontend Layout & Locking Progress Ledger
+
+- [x] Task 1: Navigation Guard and Backend Save API
+- [x] Task 2: piece.html Layout Restructuring
+- [x] Task 3: JavaScript Frontend Updates

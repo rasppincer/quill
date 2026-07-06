@@ -48,6 +48,13 @@ class TestLLMIntegration:
         )
         assert len(response) > 50, f"Response too short: {len(response)} chars"
 
+        returned_model = client.last_model_used
+        if returned_model and returned_model != LLM_MODEL and returned_model != f"openai/{LLM_MODEL}":
+            pytest.fail(
+                f"Model mismatch! Requested '{LLM_MODEL}', but server actually executed with '{returned_model}'. "
+                f"Please unload all models from LM Studio and retry."
+            )
+
     def test_json_parsing_from_llm(self):
         """LLM returns structured critique JSON validation output."""
         from quill.llm import LLMClient
@@ -71,6 +78,13 @@ class TestLLMIntegration:
         result = FeedbackStageOutput.model_validate_json(response)
         assert isinstance(result.critique, str)
         assert len(result.critique) > 0
+
+        returned_model = client.last_model_used
+        if returned_model and returned_model != LLM_MODEL and returned_model != f"openai/{LLM_MODEL}":
+            pytest.fail(
+                f"Model mismatch! Requested '{LLM_MODEL}', but server actually executed with '{returned_model}'. "
+                f"Please unload all models from LM Studio and retry."
+            )
 
     def test_prompt_template_rendering(self):
         """Prompt templates render correctly with real content."""

@@ -117,7 +117,14 @@ class LLMCaller:
                 call_label="generate", event_queue=event_queue,
             )
             try:
-                generated = client.chat(gen_system, prompt_for_generate, piece_id=piece.id)
+                generated = client.chat(
+                    gen_system,
+                    prompt_for_generate,
+                    piece_id=piece.id,
+                    stage=stage,
+                    call_type="generate",
+                    trace_id=trace_id,
+                )
             except ConnectionError as e:
                 return AgentDecision(
                     decision="error", critique="", output="",
@@ -165,7 +172,15 @@ class LLMCaller:
             call_label="feedback", event_queue=event_queue,
         )
         try:
-            response = client.chat(eval_system, prompt_for_feedback, response_format=response_format, piece_id=piece.id)
+            response = client.chat(
+                eval_system,
+                prompt_for_feedback,
+                response_format=response_format,
+                piece_id=piece.id,
+                stage=stage,
+                call_type="agent",
+                trace_id=trace_id,
+            )
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -263,7 +278,15 @@ class LLMCaller:
             call_label="evaluate",
         )
         try:
-            eval_response = client.chat(eval_system, eval_prompt, response_format=response_format, piece_id=piece.id)
+            eval_response = client.chat(
+                eval_system,
+                eval_prompt,
+                response_format=response_format,
+                piece_id=piece.id,
+                stage=stage,
+                call_type="evaluate",
+                trace_id=trace_id,
+            )
         except ConnectionError as e:
             return AgentDecision(
                 decision="error", critique="", output="",
@@ -438,7 +461,14 @@ class LLMCaller:
             self.run_logger.log(piece, stage, f"generate_ch{ch_num}", gen_system, chapter_prompt, trace_id=trace_id)
 
             try:
-                chapter_text = client.chat(gen_system, chapter_prompt, piece_id=piece.id)
+                chapter_text = client.chat(
+                    gen_system,
+                    chapter_prompt,
+                    piece_id=piece.id,
+                    stage=stage,
+                    call_type=f"generate_ch{ch_num}",
+                    trace_id=trace_id,
+                )
                 all_chapters.append(f"## {ch['heading']}\n\n{chapter_text}")
                 plog.info("Chapter %d done: %d chars", ch_num, len(chapter_text))
             except ConnectionError as e:

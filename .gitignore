@@ -46,3 +46,4 @@ src/instance/
 
 # Node dependencies
 node_modules/
+.worktrees/

@@ -106,10 +106,10 @@ Because stages are single-call, every stage writes exactly two files under the p
 
 ## 3. Implementation Phases
 
-### Phase 1: Structured Output Integration
-1. Define Pydantic models for stage responses (`ContentStageOutput` and `FeedbackStageOutput`).
-2. Update the LLM client to request structured schema-guaranteed JSON.
-3. Update the stage execution engine to parse the returned JSON and write `<stage>.json` and `<stage>.md`.
+### Phase 1: Structured Output Integration (Completed)
+- [x] Define Pydantic models for stage responses (`ContentStageOutput` and `FeedbackStageOutput`).
+- [x] Update the LLM client to request structured schema-guaranteed JSON.
+- [x] Update the stage execution engine to parse the returned JSON and write `<stage>.json` and `<stage>.md`.
 
 ### Phase 2: Pipeline & Backend Refactoring
 1. Update `workflows/default.yaml` to configure all stages as single-call.

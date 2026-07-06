@@ -731,17 +731,18 @@ def _load_from_text(text: str, path: Path) -> Piece:
     )
 
 
-def load_piece(path: Path) -> Piece:
+def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
     """Load a piece from the database or directory (new) or single file (legacy)."""
     piece_id = path.stem if (path.exists() and path.is_file()) else path.name
     try:
         session = db_session()
-        node = session.query(DocumentNode).filter_by(id=piece_id).first()
+        if node is None:
+            node = session.query(DocumentNode).filter_by(id=piece_id).first()
         if node:
             # Find Project metadata
-            project = session.query(Project).filter_by(id=node.project_id).first()
+            project = node.project
             # Find all StageStates
-            stages = session.query(StageState).filter_by(document_node_id=piece_id).all()
+            stages = node.stage_states
             stage_states = {s.stage: s.state for s in stages}
             
             is_child = node.parent_id is not None
@@ -761,8 +762,7 @@ def load_piece(path: Path) -> Piece:
                 body = ""
                 
             # Children mapping
-            children_nodes = session.query(DocumentNode).filter_by(parent_id=piece_id).all()
-            children = [c.id for c in children_nodes]
+            children = [c.id for c in node.children]
             
             piece = Piece(
                 id=piece_id,
@@ -853,12 +853,22 @@ def list_pieces(output_dir: Path | None = None) -> list[Piece]:
 
     # 1. Load pieces from database
     try:
+        from sqlalchemy.orm import joinedload, selectinload
         session = db_session()
-        nodes = session.query(DocumentNode).order_by(DocumentNode.id).all()
+        nodes = (
+            session.query(DocumentNode)
+            .options(
+                joinedload(DocumentNode.project),
+                selectinload(DocumentNode.stage_states),
+                selectinload(DocumentNode.children),
+            )
+            .order_by(DocumentNode.id)
+            .all()
+        )
         for node in nodes:
             try:
                 path = (output_dir or DEFAULT_OUTPUT_DIR) / node.id
-                piece = load_piece(path)
+                piece = load_piece(path, node=node)
                 pieces.append(piece)
                 seen_ids.add(node.id)
             except Exception as e:
@@ -897,10 +907,20 @@ def get_piece(piece_id: str, output_dir: Path | None = None) -> Piece | None:
     """Find a piece by ID."""
     path = (output_dir or DEFAULT_OUTPUT_DIR) / piece_id
     try:
+        from sqlalchemy.orm import joinedload, selectinload
         session = db_session()
-        node = session.query(DocumentNode).filter_by(id=piece_id).first()
+        node = (
+            session.query(DocumentNode)
+            .options(
+                joinedload(DocumentNode.project),
+                selectinload(DocumentNode.stage_states),
+                selectinload(DocumentNode.children),
+            )
+            .filter_by(id=piece_id)
+            .first()
+        )
         if node:
-            return load_piece(path)
+            return load_piece(path, node=node)
     except Exception:
         pass
 

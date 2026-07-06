@@ -752,3 +752,26 @@ class TestTwoFileOutput:
         assert "Previous draft attempt" not in inputs
         assert "evaluation feedback" not in inputs
         assert "brief" in inputs.lower()
+
+    @patch("quill.runner.LLMClient")
+    def test_run_stage_with_custom_prompt(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
+        """If custom_prompt is passed, it overrides StageContext.prompt."""
+        from quill.piece import load_piece
+        mock_client = MagicMock()
+        mock_client.chat.return_value = json.dumps({"critique": "Custom prompt feedback."})
+        mock_llm_cls.return_value = mock_client
+
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+
+        result = runner.run_stage(
+            "test-piece",
+            "review",
+            output_dir=tmp_output,
+            custom_prompt="MY_CUSTOM_OVERRIDE_PROMPT",
+        )
+
+        assert result.decision == "advance"
+        calls = mock_client.chat.call_args_list
+        assert len(calls) == 1
+        user_prompt = calls[0][0][1]
+        assert user_prompt == "MY_CUSTOM_OVERRIDE_PROMPT"

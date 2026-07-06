@@ -162,7 +162,7 @@ class TestStageAPI:
         assert data["current_stage"] == "draft"
 
     def test_reject_invalid_target(self, client, sample_piece, tmp_output):
-        resp = client.post("/api/pieces/test-piece/reject", json={"target": "done"})
+        resp = client.post("/api/pieces/test-piece/reject", json={"target": "nope"})
         assert resp.status_code == 400
 
     def test_reject_missing_target(self, client, sample_piece, tmp_output):

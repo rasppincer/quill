@@ -37,6 +37,8 @@ logs/
 *.sqlite3
 instance/
 src/instance/
+quill.db-shm
+quill.db-wal
 
 # Superpowers
 .agent/

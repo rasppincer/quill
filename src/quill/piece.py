@@ -564,7 +564,7 @@ class Piece:
         (backward compat with pieces created before stage_states).
         """
         state = self.get_stage_state(stage)
-        if state != "fresh":
+        if state != "fresh" or self.stage_states.get(stage) == "superseded":
             return True
         # Stage not in stage_states — fall back to current_stage as frontier
         try:

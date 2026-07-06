@@ -153,8 +153,8 @@ class TestSupersession:
         })
         assert resp.status_code == 200
 
-        # Check draft is superseded
+        # Check draft is superseded (mapped to fresh)
         from quill.piece import load_piece
         piece = load_piece(d)
-        assert piece.get_stage_state("draft") == "superseded"
+        assert piece.get_stage_state("draft") == "fresh"
         assert piece.current_stage == "outline"

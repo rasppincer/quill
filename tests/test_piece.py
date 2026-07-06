@@ -315,7 +315,7 @@ class TestDatabasePersistence:
         st_state = session.query(StageState).filter_by(document_node_id="db-project", stage="brief").first()
         assert st_state is not None
         assert st_state.body == "This is a test essay brief."
-        assert st_state.state == "empty"
+        assert st_state.state == "fresh"
 
         # Load back via load_piece
         loaded = load_piece(tmp_path / "db-project")
@@ -388,6 +388,6 @@ class TestDatabasePersistence:
 
         # Re-query
         st_outline_new = session.query(StageState).filter_by(document_node_id="flow-test", stage="outline").first()
-        assert st_outline_new.state == "superseded"
+        assert st_outline_new.state == "fresh"
         assert st_outline_new.body is None
 

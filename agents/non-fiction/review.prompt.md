@@ -20,15 +20,3 @@ Be specific. Reference line numbers or quote passages when flagging issues.
 {{METRICS}}
 
 {{CONTENT}}
-
-Respond with a JSON block:
-```json
-{
-    "decision": "advance" or "loop_back",
-    "critique": "your detailed feedback here..."
-}
-```
-
-Decision guide:
-- "advance" if the draft is structurally sound with only minor issues
-- "loop_back" if there are significant argument, evidence, or logic problems

@@ -17,15 +17,3 @@ Read the text below and produce a thorough critique. Focus on:
 Be specific. Quote passages when flagging issues.
 
 {{CONTENT}}
-
-Respond with a JSON block:
-```json
-{
-    "decision": "advance" or "loop_back",
-    "critique": "your detailed feedback here..."
-}
-```
-
-Decision guide:
-- "advance" if the text is structurally sound with only minor issues
-- "loop_back" if there are significant structural, clarity, or completeness problems

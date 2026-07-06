@@ -25,17 +25,3 @@ Check for:
 4. **Counterarguments** — are opposing views addressed where the outline marks them?
 5. **Clarity** — direct, authoritative prose with no filler or padding.
 6. **Length** — is it within the target word count range?
-
-Respond with ONLY a JSON block:
-
-```json
-{"decision": "advance", "critique": "brief feedback"}
-```
-or
-```json
-{"decision": "loop_back", "critique": "specific issues to fix"}
-```
-
-Decision guide:
-- "advance" if the output is high quality, evidence-backed, and covers the input requirements
-- "loop_back" if there are real, fixable problems — weak evidence, missing sections, thin arguments

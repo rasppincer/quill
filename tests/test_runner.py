@@ -52,10 +52,7 @@ def runner(tmp_agents, monkeypatch):
 
 def _mock_llm_response(decision="advance", critique="Looks good.", body=None):
     """Build a mock LLM response string."""
-    json_block = json.dumps({"decision": decision, "critique": critique})
-    if body:
-        return f"{body}\n\n```json\n{json_block}\n```"
-    return f"```json\n{json_block}\n```"
+    return json.dumps({"critique": critique})
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +196,20 @@ class TestRunStage:
     def test_review_loop_back(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
         """Review stage with loop_back increments loop count."""
         mock_client = MagicMock()
-        mock_client.chat.return_value = _mock_llm_response(
-            decision="loop_back",
-            critique="Opening is weak, try again.",
-        )
+        mock_client.chat.return_value = json.dumps({"critique": "Opening is weak, try again."})
         mock_llm_cls.return_value = mock_client
+
+        # Mock the run_feedback_stage to return a loop_back decision for testing runner loop execution
+        monkeypatch.setattr(
+            runner.llm,
+            "run_feedback_stage",
+            lambda *args, **kwargs: AgentDecision(
+                decision="loop_back",
+                critique="Opening is weak, try again.",
+                output="",
+                stage="review"
+            )
+        )
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
@@ -352,26 +358,11 @@ class TestRunChain:
 
 
 class TestFeedbackOutputFormat:
-    """Test that feedback stages write clean markdown, not raw JSON."""
+    """Test that feedback stages write clean markdown directly."""
 
-    def test_format_feedback_strips_json(self, runner):
-        """_format_feedback should strip JSON code fences."""
-        raw = 'The draft needs work.\n\n```json\n{"decision": "advance", "critique": "ok"}\n```'
-        cleaned = runner._format_feedback(raw)
-        assert "```" not in cleaned
-        assert "decision" not in cleaned
-        assert "draft needs work" in cleaned
-
-    def test_format_feedback_strips_bare_json(self, runner):
-        """_format_feedback should strip bare JSON decision blocks."""
-        raw = 'Good structure.\n\n{"decision": "advance", "critique": "Solid"}'
-        cleaned = runner._format_feedback(raw)
-        assert "decision" not in cleaned
-        assert "Good structure" in cleaned
-
-    def test_format_feedback_preserves_clean_text(self, runner):
-        """_format_feedback should not alter text without JSON."""
-        raw = "The piece has strong character development and pacing."
+    def test_format_feedback_returns_directly(self, runner):
+        """_format_feedback should return critique text directly."""
+        raw = "The draft needs work."
         cleaned = runner._format_feedback(raw)
         assert cleaned == raw
 
@@ -381,11 +372,8 @@ class TestFeedbackOutputFormat:
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
         mock_client = MagicMock()
-        # Simulate LLM returning JSON-wrapped response for a feedback stage
-        mock_client.chat.return_value = (
-            'The draft needs a stronger opening.\n\n'
-            '```json\n{"decision": "advance", "critique": "Good structure overall."}\n```'
-        )
+        # Simulate LLM returning schema-guaranteed JSON for a feedback stage
+        mock_client.chat.return_value = json.dumps({"critique": "The draft needs a stronger opening."})
         mock_llm_cls.return_value = mock_client
 
         result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
@@ -393,11 +381,12 @@ class TestFeedbackOutputFormat:
         assert result.decision == "advance"
         review_file = sample_piece / _stage_filename("review")
         content = review_file.read_text()
-        # Should NOT contain JSON formatting
+        assert "The draft needs a stronger opening." in content
+        assert "critique" not in content    # Should NOT contain JSON formatting
         assert "```" not in content
         assert '"decision"' not in content
         # Should contain the clean critique text
-        assert "Good structure" in content
+        assert "The draft needs a stronger opening." in content
 
 
 # ---------------------------------------------------------------------------
@@ -809,9 +798,21 @@ class TestTwoFileOutput:
         mock_client = MagicMock()
         mock_client.chat.side_effect = [
             "First attempt at revision.",  # generate
-            _mock_llm_response(decision="loop_back", critique="Needs more depth."),  # evaluate
+            json.dumps({"critique": "Needs more depth."})  # evaluate
         ]
         mock_llm_cls.return_value = mock_client
+
+        # Mock the evaluate_output to return a loop_back decision for testing runner loop execution
+        monkeypatch.setattr(
+            runner.llm,
+            "evaluate_output",
+            lambda *args, **kwargs: AgentDecision(
+                decision="loop_back",
+                critique="Needs more depth.",
+                output="",
+                stage="revise"
+            )
+        )
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 

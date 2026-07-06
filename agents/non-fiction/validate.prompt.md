@@ -19,15 +19,3 @@ Check for factual accuracy and claim integrity:
 
 For each issue found, quote the passage and explain the problem.
 If no issues found, say so explicitly.
-
-Respond with a JSON block:
-```json
-{
-    "decision": "advance" or "loop_back",
-    "critique": "validation report: issues found (list) or 'all checks pass'"
-}
-```
-
-Decision guide:
-- "advance" if no factual errors or unsupported claims found
-- "loop_back" if there are factual errors, dubious sources, or math mistakes

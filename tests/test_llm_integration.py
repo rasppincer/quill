@@ -49,28 +49,28 @@ class TestLLMIntegration:
         assert len(response) > 50, f"Response too short: {len(response)} chars"
 
     def test_json_parsing_from_llm(self):
-        """LLM returns JSON when asked, and agent parser handles it."""
+        """LLM returns structured critique JSON validation output."""
         from quill.llm import LLMClient
-        from quill.agent import parse_agent_response
+        from quill.agent import FeedbackStageOutput
 
         client = LLMClient(
             api_base=f"{LLM_BASE}/v1",
             api_key="",
             model=LLM_MODEL,
             temperature=0.3,
-            max_tokens=300,
+            max_tokens=2000,
         )
-        system = (
-            "You are a writing evaluator. Return ONLY a JSON object, nothing else.\n"
-            'Format: {"decision": "advance" or "loop_back", "critique": "your analysis"}'
-        )
+        system = "You are a writing evaluator."
         user = "Critique this text: The cat sat on the mat. It was a sunny day."
-        response = client.chat(system=system, user=user)
+        response = client.chat(
+            system=system,
+            user=user,
+            response_format=FeedbackStageOutput
+        )
 
-        result = parse_agent_response(response)
-        assert result.decision in ("advance", "loop_back")
-        # Critique may be empty if LLM returns minimal JSON
+        result = FeedbackStageOutput.model_validate_json(response)
         assert isinstance(result.critique, str)
+        assert len(result.critique) > 0
 
     def test_prompt_template_rendering(self):
         """Prompt templates render correctly with real content."""

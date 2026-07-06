@@ -24,17 +24,3 @@ Check for:
 3. **Narrative structure** — does it follow the story arc, pacing, and character development?
 4. **Voice** — does it sound natural and genre-appropriate, not generic AI?
 5. **Length** — is it within the target word count range?
-
-Respond with ONLY a JSON block:
-
-```json
-{"decision": "advance", "critique": "brief feedback"}
-```
-or
-```json
-{"decision": "loop_back", "critique": "specific issues to fix"}
-```
-
-Decision guide:
-- "advance" if the output is high quality and covers the input requirements
-- "loop_back" if there are real, fixable problems (be specific about what and why)

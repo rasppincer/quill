@@ -25,17 +25,3 @@ Check for:
 4. **Evidence** — are claims backed by data or logic? (non-fiction)
 5. **Voice** — does it sound natural, not generic AI? (all genres)
 6. **Length** — is it within the target word count range?
-
-Respond with ONLY a JSON block:
-
-```json
-{"decision": "advance", "critique": "brief feedback"}
-```
-or
-```json
-{"decision": "loop_back", "critique": "specific issues to fix"}
-```
-
-Decision guide:
-- "advance" if the output is high quality and covers the input requirements
-- "loop_back" if there are real, fixable problems (be specific about what and why)

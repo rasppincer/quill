@@ -93,17 +93,18 @@ class StageRunner:
     def run_stage(
         self, piece_id: str, stage: str, output_dir: Path | None = None,
         event_queue=None, trace_id: str | None = None, force_advance: bool = False,
-        extra_context: dict | None = None,
+        extra_context: dict | None = None, custom_prompt: str | None = None,
     ) -> AgentDecision:
         """Execute a pipeline stage.
 
         Assembles context, checks limits, delegates to LLMCaller for
-        LLM calls, then handles the decision (loop_back/advance) and
+        LLM calls, and handles the decision (always advance) and
         state transitions.
 
         Args:
             extra_context: Additional template variables injected into the
                 prompt context (used by orchestrator for sliding window).
+            custom_prompt: Custom prompt to override Jinja rendering.
         """
         # Research is a special stage
         if stage == "research":
@@ -118,26 +119,18 @@ class StageRunner:
             )
 
         piece, agent_cfg = sc.piece, sc.agent_cfg
-        loop_count = sc.loop_count
         plog = get_piece_logger("runner", piece_id)
+
+        # Custom Prompt Override
+        if custom_prompt:
+            sc = sc._replace(prompt=custom_prompt)
 
         # Set stage state to generating
         piece.set_stage_state(stage, "generating")
-        plog.info("Stage '%s' → generating (loop %d)", stage, loop_count)
+        plog.info("Stage '%s' → generating", stage)
         self.llm.run_logger.log(piece, stage, "state_transition", "", "", {
             "state": "generating",
         }, trace_id=trace_id)
-
-        # Check loop limit
-        if loop_count >= agent_cfg.max_loops:
-            logger.info("Stage '%s' reached max loops (%d), forcing advance",
-                        stage, agent_cfg.max_loops)
-            piece.advance_to(sc.stage_def.next) if sc.stage_def and sc.stage_def.next else None
-            return AgentDecision(
-                decision="advance",
-                critique=f"Max loops ({agent_cfg.max_loops}) reached. Forcing advance.",
-                output="", loop_count=loop_count, stage=stage,
-            )
 
         # Create LLM client
         client = LLMClient(
@@ -150,76 +143,36 @@ class StageRunner:
 
         _emit(event_queue, "stage_start", {
             "stage": stage, "is_content_stage": is_content,
-            "prompt_chars": len(sc.prompt), "loop_count": loop_count,
+            "prompt_chars": len(sc.prompt), "loop_count": 0,
         })
 
-        # Delegate to LLMCaller for LLM calls
-        if is_content:
-            decision = self.llm.run_content_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
-        else:
-            decision = self.llm.run_feedback_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
-
-        decision.loop_count = loop_count
+        # Delegate to unified LLMCaller run_stage
+        decision = self.llm.run_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
+        decision.loop_count = 0
         decision.stage = stage
 
-        # Loop guardrail
-        if decision.decision == "loop_back" and loop_count > 0:
-            guardrail = self.metrics_svc.check_guardrail(piece, stage, loop_count)
-            if guardrail:
-                decision.decision = "advance"
-                decision.critique = (
-                    f"[Loop guardrail] Forcing advance after {loop_count} loops. "
-                    f"Metrics degraded: {guardrail}. "
-                    f"Original critique: {decision.critique}"
-                )
-                logger.warning("Loop guardrail triggered for '%s': %s", stage, guardrail)
-                _emit(event_queue, "loop_guardrail", {
-                    "stage": stage, "loop_count": loop_count,
-                    "reason": guardrail, "forced_advance": True,
-                })
-        elif decision.decision == "loop_back" and loop_count == 0:
-            self.metrics_svc.save_guardrail_snapshot(piece, stage)
+        # Execute decision (Always advance, no loop back)
+        piece.set_loop_count(stage, 0)
+        piece.set_stage_state(stage, "completed")
+        plog.info("Stage '%s' → completed (advance)", stage)
 
-        # Execute decision
-        if decision.decision == "loop_back":
-            piece.set_loop_count(stage, loop_count + 1)
-            if not is_content:
-                piece.write_decision(stage, decision.decision, decision.critique)
-                # Write feedback output even on loop_back so subsequent stages
-                # can see the critique (e.g., revise needs review.md)
-                piece.write_output(stage, self._format_feedback(decision.critique))
-            plog.info("Stage '%s' → loop_back (loop %d/%d)", stage, loop_count + 1, agent_cfg.max_loops)
-            logger.info("Stage '%s' loop_back (loop %d/%d)",
-                        stage, loop_count + 1, agent_cfg.max_loops)
-            _emit(event_queue, "loop_start", {
-                "stage": stage, "loop_count": loop_count + 1,
-                "max_loops": agent_cfg.max_loops,
-                "critique": decision.critique[:300],
-            })
-        elif decision.decision == "advance":
-            piece.set_loop_count(stage, 0)
-            piece.set_stage_state(stage, "ready")
-            plog.info("Stage '%s' → ready (advance)", stage)
-            self.metrics_svc.cleanup_guardrail_snapshot(piece, stage)
-            if not is_content:
-                piece.write_output(stage, self._format_feedback(decision.critique))
-            if is_content:
-                self.metrics_svc.compute(piece, stage)
-            # Auto-advance only if trigger allows it or forced (chain mode)
-            auto_advance = force_advance or agent_cfg.trigger in ("auto",)
-            if auto_advance and sc.stage_def and sc.stage_def.next:
-                piece.advance_to(sc.stage_def.next)
-                plog.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
-            else:
-                logger.info("Stage '%s' → advance decision (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
+        if not is_content:
+            piece.write_output(stage, self._format_feedback(decision.critique))
+        if is_content:
+            self.metrics_svc.compute(piece, stage)
+
+        # Auto-advance only if trigger allows it or forced (chain mode)
+        auto_advance = force_advance or agent_cfg.trigger in ("auto",)
+        if auto_advance and sc.stage_def and sc.stage_def.next:
+            piece.advance_to(sc.stage_def.next)
+            plog.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
         else:
-            logger.warning("Stage '%s' returned unknown decision: '%s'",
-                           stage, decision.decision)
+            logger.info("Stage '%s' → completed (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
 
         _emit(event_queue, "stage_complete", {
-            "stage": stage, "decision": decision.decision,
+            "stage": stage, "decision": "advance",
             "critique": (decision.critique or "")[:500],
-            "loop_count": loop_count, "error": decision.error,
+            "loop_count": 0, "error": decision.error,
         })
 
         return decision
@@ -284,7 +237,7 @@ class StageRunner:
             _emit(event_queue, "research_cached", {
                 "stage": stage, "file": str(research_file),
             })
-            piece.set_stage_state(stage, "ready")
+            piece.set_stage_state(stage, "completed")
             return AgentDecision(
                 decision="advance", critique="Research cache hit.",
                 output="", stage=stage,
@@ -380,7 +333,7 @@ class StageRunner:
         else:
             logger.info("Research complete (no auto-advance, trigger=%s)", agent_cfg.trigger if agent_cfg else "?")
 
-        piece.set_stage_state(stage, "ready")
+        piece.set_stage_state(stage, "completed")
 
         return AgentDecision(
             decision="advance", critique=critique,

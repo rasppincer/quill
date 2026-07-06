@@ -193,42 +193,12 @@ class TestRunStage:
         assert piece.current_stage == "revise"
 
     @patch("quill.runner.LLMClient")
-    def test_review_loop_back(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
-        """Review stage with loop_back increments loop count."""
-        mock_client = MagicMock()
-        mock_client.chat.return_value = json.dumps({"critique": "Opening is weak, try again."})
-        mock_llm_cls.return_value = mock_client
-
-        # Mock the run_feedback_stage to return a loop_back decision for testing runner loop execution
-        monkeypatch.setattr(
-            runner.llm,
-            "run_feedback_stage",
-            lambda *args, **kwargs: AgentDecision(
-                decision="loop_back",
-                critique="Opening is weak, try again.",
-                output="",
-                stage="review"
-            )
-        )
-
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
-
-        assert result.decision == "loop_back"
-        assert result.loop_count == 0  # was 0, now incremented to 1
-
-    @patch("quill.runner.LLMClient")
     def test_content_stage_writes_body(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
         """Content stages (revise) write the body, not raw JSON."""
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        # Two-call approach: first call generates content, second call evaluates
-        mock_client.chat.side_effect = [
-            "The revised draft is much stronger now with a compelling opening.",  # generate
-            _mock_llm_response(decision="advance", critique="Much improved."),    # evaluate
-        ]
+        mock_client.chat.return_value = json.dumps({"content": "The revised draft is much stronger now with a compelling opening."})
         mock_llm_cls.return_value = mock_client
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
@@ -244,24 +214,8 @@ class TestRunStage:
         # The revise.md file should have the body text, not the JSON
         revise_file = sample_piece_with_review / _stage_filename("revise")
         content = revise_file.read_text()
-        assert "revised draft" in content
+        assert "Compelling opening" in content or "compelling" in content
         assert "decision" not in content
-
-    @patch("quill.runner.LLMClient")
-    def test_max_loops_forces_advance(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
-        """When max_loops is reached, force advance."""
-        from quill.piece import load_piece
-
-        # Set loop count to max
-        piece = load_piece(sample_piece)
-        runner.set_loop_count(piece, "review", 3)  # max_loops = 3
-
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        result = runner.run_stage("test-piece", "review", output_dir=tmp_output)
-
-        assert result.decision == "advance"
-        assert "Max loops" in result.critique
 
     @patch("quill.runner.LLMClient")
     def test_missing_agent_returns_error(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):
@@ -646,81 +600,8 @@ class TestStateTransitionLog:
 # ---------------------------------------------------------------------------
 
 
-class TestEvaluatePromptContent:
-    """Verify evaluate prompts include generated text, not just inputs."""
-
-    @patch("quill.runner.LLMClient")
-    def test_evaluate_prompt_includes_generated_text(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """The evaluate prompt must contain the generated text, not just inputs."""
-        from quill.piece import load_piece
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        mock_client = MagicMock()
-        mock_llm_cls.return_value = mock_client
-
-        mock_client.chat.side_effect = [
-            "The revised draft is much stronger now.",
-            '{"decision": "advance", "critique": "Well done."}',
-        ]
-
-        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
-
-        # Check the evaluate prompt (second call) includes generated text
-        calls = mock_client.chat.call_args_list
-        assert len(calls) == 2
-        eval_user_prompt = calls[1][0][1]  # second call, user prompt
-        assert "The revised draft is much stronger now" in eval_user_prompt, (
-            "Evaluate prompt must contain the generated text"
-        )
-
-    @patch("quill.runner.LLMClient")
-    def test_evaluate_prompt_includes_input_content(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """The evaluate prompt must contain the input content (draft + review)."""
-        from quill.piece import load_piece
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        mock_client = MagicMock()
-        mock_llm_cls.return_value = mock_client
-
-        mock_client.chat.side_effect = [
-            "Revised text here.",
-            '{"decision": "advance", "critique": "Good."}',
-        ]
-
-        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
-
-        calls = mock_client.chat.call_args_list
-        eval_user_prompt = calls[1][0][1]
-        # Should contain the input content markers
-        assert "draft" in eval_user_prompt.lower() or "outline" in eval_user_prompt.lower(), (
-            "Evaluate prompt must contain input content"
-        )
-
-    @patch("quill.runner.LLMClient")
-    def test_evaluate_prompt_has_both_sections(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """Evaluate prompt has both Input and Generated sections clearly labeled."""
-        from quill.piece import load_piece
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        mock_client = MagicMock()
-        mock_llm_cls.return_value = mock_client
-
-        mock_client.chat.side_effect = [
-            "Generated revise content.",
-            '{"decision": "advance", "critique": "OK."}',
-        ]
-
-        runner.run_stage("test-piece", "revise", output_dir=tmp_output)
-
-        calls = mock_client.chat.call_args_list
-        eval_user_prompt = calls[1][0][1]
-        # Check that both sections exist in the prompt
-        assert "Generated" in eval_user_prompt, "Evaluate prompt needs 'Generated' section"
-        assert "Input" in eval_user_prompt, "Evaluate prompt needs 'Input' section"
-
-
 class TestTwoFileOutput:
-    """Content stages write .md (generated text) + .decision.md (evaluation)."""
+    """Content stages write .md (generated text) + .json (raw output)."""
 
     def test_compose_prompt_returns_filled_template(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
         """compose_prompt returns the filled prompt template without calling LLM."""
@@ -757,15 +638,12 @@ class TestTwoFileOutput:
         assert "not found" in result["error"]
 
     @patch("quill.runner.LLMClient")
-    def test_content_stage_writes_decision_file(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """Content stage writes both stage.md and stage.decision.md."""
+    def test_content_stage_writes_json_file(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stage writes both stage.md and stage.json."""
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        mock_client.chat.side_effect = [
-            "The revised draft is much stronger now.",  # generate
-            _mock_llm_response(decision="advance", critique="Much improved."),  # evaluate
-        ]
+        mock_client.chat.return_value = json.dumps({"content": "The revised draft is much stronger now."})
         mock_llm_cls.return_value = mock_client
 
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
@@ -781,56 +659,12 @@ class TestTwoFileOutput:
         # Stage file has generated text
         revise_file = sample_piece_with_review / _stage_filename("revise")
         assert revise_file.exists()
-        assert "revised draft" in revise_file.read_text()
+        assert "The revised draft is much stronger now." in revise_file.read_text()
 
-        # Decision file has evaluation
-        decision_file = sample_piece_with_review / _stage_filename("revise", ".decision.md")
-        assert decision_file.exists()
-        decision_content = decision_file.read_text()
-        assert "Decision: advance" in decision_content
-        assert "Much improved" in decision_content
-
-    @patch("quill.runner.LLMClient")
-    def test_loop_back_preserves_generated_text(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """On loop_back, stage.md retains the generated text (not critique)."""
-        from quill.piece import load_piece
-
-        mock_client = MagicMock()
-        mock_client.chat.side_effect = [
-            "First attempt at revision.",  # generate
-            json.dumps({"critique": "Needs more depth."})  # evaluate
-        ]
-        mock_llm_cls.return_value = mock_client
-
-        # Mock the evaluate_output to return a loop_back decision for testing runner loop execution
-        monkeypatch.setattr(
-            runner.llm,
-            "evaluate_output",
-            lambda *args, **kwargs: AgentDecision(
-                decision="loop_back",
-                critique="Needs more depth.",
-                output="",
-                stage="revise"
-            )
-        )
-
-        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
-
-        piece = load_piece(sample_piece_with_review)
-        piece.current_stage = "revise"
-        piece.save()
-
-        result = runner.run_stage("test-piece", "revise", output_dir=tmp_output)
-
-        assert result.decision == "loop_back"
-
-        # Stage file still has the generated text
-        revise_file = sample_piece_with_review / _stage_filename("revise")
-        assert "First attempt" in revise_file.read_text()
-
-        # Decision file has the critique
-        decision_file = sample_piece_with_review / _stage_filename("revise", ".decision.md")
-        assert "Needs more depth" in decision_file.read_text()
+        # JSON file has raw response
+        json_file = sample_piece_with_review / _stage_filename("revise", ".json")
+        assert json_file.exists()
+        assert "The revised draft is much stronger now." in json_file.read_text()
 
     @patch("quill.runner.LLMClient")
     def test_decision_file_not_in_body_fallback(self, mock_llm_cls, runner, tmp_output, monkeypatch):

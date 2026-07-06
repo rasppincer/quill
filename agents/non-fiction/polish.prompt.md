@@ -23,14 +23,4 @@ Rules:
 
 ## Output Format
 
-Write the COMPLETE polished text first (the full piece). Then, at the very end, add a JSON decision block with your scores.
-
-Example:
-
-(polished text starts here)
-[... your complete polished text ...]
-(polished text ends here)
-
-## Output Format
-
 Write the COMPLETE text. Output only the content — no meta-commentary, no JSON, no decision blocks.

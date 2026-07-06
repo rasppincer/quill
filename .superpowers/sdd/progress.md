@@ -11,3 +11,9 @@
 - [x] Task 1: Navigation Guard and Backend Save API
 - [x] Task 2: piece.html Layout Restructuring
 - [x] Task 3: JavaScript Frontend Updates
+
+# PIVOT Phase 2b: Loop-Back Cleanup Progress Ledger
+
+- [ ] Task 1: Remove loop-back block from `read_inputs`
+- [ ] Task 2: Simplify `compose_prompt` to single-call output
+- [ ] Task 3: Reset stale loop_count values (data cleanup CLI)

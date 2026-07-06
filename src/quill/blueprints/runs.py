@@ -39,7 +39,7 @@ def pieces_run(piece_id: str):
         return jsonify({"error": "Piece is in auto mode — cannot run agent manually"}), 409
 
     # Use piece's agent_set, fall back to request body, then "default"
-    agent_set = data.get("agent_set") or piece.agent_set or "default"
+    agent_set = data.get("agent_set") or piece.resolved_agent_set
     runner = StageRunner(agent_set=agent_set)
 
     custom_prompt = data.get("custom_prompt")
@@ -122,7 +122,7 @@ def pieces_run_async(piece_id: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
-    agent_set = data.get("agent_set") or piece.agent_set or "default"
+    agent_set = data.get("agent_set") or piece.resolved_agent_set
 
     manager = RunManager()
     run_id = manager.start_run(
@@ -225,7 +225,7 @@ def pieces_debug_prompt(piece_id: str, stage: str):
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
 
-    agent_set = request.args.get("agent_set") or piece.agent_set or "default"
+    agent_set = request.args.get("agent_set") or piece.resolved_agent_set
     runner = StageRunner(agent_set=agent_set)
     result = runner.compose_prompt(piece_id, stage)
     if "error" in result:
@@ -269,7 +269,7 @@ def pieces_auto(piece_id: str):
     piece.trigger = "auto"
     piece.save()
 
-    agent_set = piece.agent_set or "default"
+    agent_set = piece.resolved_agent_set
     manager = RunManager()
     run_id = manager.start_run(
         piece_id=piece_id,

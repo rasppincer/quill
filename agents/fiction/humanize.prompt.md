@@ -24,14 +24,4 @@ Scan for these AI patterns and remove them:
 
 ## Output Format
 
-Write the COMPLETE humanized text first (the full story/article, rewritten). Then, at the very end, add a JSON decision block with your AI-ness score.
-
-Example:
-
-(humanized text starts here)
-[... your complete rewritten text ...]
-(humanized text ends here)
-
-## Output Format
-
 Write the COMPLETE text. Output only the content — no meta-commentary, no JSON, no decision blocks.

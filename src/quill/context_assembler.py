@@ -116,26 +116,6 @@ class ContextAssembler:
                             f"{text[m.end():] if m else text}"
                         )
 
-        # If looping, also read the current stage's existing content and decision
-        if loop_count > 0:
-            current_file = stage_dir / _stage_filename(stage)
-            if current_file.exists():
-                text = current_file.read_text(encoding="utf-8")
-                m = _FRONTMATTER_RE.match(text)
-                body = text[m.end():] if m else text
-                if body.strip():
-                    inputs.append(
-                        f"=== {_stage_filename(stage)} (previous attempt) ===\n{body}"
-                    )
-
-            decision_file = stage_dir / _stage_filename(stage, ".decision.md")
-            if decision_file.exists():
-                text = decision_file.read_text(encoding="utf-8")
-                inputs.append(
-                    f"=== {_stage_filename(stage, '.decision.md')} "
-                    f"(evaluation feedback) ===\n{text}"
-                )
-
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 
     def build_render_context(

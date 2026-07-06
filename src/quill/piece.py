@@ -118,6 +118,18 @@ class Piece:
             self._log = get_piece_logger("piece", self.id)
         return self._log
 
+    @property
+    def resolved_agent_set(self) -> str:
+        """Resolve agent set, auto-detecting from genre if empty."""
+        if self.agent_set:
+            return self.agent_set
+        if self.genre:
+            from .agent import AGENTS_DIR
+            genre_dir = AGENTS_DIR / self.genre
+            if genre_dir.is_dir() and (genre_dir / "config.yaml").exists():
+                return self.genre
+        return "default"
+
     def to_frontmatter(self) -> dict:
         """Export metadata as a dict for YAML serialization."""
         return {
@@ -731,6 +743,7 @@ class Piece:
         d["body_length"] = len(self.body)
         d["path"] = str(self._path) if self._path else None
         d["is_legacy"] = self._is_legacy
+        d["resolved_agent_set"] = self.resolved_agent_set
         if not self._is_legacy:
             d["stages"] = self.list_stages()
             d["display_stages"] = self.display_stages()

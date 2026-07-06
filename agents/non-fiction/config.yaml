@@ -11,7 +11,7 @@ stages:
   structure:
     name: Structure Agent
     description: Auto-segments content into argument sections
-    temperature: 0.3
+    temperature: 0.5
   outline:
     name: Outline Agent
     description: Creates structured outline from brief with thesis and evidence hooks
@@ -35,7 +35,7 @@ stages:
   validate:
     name: Validate Agent
     description: Domain-specific fact checking and consistency verification
-    temperature: 0.3
+    temperature: 0.5
   polish:
     name: Polish Agent
     description: Final line-level edits, title optimization
@@ -43,4 +43,4 @@ stages:
   state:
     name: State Agent
     description: Extracts structured narrative state
-    temperature: 0.3
+    temperature: 0.7

@@ -1,6 +1,7 @@
 api_base: http://192.168.0.3:1234/v1
-model: google/gemma-4-31b-qat
+model: google/gemma-4-31b
 temperature: 0.7
 max_tokens: 12288
 structured_output: false
 debug_prompts: true
+debug_litellm: true

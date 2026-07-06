@@ -101,7 +101,7 @@ class PromptBuilder:
             text = (
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Produce high-quality content. "
-                f"Do NOT include any JSON or decision blocks — just write the content."
+                f"Do NOT include any JSON or decision blocks - just write the content."
             )
         elif call_type == "evaluate":
             text = (

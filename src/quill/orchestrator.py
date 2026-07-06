@@ -510,7 +510,7 @@ class Orchestrator:
         system = (
             f"You are a chapter brief writer for a {genre} {type} in {language}. "
             f"Write detailed, specific briefs that guide an AI writer. "
-            f"Do NOT include JSON or decision blocks — just write the brief."
+            f"Do NOT include JSON or decision blocks - just write the brief."
         )
 
         logger.info(

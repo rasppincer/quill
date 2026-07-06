@@ -34,10 +34,4 @@ Use `## Part N: Title` headers for each major section. Example:
 [summary, call to action, implications]
 ```
 
-Write the complete outline first. Then, at the very end, add a JSON decision block.
 
-Example:
-
-(outline starts here)
-[... your complete outline ...]
-(outline ends here)

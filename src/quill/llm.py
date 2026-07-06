@@ -10,13 +10,14 @@ Works with any provider that exposes an OpenAI-compatible endpoint:
 from __future__ import annotations
 
 import logging
+import os
 import time
 import litellm
 from typing import Any
 from pydantic import BaseModel
 
 from .timeit import log_timing
-from .logging_config import get_logger
+from .logging_config import get_logger, get_piece_logger
 
 logger = logging.getLogger(__name__)
 _common_log = get_logger("llm")
@@ -72,6 +73,67 @@ class LLMClient:
                 model_name = f"openai/{model_name}"
 
         t0 = time.monotonic()
+        
+        # Check if debug_litellm is enabled in global model config or environment
+        from .agent import load_model_config
+        cfg = load_model_config()
+        debug_litellm = cfg.get("debug_litellm", False) or os.environ.get("QUILL_LITELLM_DEBUG", "").lower() in ("true", "1", "yes")
+
+        def logger_fn(model_call_dict: dict) -> None:
+            if model_call_dict.get("log_event_type") == "pre_api_call":
+                try:
+                    add_args = model_call_dict.get("additional_args") or {}
+                    litellm_params = model_call_dict.get("litellm_params") or {}
+                    
+                    # Reconstruct API Base URL
+                    api_base = add_args.get("api_base") or litellm_params.get("api_base") or self.api_base or ""
+                    api_base_str = str(api_base).rstrip("/")
+                    
+                    # Resolve Endpoint URL
+                    if api_base_str:
+                        if not api_base_str.endswith("/chat/completions") and not api_base_str.endswith("/completions"):
+                            url = f"{api_base_str}/chat/completions"
+                        else:
+                            url = api_base_str
+                    else:
+                        url = "https://api.openai.com/v1/chat/completions"
+                    
+                    # Build/mask headers
+                    headers = {"Content-Type": "application/json"}
+                    api_key = litellm_params.get("api_key") or self.api_key
+                    if api_key:
+                        if len(api_key) > 8:
+                            masked_key = api_key[:4] + "..." + api_key[-4:]
+                        else:
+                            masked_key = "***"
+                        headers["Authorization"] = f"Bearer {masked_key}"
+                    
+                    # Get complete input payload dict
+                    complete_input_dict = add_args.get("complete_input_dict") or {}
+                    
+                    # Construct curl command representation
+                    import json
+                    headers_str = " \\\n  ".join([f"-H '{k}: {v}'" for k, v in headers.items()])
+                    try:
+                        payload_str = json.dumps(complete_input_dict, indent=2)
+                    except Exception:
+                        payload_str = str(complete_input_dict)
+                    
+                    curl_cmd = (
+                        f"curl -X POST \\\n"
+                        f"  {url} \\\n"
+                        f"  {headers_str} \\\n"
+                        f"  -d '{payload_str}'"
+                    )
+                    
+                    log_msg = f"LiteLLM HTTP request payload:\n{curl_cmd}"
+                    if piece_id:
+                        get_piece_logger("llm", piece_id).info(log_msg)
+                    else:
+                        _common_log.info(log_msg)
+                except Exception as log_err:
+                    logger.debug("Failed to log LiteLLM HTTP request details: %s", log_err)
+
         try:
             response = litellm.completion(
                 model=model_name,
@@ -82,6 +144,7 @@ class LLMClient:
                 max_tokens=max_tokens or self.max_tokens,
                 response_format=response_format,
                 num_retries=3,
+                logger_fn=logger_fn if debug_litellm else None,
             )
             self.last_model_used = getattr(response, "model", None)
             elapsed = time.monotonic() - t0
@@ -93,7 +156,6 @@ class LLMClient:
             # Log to appropriate logger
             log_msg = f"LLM call: model={self.model}, in={input_chars} chars, out={len(content)} chars, elapsed={elapsed:.1f}s"
             if piece_id:
-                from .logging_config import get_piece_logger
                 get_piece_logger("llm", piece_id).info(log_msg)
             else:
                 _common_log.info(log_msg)

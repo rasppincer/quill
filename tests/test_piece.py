@@ -391,3 +391,24 @@ class TestDatabasePersistence:
         assert st_outline_new.state == "fresh"
         assert st_outline_new.body is None
 
+    def test_resolved_agent_set_autodetect(self):
+        # 1. Manually specified agent_set
+        p1 = Piece(id="test1", title="Test 1", agent_set="non-fiction")
+        assert p1.resolved_agent_set == "non-fiction"
+
+        # 2. Empty agent_set, non-fiction genre
+        p2 = Piece(id="test2", title="Test 2", agent_set="", genre="non-fiction")
+        assert p2.resolved_agent_set == "non-fiction"
+
+        # 3. Empty agent_set, fiction genre
+        p3 = Piece(id="test3", title="Test 3", agent_set="", genre="fiction")
+        assert p3.resolved_agent_set == "fiction"
+
+        # 4. Empty agent_set, unknown genre -> fallback to default
+        p4 = Piece(id="test4", title="Test 4", agent_set="", genre="unknown-genre")
+        assert p4.resolved_agent_set == "default"
+
+        # 5. Empty agent_set, empty genre -> fallback to default
+        p5 = Piece(id="test5", title="Test 5", agent_set="", genre="")
+        assert p5.resolved_agent_set == "default"
+

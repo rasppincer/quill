@@ -15,7 +15,7 @@ MODEL_SCHEMA = {
     "required": [],
     "optional": [
         "api_base", "api_key", "model", "temperature", "max_tokens",
-        "max_loops", "trigger", "debug_prompts", "structured_output",
+        "max_loops", "trigger", "debug_prompts", "debug_litellm", "structured_output",
         "context_window", "chain_retry", "research",
     ],
 }

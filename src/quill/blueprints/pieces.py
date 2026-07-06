@@ -536,7 +536,7 @@ def pieces_advance(piece_id: str):
     if piece.trigger in ("on_advance", "auto"):
         from ..runner import StageRunner
         import uuid as _uuid
-        agent_set = piece.agent_set or "default"
+        agent_set = piece.resolved_agent_set
         runner = StageRunner(agent_set=agent_set)
         trace_id = str(_uuid.uuid4())
         agent_result = runner.run_stage(piece_id, piece.current_stage, trace_id=trace_id)

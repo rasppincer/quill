@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .agent import AgentDecision, FeedbackStageOutput, ContentStageOutput
+from .agent import AgentDecision, FeedbackStageOutput, ContentStageOutput, load_model_config
 from .llm import LLMClient
 from .piece import Piece, _stage_filename
 from .logging_config import get_piece_logger
@@ -68,6 +68,8 @@ class LLMCaller:
     ) -> AgentDecision:
         """Single-call execution engine returning schema-guaranteed JSON."""
         is_content = sc.pipeline.is_content_stage(stage)
+        cfg = load_model_config()
+        use_structured = cfg.get("structured_output", False)
 
         if is_content:
             gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
@@ -113,7 +115,7 @@ class LLMCaller:
                     raw_response = client.chat(
                         gen_system,
                         prompt_for_generate,
-                        response_format=ContentStageOutput,
+                        response_format=ContentStageOutput if use_structured else None,
                         piece_id=piece.id,
                         stage=stage,
                         call_type="generate",
@@ -157,7 +159,7 @@ class LLMCaller:
                 response = client.chat(
                     eval_system,
                     prompt_for_feedback,
-                    response_format=FeedbackStageOutput,
+                    response_format=FeedbackStageOutput if use_structured else None,
                     piece_id=piece.id,
                     stage=stage,
                     call_type="agent",
@@ -292,6 +294,8 @@ class LLMCaller:
         from .structure import parse_target_length
         target = parse_target_length(piece.target_length) or 10000
         chapter_words = max(2000, int(target * 1.2) // len(chapters))
+        cfg = load_model_config()
+        use_structured = cfg.get("structured_output", False)
         all_chapters = []
 
         # Extract character sheet from brief for persistent context
@@ -355,7 +359,7 @@ class LLMCaller:
                 chapter_text = client.chat(
                     gen_system,
                     chapter_prompt,
-                    response_format=ContentStageOutput,
+                    response_format=ContentStageOutput if use_structured else None,
                     piece_id=piece.id,
                     stage=stage,
                     call_type=f"generate_ch{ch_num}",

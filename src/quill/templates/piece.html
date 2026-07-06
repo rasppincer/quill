@@ -248,7 +248,7 @@
 {
     "piece_id": {{ piece.id|tojson }},
     "current_stage": {{ piece.current_stage|tojson }},
-    "piece_agent_set": {{ (piece.agent_set or '')|tojson }},
+    "piece_agent_set": {{ piece.resolved_agent_set|tojson }},
     "pipeline_order": {{ pipeline_order|tojson }}
 }
 </script>

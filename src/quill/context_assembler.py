@@ -148,7 +148,6 @@ class ContextAssembler:
         base = {
             "piece_id": piece_id, "stage": stage, "agent_set": self.agent_set,
             "loop_count": sc.loop_count, "max_loops": agent_cfg.max_loops,
-            "is_content_stage": is_content,
             "model": agent_cfg.model, "api_base": agent_cfg.api_base,
             "temperature": agent_cfg.temperature, "max_tokens": agent_cfg.max_tokens,
             "input_content_char_count": len(sc.input_content),
@@ -160,47 +159,11 @@ class ContextAssembler:
             },
         }
 
-        if is_content:
-            gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
-            eval_template = PromptBuilder.load_evaluate_template(self.agent_set)
-            if eval_template:
-                eval_ctx = self.prompt_builder.build_context(
-                    piece, stage, sc.input_content, "", sc.loop_count,
-                    extra={
-                        "GENERATED": "<not yet generated — will be filled at runtime>",
-                        "INPUT_CONTENT": sc.input_content,
-                    },
-                )
-                eval_prompt = render_prompt(eval_template, eval_ctx)
-            else:
-                eval_prompt = (
-                    f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-                    f"## Stage: {stage}\n\n"
-                    f"## Input given to the {stage} agent:\n{sc.input_content}\n\n"
-                    f"## Generated {stage} output:\n<not yet generated>\n\n"
-                    f"## Task\n"
-                    f"Evaluate the generated {stage} output.\n\n"
-                    f"Be strict but fair. Only loop_back if there are real, fixable problems."
-                )
-            eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
-            base["generate"] = {
-                "system": gen_system, "user": sc.prompt,
-                "char_count": len(sc.prompt),
-            }
-            base["evaluate"] = {
-                "system": eval_system, "user": eval_prompt,
-                "char_count": len(eval_prompt),
-                "note": (
-                    "The 'Generated output' section above shows '<not yet generated>' "
-                    "— the real evaluate prompt includes the actual generated text "
-                    "from the generate call."
-                ),
-            }
-        else:
-            eval_system = PromptBuilder.system_prompt(stage, piece, "feedback")
-            base["single_call"] = {
-                "system": eval_system, "user": sc.prompt,
-                "char_count": len(sc.prompt),
-            }
+        system_prompt = PromptBuilder.system_prompt(stage, piece, "generate" if is_content else "feedback")
+        base["prompt"] = {
+            "system": system_prompt,
+            "user": sc.prompt,
+            "char_count": len(sc.prompt),
+        }
 
         return base

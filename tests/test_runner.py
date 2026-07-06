@@ -611,25 +611,21 @@ class TestTwoFileOutput:
 
         assert "error" not in result
         assert result["stage"] == "review"
-        assert result["is_content_stage"] is False
-        assert "single_call" in result
-        assert "draft content" in result["single_call"]["user"]
-        assert result["single_call"]["char_count"] > 0
+        assert "prompt" in result
+        assert "draft content" in result["prompt"]["user"]
+        assert result["prompt"]["char_count"] > 0
         assert result["template_vars"]["TITLE"] == "Test Piece"
 
     def test_compose_prompt_content_stage_two_calls(self, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """Content stage compose_prompt returns both generate and evaluate prompts."""
+        """Content stage compose_prompt returns single prompt with system and user keys."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
         result = runner.compose_prompt("test-piece", "revise", output_dir=tmp_output)
 
         assert "error" not in result
-        assert result["is_content_stage"] is True
-        assert "generate" in result
-        assert "evaluate" in result
-        assert "Do NOT include any JSON" in result["generate"]["system"]
-        assert result["generate"]["char_count"] > 0
-        assert result["evaluate"]["char_count"] > 0
+        assert "prompt" in result
+        assert "Do NOT include any JSON" in result["prompt"]["system"]
+        assert result["prompt"]["char_count"] > 0
 
     def test_compose_prompt_nonexistent_piece(self, runner, tmp_output):
         """compose_prompt returns error for missing piece."""

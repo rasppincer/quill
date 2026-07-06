@@ -105,7 +105,9 @@ async function navigateToStage(stage) {
             ORIGINAL_PROMPT_VAL = '';
         } else {
             let promptText = '';
-            if (data.generate) {
+            if (data.prompt) {
+                promptText = data.prompt.user || '';
+            } else if (data.generate) {
                 promptText = data.generate.user || '';
             } else if (data.single_call) {
                 promptText = data.single_call.user || '';

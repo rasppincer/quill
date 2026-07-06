@@ -12,6 +12,8 @@ dependencies = [
     "flask-migrate>=4.0",
     "litellm>=1.0.0",
     "tenacity",
+    "celery>=5.3",
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]

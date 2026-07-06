@@ -433,6 +433,20 @@ def pieces_brief_put(piece_id: str):
 
     stage_file.write_text(new_text, encoding="utf-8")
 
+    # Also sync body to the database so StageState.body matches the file.
+    # Without this, piece.save() in advance() would reload the stale empty DB body
+    # and overwrite the file with blank content.
+    try:
+        from ..db import db_session
+        from ..models import StageState
+        session = db_session()
+        st_state = session.query(StageState).filter_by(document_node_id=piece_id, stage="brief").first()
+        if st_state:
+            st_state.body = content
+            session.commit()
+    except Exception as e:
+        logger.warning("Failed to sync brief body to DB for piece '%s': %s", piece_id, e)
+
     return jsonify({"status": "saved", "has_content": bool(content.strip())})
 
 
@@ -480,8 +494,17 @@ def pieces_advance(piece_id: str):
 
     old_stage = piece.current_stage
 
-    # Save current stage file (preserves its body)
+    # Save current stage file (preserves its body).
+    # IMPORTANT: piece.body is loaded from the DB, but the file-based save endpoints
+    # (brief PUT, stage PUT) write directly to disk without updating StageState.body
+    # in the DB.  If we call piece.save() with the stale DB body we would overwrite
+    # the user's content.  Read the on-disk body first so the DB and file stay in sync.
     if not piece._is_legacy:
+        old_stage_file = piece.stage_dir() / _stage_filename(old_stage)
+        if old_stage_file.exists():
+            _text = old_stage_file.read_text(encoding="utf-8")
+            _m = _FRONTMATTER_RE.match(_text)
+            piece.body = _text[_m.end():] if _m else _text
         piece.save()
 
     # Advance: update meta.yaml to point to next stage
@@ -696,6 +719,20 @@ def pieces_stage_save(piece_id: str, stage: str):
 
     # If we wrote to the target_stage, update its state to completed
     piece.set_stage_state(target_stage, "completed")
+
+    # Also sync body to the database so StageState.body matches the file.
+    # Without this, piece.save() in advance() would reload the stale DB body
+    # and silently overwrite the file with stale content.
+    try:
+        from ..db import db_session
+        from ..models import StageState
+        session = db_session()
+        st_state = session.query(StageState).filter_by(document_node_id=piece_id, stage=target_stage).first()
+        if st_state:
+            st_state.body = content
+            session.commit()
+    except Exception as e:
+        logger.warning("Failed to sync stage body to DB for piece '%s' stage '%s': %s", piece_id, target_stage, e)
 
     # If the target_stage was the preceding one, compute metrics
     if pipeline.is_content_stage(target_stage):

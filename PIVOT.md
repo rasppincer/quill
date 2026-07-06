@@ -17,6 +17,8 @@ This document outlines the architectural plan to pivot Quill into a flexible, ma
    * All "two-call" stages (generate + evaluate) are split/elevated into distinct, single-call stages.
    * All stages run exactly one LLM call. Automatic loop-back is removed.
    * Alternating stages of Generation and Review/Feedback are placed at the same pipeline level.
+   * The loop-back context injection in `read_inputs` (which appended `<stage>.md` + `<stage>.decision.md` to `{{CONTENT}}` when `loop_count > 0`) is fully removed.
+   * `compose_prompt` is simplified to always return a single prompt — the `generate`/`evaluate` two-call branch is removed.
 
 3. **Transition to Pydantic Structured Outputs**:
    * All LLM calls across all stages return schema-guaranteed JSON matching specific Pydantic schemas.
@@ -116,6 +118,14 @@ Because stages are single-call, every stage writes exactly two files under the p
 - [x] Remove the internal evaluate loop and loop-back checks from `StageRunner` and `Orchestrator`.
 - [x] Modify `run-async` API to accept `custom_prompt`.
 - [x] Remove/bypass strict stage transition validation.
+
+### Phase 2b: Loop-Back Cleanup (Missing — causes prompt contamination)
+
+> **Root cause of extra artefacts in prompts**: The `loop_count` stored from old two-call runs causes `read_inputs` to re-inject `<stage>.md` and `<stage>.decision.md` into `{{CONTENT}}`, and `compose_prompt` still constructs a two-call `generate`/`evaluate` payload for content stages.
+
+- [ ] **Remove loop-back block from `read_inputs`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): delete the `if loop_count > 0:` block (lines 120–138) that appends the previous attempt and decision file. This logic is incompatible with single-call stages.
+- [ ] **Simplify `compose_prompt`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): remove the `is_content_stage` branch that builds separate `generate`/`evaluate` keys. All stages now return a single `prompt` key.
+- [ ] **Data cleanup**: Reset stale `loop_count` values left over from old two-call runs (e.g., `loops.structure: 1` in prob-a). Either zero them via a migration script or expose a reset endpoint.
 
 ### Phase 3: Frontend Layout & Locking
 1. Restructure [piece.html](file:///home/bob/projects/quill/src/quill/templates/piece.html) to present the prompt text editor side-by-side with the content editor.

@@ -8,12 +8,12 @@ stage_inputs:
     - brief.md
   outline:
     - brief.md
+    - structure.md
   research:
-    - outline.md
     - brief.md
+    - outline.md
   draft:
     - outline.md
-    - brief.md
     - research.md
   revise:
     - draft.md

@@ -133,7 +133,7 @@ class TestCanNavigate:
 
     def test_empty_stage_is_not_navigable(self, sample_piece):
         piece = load_piece(sample_piece)
-        assert piece.can_navigate("humanize") is False
+        assert piece.can_navigate("humanize") is True
 
     def test_superseded_stage_is_navigable(self, sample_piece):
         """Superseded stages still have content — user can view them."""

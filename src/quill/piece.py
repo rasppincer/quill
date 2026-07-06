@@ -558,23 +558,13 @@ class Piece:
         logger.info("Superseded from stage '%s', frontier reset", stage)
 
     def can_navigate(self, stage: str) -> bool:
-        """Check if a stage is viewable. Fresh stages are locked.
-
-        Fallback: if stage not in stage_states, allow up to current_stage
-        (backward compat with pieces created before stage_states).
-        """
-        state = self.get_stage_state(stage)
-        if state != "fresh" or self.stage_states.get(stage) == "superseded":
-            return True
-        # Stage not in stage_states — fall back to current_stage as frontier
+        """Check if a stage is viewable. In manual-first mode, all pipeline stages are navigable."""
+        from .pipeline import load_pipeline
         try:
-            from .pipeline import load_pipeline
             pipeline = load_pipeline("default")
-            if stage in pipeline.stage_order and self.current_stage in pipeline.stage_order:
-                return pipeline.stage_order.index(stage) <= pipeline.stage_order.index(self.current_stage)
+            return stage in pipeline.stage_order
         except Exception:
-            pass
-        return False
+            return True
 
     def _save_stage_states(self):
         """Persist stage_states to database and meta.yaml."""

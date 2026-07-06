@@ -170,6 +170,23 @@ class TestStageAPI:
         assert resp.status_code == 400
 
 
+class TestStageSaveAPI:
+    def test_save_stage_content(self, client_with_piece, sample_piece, tmp_output):
+        resp = client_with_piece.put("/api/pieces/test-piece/stages/brief", json={
+            "content": "Updated brief content."
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "saved"
+        assert resp.get_json()["target_stage"] == "brief"
+
+    def test_get_stage_content_and_json(self, client_with_piece, sample_piece, tmp_output):
+        resp = client_with_piece.get("/api/pieces/test-piece/stages/brief")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "content" in data
+        assert "raw_json" in data
+
+
 # ---------------------------------------------------------------------------
 # Model config
 # ---------------------------------------------------------------------------

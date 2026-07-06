@@ -599,10 +599,7 @@ def pieces_reject(piece_id: str):
 
 @bp.route("/api/pieces/<piece_id>/stages/<stage>")
 def pieces_stage_navigate(piece_id: str, stage: str):
-    """Navigate to a specific stage — returns content + metrics.
-
-    Only stages with state != 'empty' are navigable.
-    """
+    """Navigate to a specific stage — returns content + metrics + raw response JSON."""
     piece = get_piece(piece_id)
     if not piece:
         return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
@@ -619,13 +616,92 @@ def pieces_stage_navigate(piece_id: str, stage: str):
 
     metrics = maybe_recompute(stage_file) if stage_file.exists() else None
 
+    # Load raw JSON response if it exists
+    json_file = piece.stage_dir() / _stage_filename(stage, ".json")
+    raw_json = None
+    if json_file.exists():
+        try:
+            raw_json = json.loads(json_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
     return jsonify({
         "piece_id": piece_id,
         "stage": stage,
         "state": piece.get_stage_state(stage),
         "content": body,
         "metrics": metrics,
+        "raw_json": raw_json,
     })
+
+
+@bp.route("/api/pieces/<piece_id>/stages/<stage>", methods=["PUT"])
+def pieces_stage_save(piece_id: str, stage: str):
+    """Save content for a specific stage.
+
+    If the stage is fresh (state is fresh/empty), the content is saved
+    to the PRECEDING stage's file to establish input context.
+    Otherwise, it is saved directly to the target stage's file.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    content = data.get("content", "")
+
+    pipeline = get_pipeline()
+    stage_order = pipeline.stage_order
+
+    # Check if stage is fresh
+    state = piece.get_stage_state(stage)
+    if state == "fresh" or not (piece.stage_dir() / _stage_filename(stage)).exists():
+        # Fresh stage: find the preceding stage to write to
+        if stage in stage_order:
+            idx = stage_order.index(stage)
+            if idx > 0:
+                target_stage = stage_order[idx - 1]
+            else:
+                target_stage = stage
+        else:
+            target_stage = stage
+    else:
+        target_stage = stage
+
+    target_file = piece.stage_dir() / _stage_filename(target_stage)
+
+    # Save content with frontmatter
+    if target_file.exists():
+        text = target_file.read_text(encoding="utf-8")
+        m = _FRONTMATTER_RE.match(text)
+        if m:
+            new_text = f"{text[:m.end()]}{content}"
+        else:
+            new_text = content
+    else:
+        # Create new file with minimal frontmatter
+        fm = yaml.dump({
+            "id": piece.id,
+            "title": piece.title,
+            "genre": piece.genre,
+            "type": piece.type,
+            "language": piece.language,
+            "current_stage": target_stage,
+            "created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        }, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        new_text = f"---\n{fm}---\n{content}"
+
+    target_file.write_text(new_text, encoding="utf-8")
+
+    # If we wrote to the target_stage, update its state to completed
+    piece.set_stage_state(target_stage, "completed")
+
+    # If the target_stage was the preceding one, compute metrics
+    if pipeline.is_content_stage(target_stage):
+        maybe_recompute(target_file)
+
+    return jsonify({"status": "saved", "target_stage": target_stage, "file": target_file.name})
 
 
 @bp.route("/api/pieces/<piece_id>/chapters")

@@ -192,15 +192,12 @@ class TestRunStageEventEmission:
         assert start_event["data"]["is_content_stage"] is False
 
     @patch("quill.runner.LLMClient")
-    def test_content_stage_emits_generate_and_evaluate(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
-        """Content stages emit generate and evaluate LLM call events."""
+    def test_content_stage_emits_generate(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
+        """Content stages emit generate LLM call events."""
         from quill.piece import load_piece
 
         mock_client = MagicMock()
-        mock_client.chat.side_effect = [
-            "The revised draft.",  # generate
-            '```json\n{"decision": "advance", "critique": "Good."}\n```',  # evaluate
-        ]
+        mock_client.chat.return_value = json.dumps({"content": "The revised draft."})
         mock_llm_cls.return_value = mock_client
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
 
@@ -218,7 +215,7 @@ class TestRunStageEventEmission:
         llm_events = [e for e in events if e["type"] == "stage_llm_call"]
         calls = [e["data"]["call"] for e in llm_events]
         assert "generate" in calls
-        assert "evaluate" in calls
+        assert "evaluate" not in calls
 
     @patch("quill.runner.LLMClient")
     def test_no_events_when_queue_is_none(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):

@@ -4,4 +4,4 @@
 - [x] Task 2: Unify LLMCaller into Single-Call Execution
 - [x] Task 3: Simplify StageRunner and Remove Evaluate/Loop-Back Loops
 - [x] Task 4: Bypass Transition Validation
-- [ ] Task 5: Add Custom Prompt Execution Support
+- [x] Task 5: Add Custom Prompt Execution Support

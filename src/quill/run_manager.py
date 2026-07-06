@@ -75,6 +75,7 @@ class RunManager:
         stage: str,
         agent_set: str = "default",
         chain: bool = False,
+        custom_prompt: str | None = None,
     ) -> str | None:
         """Start a background run and return the run_id.
 
@@ -83,6 +84,7 @@ class RunManager:
             stage: Stage to run (default: piece's current stage).
             agent_set: Agent set to use.
             chain: If True, run all remaining stages.
+            custom_prompt: Custom prompt to override Jinja rendering.
 
         Returns:
             run_id string for SSE subscription.
@@ -104,11 +106,12 @@ class RunManager:
                 "stage": stage,
                 "agent_set": agent_set,
                 "chain": chain,
+                "custom_prompt": custom_prompt,
                 "started_at": time.time(),
             }
 
         self._executor.submit(
-            self._execute_run, run_id, piece_id, stage, agent_set, chain, event_queue,
+            self._execute_run, run_id, piece_id, stage, agent_set, chain, event_queue, custom_prompt,
         )
         return run_id
 
@@ -157,7 +160,7 @@ class RunManager:
             # Client disconnected — stop consuming
             return
 
-    def _execute_run(self, run_id, piece_id, stage, agent_set, chain, event_queue):
+    def _execute_run(self, run_id, piece_id, stage, agent_set, chain, event_queue, custom_prompt=None):
         """Background worker that runs StageRunner and emits events."""
         import json as _json
 
@@ -185,7 +188,7 @@ class RunManager:
             else:
                 trace_id = str(uuid.uuid4())
                 result = runner.run_stage(
-                    piece_id, stage or "", event_queue=event_queue, trace_id=trace_id,
+                    piece_id, stage or "", event_queue=event_queue, trace_id=trace_id, custom_prompt=custom_prompt,
                 )
                 result_data = {
                     "stage": result.stage,

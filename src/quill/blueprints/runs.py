@@ -42,6 +42,8 @@ def pieces_run(piece_id: str):
     agent_set = data.get("agent_set") or piece.agent_set or "default"
     runner = StageRunner(agent_set=agent_set)
 
+    custom_prompt = data.get("custom_prompt")
+
     if chain:
         results = runner.run_chain(piece_id, from_stage=stage)
         return jsonify({
@@ -88,7 +90,7 @@ def pieces_run(piece_id: str):
             })
 
         # Fall back to normal StageRunner
-        result = runner.run_stage(piece_id, target_stage, trace_id=trace_id)
+        result = runner.run_stage(piece_id, target_stage, trace_id=trace_id, custom_prompt=custom_prompt)
         return jsonify({
             "piece_id": piece_id,
             "stage": result.stage,
@@ -114,6 +116,7 @@ def pieces_run_async(piece_id: str):
     data = request.get_json(silent=True) or {}
     stage = data.get("stage")
     chain = data.get("chain", False)
+    custom_prompt = data.get("custom_prompt")
 
     piece = get_piece(piece_id)
     if not piece:
@@ -127,6 +130,7 @@ def pieces_run_async(piece_id: str):
         stage=stage or piece.current_stage,
         agent_set=agent_set,
         chain=chain,
+        custom_prompt=custom_prompt,
     )
 
     if run_id is None:

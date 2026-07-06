@@ -44,8 +44,8 @@ class TestStageNavigation:
         assert "content" in data
         assert "Brief content" in data["content"]
 
-    def test_navigate_to_empty_stage_blocked(self, client, tmp_output):
-        """Cannot navigate to a stage with state 'empty'."""
+    def test_navigate_to_empty_stage_allowed(self, client, tmp_output):
+        """Can navigate to a stage even if it is empty/fresh."""
         d = tmp_output / "nav-lock"
         d.mkdir()
         meta = {
@@ -56,8 +56,10 @@ class TestStageNavigation:
         (d / _stage_filename("brief")).write_text("---\nid: nav-lock\n---\n\nBrief.")
 
         resp = client.get("/api/pieces/nav-lock/stages/draft")
-        assert resp.status_code == 404
-        assert "not yet been reached" in resp.get_json()["error"]
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["content"] == ""
+        assert data["state"] == "fresh"
 
     def test_navigate_to_superseded_stage_allowed(self, client, tmp_output):
         """Superseded stages are still navigable (content may still exist)."""

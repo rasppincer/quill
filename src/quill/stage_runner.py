@@ -1,8 +1,8 @@
-"""StageRunner — focused generate→evaluate loop for a single stage.
+"""StageRunner — execution engine for a single stage.
 
-Handles the LLM calls for content stages (two-call: generate + evaluate)
-and feedback stages (single call). Does NOT handle context assembly,
-state transitions, or chain orchestration — those live in runner.py.
+Handles the single-call LLM execution returning schema-guaranteed JSON.
+Does NOT handle context assembly, state transitions, or chain orchestration
+— those live in runner.py.
 """
 
 from __future__ import annotations

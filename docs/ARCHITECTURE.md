@@ -2,7 +2,7 @@
 
 ## Overview
 
-Quill is an **agentic writing workflow engine**. It runs long-form content through a multi-stage pipeline where content stages use a two-call approach: one call generates content, a separate call evaluates and decides. The user provides the brief and makes the final publish/scrap decision — everything in between is agent-driven.
+Quill is an **agentic writing workflow engine**. It runs long-form content through a multi-stage pipeline where content and feedback stages run as single LLM calls returning schema-guaranteed structured JSON. The user provides the brief and makes the final publish/scrap decision — everything in between is agent-driven.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -15,7 +15,7 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 │  Agent Runner                               │  runner.py (facade)
 │  ┌─────────────────────────────────────┐    │
 │  │ StageRunner (LLMCaller)             │    │  stage_runner.py
-│  │ Two-call: generate → evaluate       │    │
+│  │ Single-call structured execution     │    │
 │  │ Chaptered generation for long-form  │    │
 │  ├─────────────────────────────────────┤    │
 │  │ ChainOrchestrator                   │    │  chain_orchestrator.py
@@ -59,8 +59,8 @@ brief → outline → research → draft → review → revise → humanize → 
 
 Each stage has a `mode` declared in `workflows/default.yaml`:
 
-- **`content`** (default): Two-call approach — generate content, then evaluate with separate LLM call. Used for outline, draft, revise, humanize, polish.
-- **`feedback`**: Single call — LLM reads content and produces critique/decision. Used for review, validate.
+- **`content`** (default): Single-call returning `ContentStageOutput` (containing the generated text/JSON), saved to `<stage>.json` and `<stage>.md`. Used for outline, draft, revise, humanize, polish.
+- **`feedback`**: Single-call returning `FeedbackStageOutput` (containing the critique and advancement decision), saved to `<stage>.json` and `<stage>.md`. Used for review, validate.
 - **`research`**: Special stage — LLM generates search queries, SearXNG fetches results, saved as-is to `research.md`.
 
 ### Stage Inputs
@@ -224,8 +224,8 @@ quill/output/
 ```
 
 Content stages produce two files:
-- `{stage}.md` — generated content (persisted immediately after generate call)
-- `{stage}.decision.md` — evaluation result (decision + critique)
+- `{stage}.md` — generated content (prose/markdown)
+- `{stage}.json` — raw structured JSON output
 
 ### Logging
 
@@ -261,7 +261,7 @@ Quill uses a relational database schema (implemented via SQLAlchemy in [models.p
 
 ## Testing
 
-**311 pytest tests + 32 behave BDD scenarios** — all passing.
+**440 pytest tests + 32 behave BDD scenarios** — all passing.
 
 ```bash
 pytest                          # unit tests (2.5s)

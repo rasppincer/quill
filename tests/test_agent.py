@@ -46,6 +46,12 @@ def test_feedback_stage_output_validation():
         FeedbackStageOutput.model_validate_json('{}')
 
 
+def test_legacy_parsers_removed():
+    import quill.agent as agent
+    assert not hasattr(agent, "parse_agent_response")
+    assert not hasattr(agent, "_strip_json_block")
+
+
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------

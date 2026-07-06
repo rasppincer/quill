@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .agent import AgentDecision, parse_agent_response
+from .agent import AgentDecision, FeedbackStageOutput
 from .llm import LLMClient
 from .piece import Piece, _stage_filename
 from .logging_config import get_piece_logger
@@ -163,7 +163,7 @@ class LLMCaller:
         """Single call with JSON decision expected."""
         eval_system = PromptBuilder.system_prompt(stage, piece, "feedback")
         self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, trace_id=trace_id)
-        response_format = PromptBuilder.get_structured_output_format()
+        response_format = FeedbackStageOutput
         _emit(event_queue, "stage_llm_call", {
             "stage": stage, "call": "agent", "prompt_chars": len(sc.prompt),
         })
@@ -186,8 +186,18 @@ class LLMCaller:
                 decision="error", critique="", output="",
                 error=str(e), stage=stage,
             )
-        decision = parse_agent_response(response)
-        decision.output = response
+        try:
+            parsed = FeedbackStageOutput.model_validate_json(response)
+            critique = parsed.critique
+        except Exception as e:
+            logger.error("Failed to parse schema-guaranteed feedback JSON: %s", e)
+            critique = response
+        decision = AgentDecision(
+            decision="advance",
+            critique=critique,
+            output=response,
+            body=critique,
+        )
         self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, {
             "decision": decision.decision, "critique": (decision.critique or "")[:500],
         }, trace_id=trace_id)
@@ -272,7 +282,7 @@ class LLMCaller:
             )
             eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
 
-        response_format = PromptBuilder.get_structured_output_format()
+        response_format = FeedbackStageOutput
         eval_prompt, _ = self.apply_token_budget(
             eval_system, prompt, max_tokens,
             call_label="evaluate",
@@ -293,7 +303,19 @@ class LLMCaller:
                 error=f"Evaluation call failed: {e}", stage=stage,
             )
 
-        result = parse_agent_response(eval_response)
+        try:
+            parsed = FeedbackStageOutput.model_validate_json(eval_response)
+            critique = parsed.critique
+        except Exception as e:
+            logger.error("Failed to parse schema-guaranteed evaluate JSON: %s", e)
+            critique = eval_response
+
+        result = AgentDecision(
+            decision="advance",
+            critique=critique,
+            output=eval_response,
+            body=critique,
+        )
         self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
             "decision": result.decision, "critique": (result.critique or "")[:500],
         }, trace_id=trace_id)

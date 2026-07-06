@@ -392,10 +392,8 @@ class StageRunner:
     # ------------------------------------------------------------------
 
     def _format_feedback(self, critique: str) -> str:
-        """Clean feedback text by stripping JSON code fences and formatting."""
-        from .agent import _strip_json_block
-        cleaned = _strip_json_block(critique)
-        return cleaned if cleaned else critique
+        """Clean feedback text by returning critique directly (fully structured output)."""
+        return critique
 
 
 # Re-export for backward compatibility

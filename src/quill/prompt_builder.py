@@ -105,14 +105,13 @@ class PromptBuilder:
             )
         elif call_type == "evaluate":
             text = (
-                "You are a quality evaluator. Respond with ONLY a JSON block "
-                "containing 'decision' (advance or loop_back) and 'critique'."
+                "You are a quality evaluator. Read the generated text and "
+                "provide your detailed evaluation critique."
             )
         elif call_type == "feedback":
             text = (
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
-                f"in {piece.language}. Be critical and precise. "
-                f"Respond with a JSON block containing 'decision' and 'critique'."
+                f"in {piece.language}. Be critical and precise."
             )
         else:
             raise ValueError(f"Unknown call_type: {call_type}")
@@ -138,12 +137,3 @@ class PromptBuilder:
             idx = stage_order.index(stage)
             return [stage_order[idx - 1]] if idx > 0 else []
         return []
-
-    @staticmethod
-    def get_structured_output_format() -> dict | None:
-        """Return response_format dict if structured_output is enabled."""
-        from .agent import load_model_config
-        cfg = load_model_config()
-        if cfg.get("structured_output"):
-            return {"type": "json_object"}
-        return None

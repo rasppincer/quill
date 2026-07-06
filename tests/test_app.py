@@ -387,12 +387,11 @@ class TestDebugPrompt:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["stage"] == "review"
-        assert "single_call" in data
-        assert data["single_call"]["char_count"] > 0
-        assert data["is_content_stage"] is False
+        assert "prompt" in data
+        assert data["prompt"]["char_count"] > 0
 
     def test_debug_prompt_content_stage_shows_both_calls(self, client, sample_piece_with_review, tmp_output, monkeypatch):
-        """Content stage debug shows generate + evaluate prompts."""
+        """Content stage debug shows single prompt user and system keys."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         # Advance to revise (a content stage that has a prompt in the fixture)
         client.post("/api/pieces/test-piece/advance")  # draft → review
@@ -401,10 +400,9 @@ class TestDebugPrompt:
         resp = client.get("/api/pieces/test-piece/prompt/revise")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["is_content_stage"] is True
-        assert "generate" in data
-        assert "evaluate" in data
-        assert data["generate"]["char_count"] > 0
+        assert "prompt" in data
+        assert "Do NOT include any JSON" in data["prompt"]["system"]
+        assert data["prompt"]["char_count"] > 0
 
     def test_debug_prompt_with_agent_set(self, client, sample_piece, tmp_output, monkeypatch):
         """Debug endpoint accepts agent_set query param."""

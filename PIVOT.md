@@ -119,22 +119,23 @@ Because stages are single-call, every stage writes exactly two files under the p
 - [x] Modify `run-async` API to accept `custom_prompt`.
 - [x] Remove/bypass strict stage transition validation.
 
-### Phase 2b: Loop-Back Cleanup (Missing — causes prompt contamination)
+### Phase 2b: Loop-Back Cleanup (Completed)
 
 > **Root cause of extra artefacts in prompts**: The `loop_count` stored from old two-call runs causes `read_inputs` to re-inject `<stage>.md` and `<stage>.decision.md` into `{{CONTENT}}`, and `compose_prompt` still constructs a two-call `generate`/`evaluate` payload for content stages.
 
-- [ ] **Remove loop-back block from `read_inputs`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): delete the `if loop_count > 0:` block (lines 120–138) that appends the previous attempt and decision file. This logic is incompatible with single-call stages.
-- [ ] **Simplify `compose_prompt`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): remove the `is_content_stage` branch that builds separate `generate`/`evaluate` keys. All stages now return a single `prompt` key.
-- [ ] **Data cleanup**: Reset stale `loop_count` values left over from old two-call runs (e.g., `loops.structure: 1` in prob-a). Either zero them via a migration script or expose a reset endpoint.
+- [x] **Remove loop-back block from `read_inputs`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): delete the `if loop_count > 0:` block (lines 120–138) that appends the previous attempt and decision file. This logic is incompatible with single-call stages.
+- [x] **Simplify `compose_prompt`** in [context_assembler.py](file:///home/bob/projects/quill/src/quill/context_assembler.py): remove the `is_content_stage` branch that builds separate `generate`/`evaluate` keys. All stages now return a single `prompt` key.
+- [x] **Data cleanup**: Reset stale `loop_count` values left over from old two-call runs (e.g., `loops.structure: 1` in prob-a). Either zero them via a migration script or expose a reset endpoint.
+- [x] **Proactive LAN IP Check for Local LLMs**: Disable structured output configuration dynamically when calling local/LAN endpoints to prevent poor LLM formatting/failures.
 
-### Phase 3: Frontend Layout & Locking
-1. Restructure [piece.html](file:///home/bob/projects/quill/src/quill/templates/piece.html) to present the prompt text editor side-by-side with the content editor.
-2. Update [piece.js](file:///home/bob/projects/quill/src/quill/static/js/piece.js) to dynamically fetch the rendered prompt when navigating tabs.
-3. Add the raw JSON viewer to the bottom of the page.
-4. Add front-end disable-state toggles for the editor and prompt textareas.
-5. Wire the front-end Interrupt button to discard pending changes and restore previous editor text.
+### Phase 3: Frontend Layout & Locking (Completed)
+- [x] Restructure [piece.html](file:///home/bob/projects/quill/src/quill/templates/piece.html) to present the prompt text editor side-by-side with the content editor.
+- [x] Update [piece.js](file:///home/bob/projects/quill/src/quill/static/js/piece.js) to dynamically fetch the rendered prompt when navigating tabs.
+- [x] Add the raw JSON viewer to the bottom of the page.
+- [x] Add front-end disable-state toggles for the editor and prompt textareas.
+- [x] Wire the front-end Interrupt button to discard pending changes and restore previous editor text.
 
-### Phase 4: Auto Mode History Inspection & Validation
-1. Update SSE listeners to allow background stage updates without locking the navigation tabs.
-2. Verify that clicking tabs during or after an auto run successfully pulls the generated files and prompts.
-3. Verify backward compatibility with existing pieces.
+### Phase 4: Auto Mode History Inspection & Validation (Completed)
+- [x] Update SSE listeners to allow background stage updates without locking the navigation tabs.
+- [x] Verify that clicking tabs during or after an auto run successfully pulls the generated files and prompts.
+- [x] Verify backward compatibility with existing pieces.

@@ -24,7 +24,7 @@ class Stage:
     key: str
     name: str
     description: str = ""
-    mode: str = "content"  # "content" (two-call) or "feedback" (single-call)
+    mode: str = "content"  # "content" or "feedback"
     next: str | None = None
     can_reject_to: list[str] = field(default_factory=list)
     required_fields: list[str] = field(default_factory=list)
@@ -55,7 +55,7 @@ class Pipeline:
         return None
 
     def is_content_stage(self, key: str) -> bool:
-        """Check if a stage uses two-call (generate→evaluate) mode."""
+        """Check if a stage is a content generation stage."""
         stage = self.stages.get(key)
         return stage.mode == "content" if stage else False
 

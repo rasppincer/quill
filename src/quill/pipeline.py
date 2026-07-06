@@ -78,8 +78,8 @@ class Pipeline:
         """Validate a stage transition.
 
         Returns (is_valid, message). Transition is valid if:
-        - target is the next stage (advance)
-        - target is in can_reject_to (revert)
+        - target is defined in the pipeline stages
+        - target is not the current stage
         """
         if current == target:
             return False, f"Already at stage '{current}'"
@@ -87,15 +87,7 @@ class Pipeline:
         if target not in self.stages:
             return False, f"Unknown stage '{target}'"
 
-        # Advance to next
-        if self.next_stage(current) == target:
-            return True, f"Advancing: {current} → {target}"
-
-        # Revert to allowed target
-        if self.can_reject_to(current, target):
-            return True, f"Reverting: {current} → {target}"
-
-        return False, f"Cannot transition from '{current}' to '{target}'"
+        return True, f"Transition from '{current}' to '{target}' is valid"
 
     def progress(self, current: str) -> dict:
         """Get progress info for a piece at the current stage."""

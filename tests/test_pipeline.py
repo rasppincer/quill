@@ -72,12 +72,12 @@ class TestTransitions:
     def test_valid_advance(self, simple_pipeline):
         valid, msg = simple_pipeline.validate_transition("start", "middle")
         assert valid is True
-        assert "Advancing" in msg
+        assert "Transition" in msg
 
     def test_valid_reject(self, simple_pipeline):
         valid, msg = simple_pipeline.validate_transition("middle", "start")
         assert valid is True
-        assert "Reverting" in msg
+        assert "Transition" in msg
 
     def test_invalid_same_stage(self, simple_pipeline):
         valid, msg = simple_pipeline.validate_transition("middle", "middle")
@@ -90,10 +90,10 @@ class TestTransitions:
         assert "Unknown stage" in msg
 
     def test_invalid_skip_stage(self, simple_pipeline):
-        """Can't skip from start directly to end."""
+        """Can skip from start directly to end now."""
         valid, msg = simple_pipeline.validate_transition("start", "end")
-        assert valid is False
-        assert "Cannot transition" in msg
+        assert valid is True
+        assert "Transition" in msg
 
     def test_reject_targets(self, simple_pipeline):
         assert simple_pipeline.valid_reject_targets("middle") == ["start"]

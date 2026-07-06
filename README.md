@@ -120,6 +120,7 @@ quill/
 │   ├── agent.py         ← Agent config loader, response parser
 │   ├── llm.py           ← OpenAI-compatible LLM client (urllib)
 │   ├── runner.py        ← Stage executor (critique → decide → loop)
+│   ├── celery_app.py    ← Celery app + run_stage_task (broker/backend via REDIS_URL)
 │   ├── templates/       ← Dashboard HTML templates
 │   └── static/          ← CSS, JS assets
 ├── agents/
@@ -208,9 +209,68 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 - Agent loop history tracked in `meta.yaml` under `loop_history`
 - Text metrics (Flesch Reading Ease, word count, etc.) computed per-stage as `.metrics.yaml` files
 
+## Celery Workers
+
+Async stage runs currently use a `ThreadPoolExecutor` inside the Flask process. `celery_app.py` provides a drop-in Celery+Redis backend for crash-resilient, horizontally-scalable execution (wiring into the API is ticket 74).
+
+### Setup
+
+1. **Configure Redis URL** — copy `.env.example` to `.env` and set:
+
+   ```dotenv
+   # Local Redis (no auth)
+   REDIS_URL=redis://localhost:6379/0
+
+   # LAN Redis with password (no username)
+   REDIS_URL=redis://:yourpassword@192.168.1.50:6379/0
+   ```
+
+2. **Start a worker** — from the repo root:
+
+   ```bash
+   REDIS_URL=redis://:yourpassword@192.168.1.50:6379/0 \
+     .venv/bin/celery -A quill.celery_app worker --loglevel=info
+   ```
+
+   Expected output:
+
+   ```
+   [tasks]
+     . quill.celery_app.run_stage_task
+
+   [2026-...] Connected to redis://...
+   celery@hostname ready.
+   ```
+
+   Worker concurrency is controlled by the `QUILL_MAX_WORKERS` env var (default: 2).
+
+### Enqueue a task
+
+```python
+from quill.celery_app import run_stage_task
+
+# Single stage
+result = run_stage_task.delay(piece_id, stage, agent_set="default", chain=False)
+print(result.get(timeout=120))   # blocks until done
+
+# Full chain from a given stage
+result = run_stage_task.delay(piece_id, stage, agent_set="default", chain=True)
+```
+
+The task returns a dict with `stage`, `decision`, `critique`, `loop_count`, and `error` keys.
+
+### Connectivity tests
+
+```bash
+# Verify Redis is reachable (opt-in, skipped in normal suite)
+QUILL_TEST_REDIS_LIVE=1 pytest tests/test_redis_connectivity.py -v
+```
+
+---
+
 ## Testing
 
-**272 pytest tests + 16 behave BDD scenarios** — all passing.
+**410 pytest tests** — all passing (2 connectivity tests skipped without `QUILL_TEST_REDIS_LIVE=1`).
 
 ### Pytest
 
@@ -238,5 +298,8 @@ behave features/api/            # BDD scenarios
 
 - Flask (API + template server)
 - PyYAML (frontmatter + meta.yaml parsing)
+- SQLAlchemy + Flask-SQLAlchemy + Flask-Migrate (database)
+- LiteLLM (unified LLM provider interface)
+- Celery + redis-py (distributed task queue — worker optional)
 - Werkzeug ProxyFix (reverse proxy support)
-- No external LLM client dependencies — uses stdlib `urllib`
+- tenacity (retry logic for LLM calls)

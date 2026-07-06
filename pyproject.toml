@@ -10,6 +10,7 @@ dependencies = [
     "SQLAlchemy>=2.0",
     "flask-sqlalchemy>=3.0",
     "flask-migrate>=4.0",
+    "litellm>=1.0.0",
 ]
 
 [project.optional-dependencies]

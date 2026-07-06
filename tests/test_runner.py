@@ -775,3 +775,12 @@ class TestTwoFileOutput:
         assert len(calls) == 1
         user_prompt = calls[0][0][1]
         assert user_prompt == "MY_CUSTOM_OVERRIDE_PROMPT"
+
+
+def test_is_local_api_detection():
+    from quill.stage_runner import is_local_api
+    assert is_local_api("http://localhost:11434") is True
+    assert is_local_api("http://127.0.0.1:1234/v1") is True
+    assert is_local_api("http://192.168.1.100:8000") is True
+    assert is_local_api("https://api.openai.com/v1") is False
+    assert is_local_api("https://api.anthropic.com") is False

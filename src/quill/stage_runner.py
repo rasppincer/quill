@@ -22,6 +22,34 @@ from .token_budget import check_and_truncate, load_context_window
 logger = logging.getLogger(__name__)
 
 
+def is_local_api(api_base: str | None) -> bool:
+    if not api_base:
+        return False
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(api_base)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1"):
+            return True
+        if hostname.startswith("192.168.") or hostname.startswith("10."):
+            return True
+        if hostname.startswith("172."):
+            parts = hostname.split('.')
+            if len(parts) >= 2:
+                try:
+                    second_octet = int(parts[1])
+                    if 16 <= second_octet <= 31:
+                        return True
+                except ValueError:
+                    pass
+    except Exception:
+        pass
+    return False
+
+
 class LLMCaller:
     """Execute a single stage's LLM calls (generate→evaluate or feedback)."""
 
@@ -70,6 +98,8 @@ class LLMCaller:
         is_content = sc.pipeline.is_content_stage(stage)
         cfg = load_model_config()
         use_structured = cfg.get("structured_output", False)
+        if use_structured and is_local_api(client.api_base):
+            use_structured = False
 
         if is_content:
             gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
@@ -296,6 +326,8 @@ class LLMCaller:
         chapter_words = max(2000, int(target * 1.2) // len(chapters))
         cfg = load_model_config()
         use_structured = cfg.get("structured_output", False)
+        if use_structured and is_local_api(client.api_base):
+            use_structured = False
         all_chapters = []
 
         # Extract character sheet from brief for persistent context

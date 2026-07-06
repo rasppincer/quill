@@ -80,9 +80,8 @@ Stages without explicit inputs fall back to reading the previous stage's output.
 
 ### Transitions
 
-- **Advance**: moves to next stage, preserves old stage file
-- **Reject**: reverts to allowed previous stage, clears stage_states and file bodies for stages after target
-- **Loop**: content stages can loop back on negative evaluation (max_loops configurable per flavor)
+- **Arbitrary Jumps**: users/agents can transition arbitrarily between any two distinct stages defined in the pipeline.
+- **Supersede**: running a stage resets all subsequent stages to `fresh` and unlinks their generated files.
 
 ### Stage States
 
@@ -96,7 +95,7 @@ stage_states:
   draft: generating
 ```
 
-States: `empty` (not reached), `generating` (agent running), `ready` (completed), `superseded` (stale — earlier stage re-run).
+States: `fresh` (not yet completed/empty/superseded), `generating` (agent running), `completed` (completed/ready). Legacy state strings are dynamically mapped on-the-fly for backward compatibility.
 
 ### Trigger Modes
 
@@ -112,34 +111,29 @@ For long-form content (10k+ words), the draft stage detects multi-part outlines 
 
 1. Parse outline/brief for `## Part N: Title` headers
 2. Extract character sheet from brief for persistent context
-3. Generate each chapter as separate LLM call (~2000 words each)
+3. Generate each chapter as separate LLM call (~2000 words each) using single-call content schemas
 4. Concatenate chapters into single draft file
-5. Evaluate the full draft with chapter context in the evaluate prompt
 
 Chapter detection falls back through: outline headers → brief headers → brief bullet points (`- Part N: Description`).
 
 ## Agent System
 
-### Two-Call Approach (Content Stages)
+### Single-Call Execution
+
+Content and Feedback stages execute as a single LLM call per stage.
 
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Load     │───▶│ Generate │───▶│ Save     │───▶│ Evaluate │───▶│ Decide   │
-│ prompt + │    │ call     │    │ content  │    │ call     │    │ advance  │
-│ prev     │    │ (produce │    │ to stage │    │ (JSON    │    │ or loop  │
-│ content  │    │  content)│    │ .md file │    │  decision)│    │          │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-                                                                    │
-                                                          ┌─────────┴─────────┐
-                                                          │                   │
-                                                     advance             loop_back
-                                                     (next stage)        (retry ≤ max_loops)
+┌──────────┐    ┌─────────────┐    ┌──────────────┐
+│ Load     │───▶│ Single-Call │───▶│ Save         │
+│ prompt + │    │ LLM request │    │ content/crit │
+│ context  │    │ (structured)│    │ to disk/db   │
+└──────────┘    └─────────────┘    └──────────────┘
 ```
 
-**Generate call**: LLM produces stage content → saved to `{stage}.md` immediately.
-**Evaluate call**: Separate LLM call inspects the saved content → writes `{stage}.decision.md`.
+- **Content Stages**: Request `ContentStageOutput` structured JSON format (containing `content` string), saved to `<stage>.json` (raw JSON) and `<stage>.md` (parsed markdown).
+- **Feedback Stages**: Request `FeedbackStageOutput` structured JSON format (containing `critique` string and transition `decision`), saved to `<stage>.json` (raw JSON) and `<stage>.md` (parsed critique markdown).
 
-The evaluator receives the full generated text via `{{GENERATED}}` — not a summary. Content is persisted before evaluation — if evaluate fails, the draft survives.
+The LLM output is parsed directly into structured Pydantic models to guarantee response shape.
 
 ### Agent Config Hierarchy
 
@@ -188,25 +182,9 @@ Agents return structured JSON:
 
 If the LLM returns malformed JSON, `agent.py` falls back to heuristic parsing with negative lookahead to avoid matching "loop_back" in instructional text.
 
-### Loop Tracking
+### Loop Tracking & Guardrails (Removed)
 
-Loop history is recorded in `meta.yaml`:
-
-```yaml
-loops:
-  review: 1
-  validate: 2
-```
-
-### Loop Guardrails
-
-`MetricsService` detects metric degradation across loop iterations:
-- Word count drops >30%
-- Readability shifts >15 points
-- Vocabulary diversity drops >10%
-- Passive voice increases >10 percentage points
-
-Forces advance if degradation detected, preventing runaway loops.
+With the pipeline pivot to single-call execution, loop-back checks, loop counts, loop tracking, and loop guardrails have been removed. Stages advance immediately to `completed` upon run completion.
 
 ## Research Stage
 
@@ -270,14 +248,14 @@ Quill uses a relational database schema (implemented via SQLAlchemy in [models.p
 
 - **Project**: Holds top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set).
 - **DocumentNode**: Represents files, chapters, or scenes in a hierarchical tree structure with self-referential parent-child relationships.
-- **StageState**: Tracks workflow state (generating, ready, superseded), loop counts, content body, and evaluation decisions/critiques for each stage of a `DocumentNode`.
-- **Metrics**: Holds per-stage mechanical readability scores and word counts, with labels for current vs baseline snapshots to support loop guardrails.
+- **StageState**: Tracks workflow state (`fresh`, `generating`, `completed`), content body, and critiques for each stage of a `DocumentNode`.
+- **Metrics**: Holds per-stage mechanical readability scores and word counts.
 - **AgentLog**: Append-only execution record of LLM calls, prompts, character/token counts, costs, and critiques.
 
 ## Observability
 
 - **Run log**: JSONL per piece, every LLM call logged with timestamp, stage, char counts
-- **SSE events**: Live stream during runs (`stage_start`, `stage_llm_call`, `loop_guardrail`, `chain_complete`)
+- **SSE events**: Live stream during runs (`stage_start`, `stage_llm_call`, `chain_complete`)
 - **Debug prompts**: `GET /api/pieces/<id>/prompt/<stage>` shows composed prompts without calling LLM
 - **Metrics**: Per-stage readability (Flesch, grade, word count, passive voice %) stored as `.metrics.yaml`
 

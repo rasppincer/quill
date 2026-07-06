@@ -111,11 +111,11 @@ Because stages are single-call, every stage writes exactly two files under the p
 - [x] Update the LLM client to request structured schema-guaranteed JSON.
 - [x] Update the stage execution engine to parse the returned JSON and write `<stage>.json` and `<stage>.md`.
 
-### Phase 2: Pipeline & Backend Refactoring
-1. Update `workflows/default.yaml` to configure all stages as single-call.
-2. Remove the internal evaluate loop and loop-back checks from `StageRunner` and `Orchestrator`.
-3. Modify `run-async` API to accept `custom_prompt`.
-4. Remove/bypass strict stage transition validation.
+### Phase 2: Pipeline & Backend Refactoring (Completed)
+- [x] Update `workflows/default.yaml` to configure all stages as single-call.
+- [x] Remove the internal evaluate loop and loop-back checks from `StageRunner` and `Orchestrator`.
+- [x] Modify `run-async` API to accept `custom_prompt`.
+- [x] Remove/bypass strict stage transition validation.
 
 ### Phase 3: Frontend Layout & Locking
 1. Restructure [piece.html](file:///home/bob/projects/quill/src/quill/templates/piece.html) to present the prompt text editor side-by-side with the content editor.

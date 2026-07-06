@@ -3,6 +3,7 @@
 import json
 import pytest
 from pathlib import Path
+from pydantic import ValidationError
 
 import yaml
 
@@ -14,179 +15,35 @@ from quill.agent import (
     save_model_config,
     list_agent_sets,
     list_agent_prompts,
-    parse_agent_response,
-    _strip_json_block,
+    ContentStageOutput,
+    FeedbackStageOutput,
 )
 
 
 # ---------------------------------------------------------------------------
-# Response parsing — the most critical logic
+# Pydantic schemas validation tests
 # ---------------------------------------------------------------------------
 
 
-class TestParseAgentResponse:
-    """Test the LLM response parser with various formats."""
+def test_content_stage_output_validation():
+    # Valid model validation
+    valid_data = '{"content": "This is generated content."}'
+    obj = ContentStageOutput.model_validate_json(valid_data)
+    assert obj.content == "This is generated content."
 
-    def test_json_in_code_block(self):
-        """Standard format: JSON inside ```json ... ``` block."""
-        response = (
-            "The draft has several issues.\n\n"
-            "1. Opening is weak\n"
-            "2. Pacing is off\n\n"
-            '```json\n{"decision": "loop_back", "critique": "Needs stronger opening"}\n```'
-        )
-        result = parse_agent_response(response)
-        assert result.decision == "loop_back"
-        assert result.critique == "Needs stronger opening"
-        assert result.body  # body should have the prose, not the JSON
+    # Missing field should raise ValidationError
+    with pytest.raises(ValidationError):
+        ContentStageOutput.model_validate_json('{}')
 
-    def test_bare_json_no_code_block(self):
-        """JSON without code block wrapper."""
-        response = (
-            "Good draft overall.\n\n"
-            '{"decision": "advance", "critique": "Well structured, proceed."}'
-        )
-        result = parse_agent_response(response)
-        assert result.decision == "advance"
-        assert "Well structured" in result.critique
+def test_feedback_stage_output_validation():
+    # Valid model validation
+    valid_data = '{"critique": "The pacing was a bit slow in chapter 2."}'
+    obj = FeedbackStageOutput.model_validate_json(valid_data)
+    assert obj.critique == "The pacing was a bit slow in chapter 2."
 
-    def test_json_with_extra_fields(self):
-        """JSON with extra fields beyond decision/critique."""
-        response = (
-            '```json\n{"decision": "advance", "critique": "Solid work", "score": 8.5}\n```'
-        )
-        result = parse_agent_response(response)
-        assert result.decision == "advance"
-        assert result.critique == "Solid work"
-
-    def test_heuristic_loop_back_keywords(self):
-        """Falls back to heuristic when no JSON found."""
-        for keyword in ["loop_back", "loop back", "needs revision", "needs work", "reject"]:
-            response = f"The text {keyword} because of issues."
-            result = parse_agent_response(response)
-            assert result.decision == "loop_back", f"Keyword '{keyword}' should trigger loop_back"
-
-    def test_heuristic_advance_default(self):
-        """Defaults to advance when no JSON and no loop keywords."""
-        response = "The text is good. Everything looks fine."
-        result = parse_agent_response(response)
-        assert result.decision == "advance"
-
-    def test_body_strips_json(self):
-        """Body field should contain prose without JSON metadata."""
-        response = (
-            "Here is the revised text.\n\nIt is much better now.\n\n"
-            '```json\n{"decision": "advance", "critique": "Good"}\n```'
-        )
-        result = parse_agent_response(response)
-        assert "revised text" in result.body
-        assert "decision" not in result.body
-        assert "```" not in result.body
-
-    def test_body_strips_example_markers(self):
-        """Body should strip '(revised text starts here)' style markers."""
-        response = (
-            "(revised text starts here)\n\n"
-            "The actual content.\n\n"
-            "(revised text ends here)\n\n"
-            '```json\n{"decision": "advance", "critique": "ok"}\n```'
-        )
-        result = parse_agent_response(response)
-        assert "starts here" not in result.body
-        assert "ends here" not in result.body
-        assert "actual content" in result.body
-
-    def test_empty_response(self):
-        """Handle empty or whitespace-only response."""
-        result = parse_agent_response("")
-        assert result.decision == "advance"  # defaults to advance
-
-    def test_malformed_json_in_code_block(self):
-        """Handle malformed JSON inside code block gracefully."""
-        response = '```json\n{"decision": advance, broken}\n```'
-        result = parse_agent_response(response)
-        # Should fall back to heuristic
-        assert result.decision in ("advance", "loop_back")
-
-    def test_multiple_json_blocks_uses_first(self):
-        """When multiple JSON blocks exist, uses the first valid one."""
-        response = (
-            '```json\n{"decision": "loop_back", "critique": "first"}\n```\n'
-            'Some text\n\n'
-            '```json\n{"decision": "advance", "critique": "second"}\n```'
-        )
-        result = parse_agent_response(response)
-        assert result.decision == "loop_back"
-        assert result.critique == "first"
-
-    def test_output_preserves_full_response(self):
-        """Output field should contain the complete raw response."""
-        response = "Some text\n\n```json\n{\"decision\": \"advance\", \"critique\": \"ok\"}\n```"
-        result = parse_agent_response(response)
-        assert result.output == response
-
-
-# ---------------------------------------------------------------------------
-# Strip JSON block
-# ---------------------------------------------------------------------------
-
-
-class TestStripJsonBlock:
-    """Test the JSON stripping utility."""
-
-    def test_strips_code_block_json(self):
-        text = 'Review text.\n\n```json\n{"decision": "advance"}\n```\n'
-        result = _strip_json_block(text)
-        assert "decision" not in result
-        assert "Review text" in result
-
-    def test_strips_bare_json(self):
-        text = 'Review text.\n\n{"decision": "advance", "critique": "ok"}\n'
-        result = _strip_json_block(text)
-        assert "decision" not in result
-        assert "Review text" in result
-
-    def test_preserves_non_decision_json(self):
-        """JSON without 'decision' key should be preserved."""
-        text = 'Here is code: {"name": "test", "value": 42}\n'
-        result = _strip_json_block(text)
-        assert '{"name": "test"' in result
-
-    def test_preserves_json_code_examples_in_content(self):
-        """JSON code examples in the middle of content are preserved."""
-        text = (
-            '## API Reference\n\n'
-            'To create a user, send a POST request:\n\n'
-            '```json\n{"name": "Alice", "email": "alice@example.com"}\n```\n\n'
-            'The response will be:\n\n'
-            '```json\n{"status": "ok", "id": 123}\n```\n\n'
-            'These examples show the API format.\n\n'
-            '```json\n{"decision": "advance", "critique": "Good work."}\n```'
-        )
-        result = _strip_json_block(text)
-        assert "API Reference" in result
-        assert '"name": "Alice"' in result
-        assert '"status": "ok"' in result
-        assert "These examples" in result
-        assert "decision" not in result
-
-    def test_preserves_json_in_blog_content(self):
-        """JSON in a programming blog post is preserved."""
-        text = (
-            '# Building REST APIs\n\n'
-            'A typical response looks like:\n'
-            '{"status": "ok", "data": [1, 2, 3]}\n\n'
-            'And error responses:\n'
-            '{"error": "not found", "code": 404}\n\n'
-            'In conclusion, REST APIs are great.\n\n'
-            '```json\n{"decision": "advance", "critique": "Well written."}\n```'
-        )
-        result = _strip_json_block(text)
-        assert "Building REST APIs" in result
-        assert '"status": "ok"' in result
-        assert '"error": "not found"' in result
-        assert "In conclusion" in result
-        assert "decision" not in result
+    # Missing field should raise ValidationError
+    with pytest.raises(ValidationError):
+        FeedbackStageOutput.model_validate_json('{}')
 
 
 # ---------------------------------------------------------------------------

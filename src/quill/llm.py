@@ -13,6 +13,7 @@ import logging
 import time
 import litellm
 from typing import Any
+from pydantic import BaseModel
 
 from .timeit import log_timing
 from .logging_config import get_logger
@@ -33,7 +34,7 @@ class LLMClient:
         self.max_tokens = max_tokens
 
     def chat(self, system: str, user: str, temperature: float | None = None,
-             max_tokens: int | None = None, response_format: dict | None = None,
+             max_tokens: int | None = None, response_format: dict | type[BaseModel] | None = None,
              piece_id: str | None = None, stage: str | None = None,
              call_type: str | None = None, trace_id: str | None = None) -> str:
         """Send a chat completion request.

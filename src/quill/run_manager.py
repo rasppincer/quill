@@ -212,6 +212,8 @@ class RunManager:
             # race conditions where the piece is still being processed by the
             # frontend but the run is marked complete.
             event_queue.put(None)
+            from .db import db_session
+            db_session.remove()
 
     def _cleanup_old_runs(self):
         """Remove runs older than 5 minutes (thread-safe)."""

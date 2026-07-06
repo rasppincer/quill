@@ -58,6 +58,10 @@ def test_delete_piece_running(client, tmp_output):
     assert session.query(Project).filter_by(id="test-delete-running").first() is not None
     
     # Cleanup
-    session.delete(project)
-    session.delete(node)
+    project_to_del = session.query(Project).filter_by(id="test-delete-running").first()
+    node_to_del = session.query(DocumentNode).filter_by(id="test-delete-running").first()
+    if project_to_del:
+        session.delete(project_to_del)
+    if node_to_del:
+        session.delete(node_to_del)
     session.commit()

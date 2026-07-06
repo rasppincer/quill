@@ -308,10 +308,11 @@ class TestOrchestratorRunStage:
             "---\nid: parent-piece\n---\n\n## Part 1: The Setup\nThe team assembles.\n"
             "## Part 2: The Conflict\nThings go wrong.\n## Part 3: The Resolution\nEscape.\n"
         )
-        # Mock _run_stage_on_child to avoid LLM calls for stage execution
+        # Mock _run_stage_on_child and _generate_chapter_brief to avoid LLM calls for stage execution
         mock_result = MagicMock()
         mock_result.decision = "advance"
-        with patch.object(orch, '_run_stage_on_child', return_value=mock_result):
+        with patch.object(orch, '_run_stage_on_child', return_value=mock_result), \
+             patch.object(orch, '_generate_chapter_brief', return_value="Brief"):
             orch.run_stage("parent-piece", "draft", output_dir=tmp_path)
         # Verify children were created
         children = list(tmp_path.glob("parent-piece-chapter-*"))

@@ -66,6 +66,11 @@ def create_app() -> Flask:
     from .cli import sync_legacy_command
     app.cli.add_command(sync_legacy_command)
 
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        from .db import db_session
+        db_session.remove()
+
     return app
 
 

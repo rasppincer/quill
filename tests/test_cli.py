@@ -208,11 +208,13 @@ def test_sync_legacy_command(tmp_path):
 
             # Verify the update in DB
             session.expire_all()
+            session = db_session()
             project_updated = session.query(Project).filter_by(id="my-project").first()
             assert project_updated.title == "My Updated Project Title"
 
             # 6. Test Safety Guard: skip actively generating
             # Set state in DB to generating
+            outline_state = session.query(StageState).filter_by(document_node_id="my-project", stage="outline").first()
             outline_state.state = "generating"
             session.commit()
 

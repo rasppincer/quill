@@ -86,6 +86,49 @@ class LLMClient:
             else:
                 _common_log.info(log_msg)
 
+            # Audit tokens and cost, then log to Database AgentLog
+            try:
+                from .db import SessionLocal
+                from .models import DocumentNode, AgentLog
+                
+                project_id = None
+                if piece_id:
+                    with SessionLocal() as db:
+                        node = db.query(DocumentNode).filter_by(id=piece_id).first()
+                        if node:
+                            project_id = node.project_id
+
+                prompt_tokens = 0
+                completion_tokens = 0
+                cost = 0.0
+                usage = getattr(response, "usage", None)
+                if usage:
+                    prompt_tokens = getattr(usage, "prompt_tokens", 0)
+                    completion_tokens = getattr(usage, "completion_tokens", 0)
+                cost = litellm.completion_cost(completion_response=response) or 0.0
+
+                with SessionLocal() as db:
+                    agent_log = AgentLog(
+                        project_id=project_id,
+                        document_node_id=piece_id,
+                        stage=stage or "unknown",
+                        call_type=call_type or "generate",
+                        model=self.model,
+                        system_prompt=system,
+                        user_prompt=user,
+                        system_chars=len(system),
+                        user_chars=len(user),
+                        trace_id=trace_id,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cost=cost,
+                        output=content,
+                    )
+                    db.add(agent_log)
+                    db.commit()
+            except Exception as db_err:
+                logger.error("Failed to write database AgentLog: %s", db_err, exc_info=True)
+
             return content
         except Exception as e:
             raise ConnectionError(f"LLM connection/API error: {e}") from e

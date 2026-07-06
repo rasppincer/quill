@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .agent import AgentDecision, FeedbackStageOutput
+from .agent import AgentDecision, FeedbackStageOutput, ContentStageOutput
 from .llm import LLMClient
 from .piece import Piece, _stage_filename
 from .logging_config import get_piece_logger
@@ -57,72 +57,110 @@ class LLMCaller:
         return truncated, was_truncated
 
     # ------------------------------------------------------------------
-    # Content stage (two-call: generate + evaluate)
+    # ------------------------------------------------------------------
+    # Single-call Stage Execution
     # ------------------------------------------------------------------
 
-    @timeit("LLMCaller.run_content_stage")
-    def run_content_stage(
+    @timeit("LLMCaller.run_stage")
+    def run_stage(
         self, client: LLMClient, stage: str, piece: Piece,
         sc, event_queue=None, trace_id: str | None = None,
     ) -> AgentDecision:
-        """Two-call approach: generate content, then evaluate.
+        """Single-call execution engine returning schema-guaranteed JSON."""
+        is_content = sc.pipeline.is_content_stage(stage)
 
-        For draft stage with multi-part outlines, generates each part
-        separately to overcome token limits, then evaluates the full text.
-        """
-        gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
+        if is_content:
+            gen_system = PromptBuilder.system_prompt(stage, piece, "generate")
+            chapters = self._parse_chapters(sc.input_content) if stage == "draft" else []
 
-        # Check if this is a chaptered draft (outline has ## Part N sections)
-        chapters = self._parse_chapters(sc.input_content) if stage == "draft" else []
-
-        # Fallback: try parsing the brief if outline doesn't have chapters
-        if not chapters and stage == "draft":
-            # Try structure file first (## Segment N headers)
-            structure_file = piece.stage_dir() / _stage_filename("structure")
-            if structure_file.exists():
-                structure_text = structure_file.read_text(encoding="utf-8")
-                import re as _re
-                m = _re.match(r'^---.*?---\s*', structure_text, _re.DOTALL)
-                structure_body = structure_text[m.end():] if m else structure_text
-                chapters = self._parse_chapters(structure_body)
-
-            # Fall back to brief
-            if not chapters:
-                brief_file = piece.stage_dir() / _stage_filename("brief")
-                if brief_file.exists():
-                    brief_text = brief_file.read_text(encoding="utf-8")
-                    # Strip frontmatter
+            # Chapter fallback
+            if not chapters and stage == "draft":
+                structure_file = piece.stage_dir() / _stage_filename("structure")
+                if structure_file.exists():
+                    structure_text = structure_file.read_text(encoding="utf-8")
                     import re as _re
-                    m = _re.match(r'^---.*?---\s*', brief_text, _re.DOTALL)
-                    brief_body = brief_text[m.end():] if m else brief_text
-                    chapters = self._parse_chapters(brief_body)
+                    m = _re.match(r'^---.*?---\s*', structure_text, _re.DOTALL)
+                    structure_body = structure_text[m.end():] if m else structure_text
+                    chapters = self._parse_chapters(structure_body)
 
-                    # Fallback: parse "- Part N: Title - Description" bullet format
-                    if not chapters:
-                        chapters = self._parse_bullet_chapters(brief_body)
+                if not chapters:
+                    brief_file = piece.stage_dir() / _stage_filename("brief")
+                    if brief_file.exists():
+                        brief_text = brief_file.read_text(encoding="utf-8")
+                        import re as _re
+                        m = _re.match(r'^---.*?---\s*', brief_text, _re.DOTALL)
+                        brief_body = brief_text[m.end():] if m else brief_text
+                        chapters = self._parse_chapters(brief_body)
+                        if not chapters:
+                            chapters = self._parse_bullet_chapters(brief_body)
 
-        logger.info("Chapter detection for stage='%s': %d chapters found", stage, len(chapters))
-        if chapters and len(chapters) > 1:
-            generated = self._generate_chaptered(
-                client, gen_system, stage, piece, sc, chapters, event_queue, trace_id,
+            if chapters and len(chapters) > 1:
+                generated_content = self._generate_chaptered(
+                    client, gen_system, stage, piece, sc, chapters, event_queue, trace_id,
+                )
+                import json
+                raw_response = json.dumps({"content": generated_content})
+            else:
+                self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt, trace_id=trace_id)
+                _emit(event_queue, "stage_llm_call", {
+                    "stage": stage, "call": "generate", "prompt_chars": len(sc.prompt),
+                })
+                prompt_for_generate, _ = self.apply_token_budget(
+                    gen_system, sc.prompt, sc.agent_cfg.max_tokens,
+                    call_label="generate", event_queue=event_queue,
+                )
+                try:
+                    raw_response = client.chat(
+                        gen_system,
+                        prompt_for_generate,
+                        response_format=ContentStageOutput,
+                        piece_id=piece.id,
+                        stage=stage,
+                        call_type="generate",
+                        trace_id=trace_id,
+                    )
+                except ConnectionError as e:
+                    return AgentDecision(
+                        decision="error", critique="", output="",
+                        error=str(e), stage=stage,
+                    )
+
+                try:
+                    parsed = ContentStageOutput.model_validate_json(raw_response)
+                    generated_content = parsed.content
+                except Exception as e:
+                    logger.error("Failed to parse schema-guaranteed content JSON: %s", e)
+                    generated_content = raw_response
+
+            piece.write_json(stage, raw_response)
+            piece.write_output(stage, generated_content)
+
+            return AgentDecision(
+                decision="advance",
+                critique="",
+                output=raw_response,
+                body=generated_content,
             )
+
         else:
-            # Standard single-call generation
-            self.run_logger.log(piece, stage, "generate", gen_system, sc.prompt, trace_id=trace_id)
+            # Feedback/Critique stage
+            eval_system = PromptBuilder.system_prompt(stage, piece, "feedback")
+            self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, trace_id=trace_id)
             _emit(event_queue, "stage_llm_call", {
-                "stage": stage, "call": "generate", "prompt_chars": len(sc.prompt),
+                "stage": stage, "call": "agent", "prompt_chars": len(sc.prompt),
             })
-            prompt_for_generate, _ = self.apply_token_budget(
-                gen_system, sc.prompt, sc.agent_cfg.max_tokens,
-                call_label="generate", event_queue=event_queue,
+            prompt_for_feedback, _ = self.apply_token_budget(
+                eval_system, sc.prompt, sc.agent_cfg.max_tokens,
+                call_label="feedback", event_queue=event_queue,
             )
             try:
-                generated = client.chat(
-                    gen_system,
-                    prompt_for_generate,
+                response = client.chat(
+                    eval_system,
+                    prompt_for_feedback,
+                    response_format=FeedbackStageOutput,
                     piece_id=piece.id,
                     stage=stage,
-                    call_type="generate",
+                    call_type="agent",
                     trace_id=trace_id,
                 )
             except ConnectionError as e:
@@ -131,195 +169,26 @@ class LLMCaller:
                     error=str(e), stage=stage,
                 )
 
-        # Persist generated content immediately (survives loop_back)
-        piece.write_output(stage, generated)
+            try:
+                parsed = FeedbackStageOutput.model_validate_json(response)
+                critique = parsed.critique
+            except Exception as e:
+                logger.error("Failed to parse schema-guaranteed feedback JSON: %s", e)
+                critique = response
 
-        # Second call: evaluate the generated content
-        _emit(event_queue, "stage_llm_call", {
-            "stage": stage, "call": "evaluate", "output_chars": len(generated),
-        })
-        decision = self.evaluate_output(
-            client, stage, piece, generated, sc.pipeline, sc.input_content,
-            agent_set=piece.agent_set or "default",
-            max_tokens=sc.agent_cfg.max_tokens,
-            trace_id=trace_id,
-        )
-        decision.body = generated
-        decision.output = generated
+            piece.write_json(stage, response)
+            piece.write_output(stage, critique)
 
-        # Persist evaluation result to separate file
-        piece.write_decision(stage, decision.decision, decision.critique)
-        return decision
-
-    # ------------------------------------------------------------------
-    # Feedback stage (single call)
-    # ------------------------------------------------------------------
-
-    @timeit("LLMCaller.run_feedback_stage")
-    def run_feedback_stage(
-        self, client: LLMClient, stage: str, piece: Piece,
-        sc, event_queue=None, trace_id: str | None = None,
-    ) -> AgentDecision:
-        """Single call with JSON decision expected."""
-        eval_system = PromptBuilder.system_prompt(stage, piece, "feedback")
-        self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, trace_id=trace_id)
-        response_format = FeedbackStageOutput
-        _emit(event_queue, "stage_llm_call", {
-            "stage": stage, "call": "agent", "prompt_chars": len(sc.prompt),
-        })
-        prompt_for_feedback, _ = self.apply_token_budget(
-            eval_system, sc.prompt, sc.agent_cfg.max_tokens,
-            call_label="feedback", event_queue=event_queue,
-        )
-        try:
-            response = client.chat(
-                eval_system,
-                prompt_for_feedback,
-                response_format=response_format,
-                piece_id=piece.id,
-                stage=stage,
-                call_type="agent",
-                trace_id=trace_id,
+            decision = AgentDecision(
+                decision="advance",
+                critique=critique,
+                output=response,
+                body=critique,
             )
-        except ConnectionError as e:
-            return AgentDecision(
-                decision="error", critique="", output="",
-                error=str(e), stage=stage,
-            )
-        try:
-            parsed = FeedbackStageOutput.model_validate_json(response)
-            critique = parsed.critique
-        except Exception as e:
-            logger.error("Failed to parse schema-guaranteed feedback JSON: %s", e)
-            critique = response
-        decision = AgentDecision(
-            decision="advance",
-            critique=critique,
-            output=response,
-            body=critique,
-        )
-        self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, {
-            "decision": decision.decision, "critique": (decision.critique or "")[:500],
-        }, trace_id=trace_id)
-        return decision
-
-    # ------------------------------------------------------------------
-    # Evaluate (second call for content stages)
-    # ------------------------------------------------------------------
-
-    @timeit("LLMCaller.evaluate_output")
-    def evaluate_output(
-        self, client: LLMClient, stage: str, piece: Piece,
-        generated: str, pipeline, input_content: str,
-        agent_set: str = "default", max_tokens: int = 4096,
-        trace_id: str | None = None,
-    ) -> AgentDecision:
-        """Evaluate generated content and return a JSON decision.
-
-        Loads the evaluate.prompt.md template, fills in {{GENERATED}},
-        {{INPUT_CONTENT}}, and standard variables, then calls the LLM.
-        """
-        eval_template = PromptBuilder.load_evaluate_template(agent_set)
-
-        if eval_template:
-            from .metrics import compute_and_save, load_metrics
-            stage_file = piece.stage_dir() / _stage_filename(stage)
-            metrics_str = ""
-            if stage_file.exists():
-                try:
-                    compute_and_save(stage_file)
-                    m = load_metrics(stage_file)
-                    if m:
-                        metrics_str = "\n".join([
-                            f"--- {stage} metrics ---",
-                            f"  Flesch Reading Ease: {m.get('flesch_ease', 'n/a')}",
-                            f"  Flesch-Kincaid Grade: {m.get('flesch_kincaid', 'n/a')}",
-                            f"  Word count: {m.get('word_count', 'n/a')}",
-                            f"  Avg sentence length: {m.get('avg_sentence_length', 'n/a')} words",
-                            f"  Vocabulary diversity: {round(m.get('type_token_ratio', 0) * 100, 1)}%",
-                            f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%",
-                        ])
-                except Exception as e:
-                    logger.warning("Failed to compute metrics for evaluate prompt: %s", e)
-
-            from .context_assembler import ContextAssembler
-            assembler = ContextAssembler(agent_set)
-            eval_ctx = assembler.build_render_context(
-                piece, stage, input_content, metrics_str, 0,
-                extra={"GENERATED": generated, "INPUT_CONTENT": input_content},
-            )
-
-            # Add chapter context for chaptered drafts
-            if stage == "draft":
-                chapter_count = generated.count("\n## Part ") + generated.count("\n## Chapter ")
-                if chapter_count > 1:
-                    word_count = len(generated.split())
-                    per_chapter = word_count // chapter_count
-                    eval_ctx["CHAPTER_INFO"] = (
-                        f"This draft was generated as {chapter_count} chapters, "
-                        f"each targeting ~{per_chapter} words. "
-                        f"Total: {word_count} words. "
-                        f"Evaluate the overall quality and completeness, not just word count."
-                    )
-
-            prompt = render_prompt(eval_template, eval_ctx)
-            eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
-            self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, trace_id=trace_id)
-        else:
-            logger.warning("No evaluate.prompt.md in agent set '%s', using fallback", agent_set)
-            prompt = (
-                f"You are a quality evaluator for a {piece.genre} {piece.type}.\n\n"
-                f"## Stage: {stage}\n\n"
-                f"## Input given to the {stage} agent:\n{input_content}\n\n"
-                f"## Generated {stage} output:\n{generated}\n\n"
-                f"## Task\n"
-                f"Evaluate the generated {stage} output. Is it high quality? "
-                f"Does it meet the requirements? Respond with ONLY a JSON block:\n\n"
-                f'{{"decision": "advance", "critique": "brief feedback"}}\n'
-                f'or\n'
-                f'{{"decision": "loop_back", "critique": "specific issues to fix"}}\n\n'
-                f"Be strict but fair. Only loop_back if there are real, fixable problems."
-            )
-            eval_system = PromptBuilder.system_prompt(stage, piece, "evaluate")
-
-        response_format = FeedbackStageOutput
-        eval_prompt, _ = self.apply_token_budget(
-            eval_system, prompt, max_tokens,
-            call_label="evaluate",
-        )
-        try:
-            eval_response = client.chat(
-                eval_system,
-                eval_prompt,
-                response_format=response_format,
-                piece_id=piece.id,
-                stage=stage,
-                call_type="evaluate",
-                trace_id=trace_id,
-            )
-        except ConnectionError as e:
-            return AgentDecision(
-                decision="error", critique="", output="",
-                error=f"Evaluation call failed: {e}", stage=stage,
-            )
-
-        try:
-            parsed = FeedbackStageOutput.model_validate_json(eval_response)
-            critique = parsed.critique
-        except Exception as e:
-            logger.error("Failed to parse schema-guaranteed evaluate JSON: %s", e)
-            critique = eval_response
-
-        result = AgentDecision(
-            decision="advance",
-            critique=critique,
-            output=eval_response,
-            body=critique,
-        )
-        self.run_logger.log(piece, stage, "evaluate", eval_system, prompt, {
-            "decision": result.decision, "critique": (result.critique or "")[:500],
-        }, trace_id=trace_id)
-        return result
+            self.run_logger.log(piece, stage, "agent", eval_system, sc.prompt, {
+                "decision": decision.decision, "critique": (decision.critique or "")[:500],
+            }, trace_id=trace_id)
+            return decision
 
     # ------------------------------------------------------------------
     # Chaptered generation (for long-form content)
@@ -486,13 +355,20 @@ class LLMCaller:
                 chapter_text = client.chat(
                     gen_system,
                     chapter_prompt,
+                    response_format=ContentStageOutput,
                     piece_id=piece.id,
                     stage=stage,
                     call_type=f"generate_ch{ch_num}",
                     trace_id=trace_id,
                 )
-                all_chapters.append(f"## {ch['heading']}\n\n{chapter_text}")
-                plog.info("Chapter %d done: %d chars", ch_num, len(chapter_text))
+                try:
+                    parsed_ch = ContentStageOutput.model_validate_json(chapter_text)
+                    prose = parsed_ch.content
+                except Exception as e:
+                    logger.error("Failed to parse chapter content JSON: %s", e)
+                    prose = chapter_text
+                all_chapters.append(f"## {ch['heading']}\n\n{prose}")
+                plog.info("Chapter %d done: %d chars", ch_num, len(prose))
             except ConnectionError as e:
                 plog.error("Chapter %d failed: %s", ch_num, e)
                 all_chapters.append(f"## {ch['heading']}\n\n[Generation failed: {e}]")

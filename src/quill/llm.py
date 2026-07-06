@@ -60,13 +60,22 @@ class LLMClient:
             {"role": "user", "content": user},
         ]
         
+        # If the model provider is unknown to LiteLLM, default to openai/ prefix
+        # so it routes to the custom OpenAI-compatible api_base endpoint.
+        model_name = self.model
+        try:
+            litellm.get_llm_provider(model_name)
+        except Exception:
+            if self.api_base:
+                model_name = f"openai/{model_name}"
+
         t0 = time.monotonic()
         try:
             response = litellm.completion(
-                model=self.model,
+                model=model_name,
                 messages=messages,
                 api_base=self.api_base,
-                api_key=self.api_key or None,
+                api_key=self.api_key or "dummy",
                 temperature=temperature if temperature is not None else self.temperature,
                 max_tokens=max_tokens or self.max_tokens,
                 response_format=response_format,

@@ -9,11 +9,9 @@ Works with any provider that exposes an OpenAI-compatible endpoint:
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-import urllib.request
-import urllib.error
+import litellm
 from typing import Any
 
 from .timeit import log_timing
@@ -24,7 +22,7 @@ _common_log = get_logger("llm")
 
 
 class LLMClient:
-    """Simple OpenAI-compatible chat completion client."""
+    """Simple OpenAI-compatible chat completion client using LiteLLM."""
 
     def __init__(self, api_base: str, api_key: str, model: str,
                  temperature: float = 0.7, max_tokens: int = 4096):
@@ -36,7 +34,8 @@ class LLMClient:
 
     def chat(self, system: str, user: str, temperature: float | None = None,
              max_tokens: int | None = None, response_format: dict | None = None,
-             piece_id: str | None = None) -> str:
+             piece_id: str | None = None, stage: str | None = None,
+             call_type: str | None = None, trace_id: str | None = None) -> str:
         """Send a chat completion request.
 
         Args:
@@ -44,8 +43,11 @@ class LLMClient:
             user: User message.
             temperature: Override default temperature.
             max_tokens: Override default max_tokens.
-            response_format: OpenAI-compatible response format, e.g.
-                {"type": "json_object"} for guaranteed JSON output.
+            response_format: OpenAI-compatible response format.
+            piece_id: The document node ID.
+            stage: The pipeline stage calling this LLM.
+            call_type: The type of execution call.
+            trace_id: ID tracing the current execution run.
 
         Returns:
             The assistant's response text.
@@ -53,50 +55,37 @@ class LLMClient:
         Raises:
             ConnectionError: If the API call fails.
         """
-        url = f"{self.api_base}/chat/completions"
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "temperature": temperature if temperature is not None else self.temperature,
-            "max_tokens": max_tokens or self.max_tokens,
-        }
-        if response_format:
-            payload["response_format"] = response_format
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-
-        input_chars = len(system) + len(user)
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        
         t0 = time.monotonic()
         try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-                elapsed = time.monotonic() - t0
-                content = body["choices"][0]["message"]["content"]
-                log_timing(f"llm.chat ({self.model}, {input_chars} chars in, {len(content)} chars out)", elapsed)
+            response = litellm.completion(
+                model=self.model,
+                messages=messages,
+                api_base=self.api_base,
+                api_key=self.api_key or None,
+                temperature=temperature if temperature is not None else self.temperature,
+                max_tokens=max_tokens or self.max_tokens,
+                response_format=response_format,
+                num_retries=3,
+            )
+            elapsed = time.monotonic() - t0
+            content = response.choices[0].message.content or ""
+            
+            input_chars = len(system) + len(user)
+            log_timing(f"llm.chat ({self.model}, {input_chars} chars in, {len(content)} chars out)", elapsed)
 
-                # Log to appropriate logger
-                log_msg = f"LLM call: model={self.model}, in={input_chars} chars, out={len(content)} chars, elapsed={elapsed:.1f}s"
-                if piece_id:
-                    from .logging_config import get_piece_logger
-                    get_piece_logger("llm", piece_id).info(log_msg)
-                else:
-                    _common_log.info(log_msg)
+            # Log to appropriate logger
+            log_msg = f"LLM call: model={self.model}, in={input_chars} chars, out={len(content)} chars, elapsed={elapsed:.1f}s"
+            if piece_id:
+                from .logging_config import get_piece_logger
+                get_piece_logger("llm", piece_id).info(log_msg)
+            else:
+                _common_log.info(log_msg)
 
-                return content
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8", errors="replace")
-            raise ConnectionError(f"LLM API error {e.code}: {error_body}") from e
-        except urllib.error.URLError as e:
-            raise ConnectionError(f"LLM connection error: {e.reason}") from e
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
-            raise ConnectionError(f"LLM response parse error: {e}") from e
+            return content
+        except Exception as e:
+            raise ConnectionError(f"LLM connection/API error: {e}") from e

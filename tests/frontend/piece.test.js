@@ -29,15 +29,18 @@ describe('piece.js tests', () => {
           <option value="on_advance">On Advance</option>
           <option value="auto">Auto</option>
         </select>
-        <button id="run-agent-btn"></button>
+        <textarea id="prompt-editor"></textarea>
+        <textarea id="content-editor"></textarea>
+        <pre id="raw-json-content"></pre>
+        <button id="execute-btn"></button>
+        <button id="save-content-btn"></button>
         <button id="advance-btn"></button>
         <button id="interrupt-btn" style="display: none;"></button>
-        <select id="agent-select"></select>
+        <button id="delete-piece-btn"></button>
 
         <!-- Mock initialization elements to prevent DOMContentLoaded errors -->
         <div id="viewing-stage-display"></div>
         <div id="content-heading"></div>
-        <div id="stage-content"></div>
         <div id="chapter-breakdown"></div>
         <div id="stage-state-badge"></div>
         <div id="stage-metrics"></div>
@@ -64,27 +67,35 @@ describe('piece.js tests', () => {
     dom.window.document.body.appendChild(script);
   });
 
-  it('should disable run and advance buttons when auto trigger and interrupt is visible', () => {
+  it('should disable execute and advance buttons when auto trigger and interrupt is visible', () => {
     dom.window.document.getElementById('trigger-select').value = 'auto';
     dom.window.document.getElementById('interrupt-btn').style.display = 'block';
     
     dom.window.updateButtonStates();
 
-    expect(dom.window.document.getElementById('run-agent-btn').disabled).toBe(true);
+    expect(dom.window.document.getElementById('execute-btn').disabled).toBe(true);
     expect(dom.window.document.getElementById('advance-btn').disabled).toBe(true);
   });
 
-  it('should enable run and advance buttons when trigger is manual', () => {
+  it('should enable execute and advance buttons when trigger is manual', () => {
     dom.window.document.getElementById('trigger-select').value = 'manual';
     dom.window.updateButtonStates();
 
-    expect(dom.window.document.getElementById('run-agent-btn').disabled).toBe(false);
+    expect(dom.window.document.getElementById('execute-btn').disabled).toBe(false);
     expect(dom.window.document.getElementById('advance-btn').disabled).toBe(false);
   });
 
-  it('should populate agent selection for research stage without backend call', async () => {
-    await dom.window.loadAgentsForStage('research');
-    const select = dom.window.document.getElementById('agent-select');
-    expect(select.innerHTML).toContain('ResearchService');
+  it('should toggle element disabled states during setLockState', () => {
+    dom.window.setLockState(true);
+    expect(dom.window.document.getElementById('prompt-editor').disabled).toBe(true);
+    expect(dom.window.document.getElementById('content-editor').disabled).toBe(true);
+    expect(dom.window.document.getElementById('execute-btn').disabled).toBe(true);
+    expect(dom.window.document.getElementById('save-content-btn').disabled).toBe(true);
+
+    dom.window.setLockState(false);
+    expect(dom.window.document.getElementById('prompt-editor').disabled).toBe(false);
+    expect(dom.window.document.getElementById('content-editor').disabled).toBe(false);
+    expect(dom.window.document.getElementById('execute-btn').disabled).toBe(false);
+    expect(dom.window.document.getElementById('save-content-btn').disabled).toBe(false);
   });
 });

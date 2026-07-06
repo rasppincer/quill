@@ -7,8 +7,11 @@ let VIEWING_STAGE = CURRENT_STAGE;
 
 // ── Stage navigation ──────────────────────────────────────────────
 
+let ORIGINAL_PROMPT_VAL = '';
+let ORIGINAL_CONTENT_VAL = '';
+
 async function navigateToStage(stage) {
-    // Update active tab
+    // Update active tab - Allow clicking any stage tab
     document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('viewing'));
     const tab = document.querySelector(`.stage-tab[data-stage="${stage}"]`);
     if (tab) tab.classList.add('viewing');
@@ -17,71 +20,102 @@ async function navigateToStage(stage) {
     document.getElementById('viewing-stage-display').textContent = stage.charAt(0).toUpperCase() + stage.slice(1);
     document.getElementById('content-heading').textContent = `Stage Content — ${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
 
-    // Load content from navigate endpoint
-    const contentDiv = document.getElementById('stage-content');
-    contentDiv.innerHTML = '<div style="color:var(--text-muted)">Loading...</div>';
+    const promptTextarea = document.getElementById('prompt-editor');
+    const contentTextarea = document.getElementById('content-editor');
+    const jsonContent = document.getElementById('raw-json-content');
 
+    promptTextarea.value = 'Loading prompt...';
+    contentTextarea.value = 'Loading content...';
+    jsonContent.textContent = 'Loading response JSON...';
+
+    // 1. Fetch Stage Content
     try {
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/stages/${stage}`);
         const data = await resp.json();
 
         if (data.error) {
-            contentDiv.innerHTML = `<div style="color:var(--accent-red)">${data.error}</div>`;
-            return;
-        }
-
-        // Render content
-        const raw = data.content || '(empty)';
-        if (raw.trim()) {
-            contentDiv.innerHTML = marked.parse(raw);
+            contentTextarea.value = `Error: ${data.error}`;
+            ORIGINAL_CONTENT_VAL = '';
         } else {
-            contentDiv.innerHTML = '<div style="color:var(--text-muted)">(empty — run agent to generate content)</div>';
+            const rawContent = data.content || '';
+            contentTextarea.value = rawContent;
+            ORIGINAL_CONTENT_VAL = rawContent;
+
+            // State badge
+            const badge = document.getElementById('stage-state-badge');
+            const state = data.state || 'fresh';
+            const stateColors = {
+                'ready': 'var(--accent-green)',
+                'generating': 'var(--accent-blue)',
+                'superseded': 'var(--accent-yellow)',
+                'fresh': 'var(--text-muted)',
+                'completed': 'var(--accent-green)',
+            };
+            badge.textContent = state;
+            badge.style.borderColor = stateColors[state] || 'var(--border)';
+            badge.style.color = stateColors[state] || 'var(--text-muted)';
+
+            // Metrics
+            const metricsDiv = document.getElementById('stage-metrics');
+            const metricsGrid = document.getElementById('stage-metrics-grid');
+            if (data.metrics && Object.keys(data.metrics).length > 0) {
+                const m = data.metrics;
+                metricsGrid.innerHTML = `
+                    <div class="meta-item"><div class="label">Flesch Ease</div><div class="value ${m.flesch_ease >= 60 ? 'green' : m.flesch_ease >= 40 ? 'yellow' : 'red'}">${m.flesch_ease || '—'}</div></div>
+                    <div class="meta-item"><div class="label">Grade Level</div><div class="value">${m.flesch_kincaid || '—'}</div></div>
+                    <div class="meta-item"><div class="label">Words</div><div class="value blue">${m.word_count || '—'}</div></div>
+                    <div class="meta-item"><div class="label">Avg Sentence</div><div class="value">${m.avg_sentence_length || '—'} words</div></div>
+                    <div class="meta-item"><div class="label">Vocabulary</div><div class="value">${m.type_token_ratio ? (m.type_token_ratio * 100).toFixed(1) + '%' : '—'}</div></div>
+                    <div class="meta-item"><div class="label">Passive Voice</div><div class="value ${m.passive_voice_pct <= 10 ? 'green' : m.passive_voice_pct <= 20 ? 'yellow' : 'red'}">${m.passive_voice_pct || '—'}%</div></div>
+                `;
+                metricsDiv.style.display = 'block';
+            } else {
+                metricsDiv.style.display = 'none';
+            }
+
+            // Load raw JSON if it was returned by navigate endpoint
+            if (data.raw_json) {
+                jsonContent.textContent = JSON.stringify(data.raw_json, null, 4);
+            } else {
+                jsonContent.textContent = '(No JSON response payload generated for this stage)';
+            }
         }
 
         // Chapter breakdown for draft stage
         const chapterDiv = document.getElementById('chapter-breakdown');
-        if (stage === 'draft' && raw.trim()) {
+        if (stage === 'draft' && data.content && data.content.trim()) {
             loadChapterBreakdown(chapterDiv);
         } else if (chapterDiv) {
             chapterDiv.style.display = 'none';
         }
 
-        // State badge
-        const badge = document.getElementById('stage-state-badge');
-        const state = data.state || 'empty';
-        const stateColors = {
-            'ready': 'var(--accent-green)',
-            'generating': 'var(--accent-blue)',
-            'superseded': 'var(--accent-yellow)',
-            'empty': 'var(--text-muted)',
-        };
-        badge.textContent = state;
-        badge.style.borderColor = stateColors[state] || 'var(--border)';
-        badge.style.color = stateColors[state] || 'var(--text-muted)';
-
-        // Metrics
-        const metricsDiv = document.getElementById('stage-metrics');
-        const metricsGrid = document.getElementById('stage-metrics-grid');
-        if (data.metrics && Object.keys(data.metrics).length > 0) {
-            const m = data.metrics;
-            metricsGrid.innerHTML = `
-                <div class="meta-item"><div class="label">Flesch Ease</div><div class="value ${m.flesch_ease >= 60 ? 'green' : m.flesch_ease >= 40 ? 'yellow' : 'red'}">${m.flesch_ease || '—'}</div></div>
-                <div class="meta-item"><div class="label">Grade Level</div><div class="value">${m.flesch_kincaid || '—'}</div></div>
-                <div class="meta-item"><div class="label">Words</div><div class="value blue">${m.word_count || '—'}</div></div>
-                <div class="meta-item"><div class="label">Avg Sentence</div><div class="value">${m.avg_sentence_length || '—'} words</div></div>
-                <div class="meta-item"><div class="label">Vocabulary</div><div class="value">${m.type_token_ratio ? (m.type_token_ratio * 100).toFixed(1) + '%' : '—'}</div></div>
-                <div class="meta-item"><div class="label">Passive Voice</div><div class="value ${m.passive_voice_pct <= 10 ? 'green' : m.passive_voice_pct <= 20 ? 'yellow' : 'red'}">${m.passive_voice_pct || '—'}%</div></div>
-            `;
-            metricsDiv.style.display = 'block';
-        } else {
-            metricsDiv.style.display = 'none';
-        }
-
-        // Update agent selector for this stage
-        loadAgentsForStage(stage);
-
     } catch (e) {
-        contentDiv.innerHTML = `<div style="color:var(--accent-red)">Error loading content: ${e.message}</div>`;
+        contentTextarea.value = `Error loading content: ${e.message}`;
+        ORIGINAL_CONTENT_VAL = '';
+        jsonContent.textContent = '(Error loading response JSON)';
+    }
+
+    // 2. Fetch Prompt
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/prompt/${stage}`);
+        const data = await resp.json();
+
+        if (data.error) {
+            promptTextarea.value = `No prompt template: ${data.error}`;
+            ORIGINAL_PROMPT_VAL = '';
+        } else {
+            let promptText = '';
+            if (data.generate) {
+                promptText = data.generate.user || '';
+            } else if (data.single_call) {
+                promptText = data.single_call.user || '';
+            }
+            promptTextarea.value = promptText;
+            ORIGINAL_PROMPT_VAL = promptText;
+        }
+    } catch (e) {
+        promptTextarea.value = `Error loading prompt: ${e.message}`;
+        ORIGINAL_PROMPT_VAL = '';
     }
 }
 
@@ -256,13 +290,18 @@ async function interruptAuto() {
             toast(data.error, 'error');
             return;
         }
-        toast('Interrupt requested — will stop after current stage', 'info');
-        document.getElementById('interrupt-btn').disabled = true;
-        document.getElementById('interrupt-btn').textContent = '⏳ Stopping...';
+        toast('Interrupt requested', 'info');
+
+        // Revert editors to loaded values
+        document.getElementById('prompt-editor').value = ORIGINAL_PROMPT_VAL;
+        document.getElementById('content-editor').value = ORIGINAL_CONTENT_VAL;
+
+        setLockState(false);
     } catch (e) {
         toast(`Failed to interrupt: ${e.message}`, 'error');
     }
 }
+
 
 function resetAutoButtons() {
     document.getElementById('auto-btn').style.display = '';
@@ -279,15 +318,15 @@ function resetAutoButtons() {
 function updateButtonStates() {
     const trigger = document.getElementById('trigger-select').value;
     const isAuto = trigger === 'auto';
-    const runBtn = document.getElementById('run-agent-btn');
+    const executeBtn = document.getElementById('execute-btn');
     const advanceBtn = document.getElementById('advance-btn');
 
-    // During auto mode, disable run and advance
+    // During auto mode, disable execute and advance
     if (isAuto && document.getElementById('interrupt-btn').style.display !== 'none') {
-        if (runBtn) { runBtn.disabled = true; runBtn.title = 'Auto mode — cannot run manually'; }
+        if (executeBtn) { executeBtn.disabled = true; executeBtn.title = 'Auto mode — cannot run manually'; }
         if (advanceBtn) { advanceBtn.disabled = true; advanceBtn.title = 'Auto mode — cannot advance manually'; }
     } else {
-        if (runBtn) { runBtn.disabled = false; runBtn.title = ''; }
+        if (executeBtn) { executeBtn.disabled = false; executeBtn.title = ''; }
         if (advanceBtn) { advanceBtn.disabled = false; advanceBtn.title = ''; }
     }
 }
@@ -519,21 +558,47 @@ async function deleteCurrentPiece() {
     }
 }
 
-// ── Run Agent ─────────────────────────────────────────────────────
+// ── Execute and Save ──────────────────────────────────────────────
 
-async function runAgent() {
-    const btn = document.getElementById('run-agent-btn');
-    const resultDiv = document.getElementById('agent-result');
-    const statusEl = document.getElementById('agent-status');
+async function saveContent() {
+    const contentTextarea = document.getElementById('content-editor');
+    const saveStatus = document.getElementById('save-status');
+    const content = contentTextarea.value;
 
-    btn.disabled = true;
-    btn.textContent = '⏳ Running...';
-    resultDiv.style.display = 'block';
+    saveStatus.textContent = 'Saving...';
+    saveStatus.style.color = 'var(--text-muted)';
+
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/stages/${VIEWING_STAGE}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ content })
+        });
+        const data = await resp.json();
+        if (data.status === 'saved') {
+            saveStatus.textContent = '✓ Saved';
+            saveStatus.style.color = 'var(--accent-green)';
+            ORIGINAL_CONTENT_VAL = content;
+            setTimeout(() => { saveStatus.textContent = ''; }, 2000);
+            refreshStageTabs();
+        } else {
+            saveStatus.textContent = `Error: ${data.error}`;
+            saveStatus.style.color = 'var(--accent-red)';
+        }
+    } catch (e) {
+        saveStatus.textContent = 'Failed to save';
+        saveStatus.style.color = 'var(--accent-red)';
+    }
+}
+
+async function executeStage() {
+    const promptTextarea = document.getElementById('prompt-editor');
+    const statusEl = document.getElementById('execute-status');
+    const customPrompt = promptTextarea.value;
+
+    setLockState(true);
     statusEl.textContent = 'Starting...';
     statusEl.style.color = 'var(--accent-blue)';
-    document.getElementById('agent-decision').textContent = '—';
-    document.getElementById('agent-loops').textContent = '—';
-    document.getElementById('agent-critique').textContent = 'Waiting for response...';
 
     // Open run log panel
     const logPanel = document.getElementById('run-log-panel');
@@ -553,25 +618,22 @@ async function runAgent() {
     function ts() { return new Date().toLocaleTimeString(); }
 
     try {
-        const agentSet = document.getElementById('agent-select').value;
         const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ agent_set: agentSet, stage: VIEWING_STAGE })
+            body: JSON.stringify({ stage: VIEWING_STAGE, custom_prompt: customPrompt })
         });
         const data = await resp.json();
 
         if (data.error) {
             statusEl.textContent = `Error: ${data.error}`;
             statusEl.style.color = 'var(--accent-red)';
-            document.getElementById('agent-critique').textContent = data.error;
-            btn.disabled = false;
-            btn.textContent = '▶ Run Agent';
+            setLockState(false);
             return;
         }
 
         const runId = data.run_id;
-        statusEl.textContent = 'Running...';
+        statusEl.textContent = 'Executing...';
         appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> Connected. Run: ${runId}`);
 
         // Connect to SSE
@@ -579,83 +641,23 @@ async function runAgent() {
 
         eventSource.addEventListener('stage_start', function(e) {
             const d = JSON.parse(e.data);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Stage start:</span> ${d.stage} (prompt: ${d.prompt_chars} chars, loop: ${d.loop_count})`);
-            statusEl.textContent = `Running: ${d.stage}...`;
-        });
-
-        eventSource.addEventListener('stage_llm_call', function(e) {
-            const d = JSON.parse(e.data);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-blue)">LLM call:</span> ${d.call} for ${d.stage}`);
-            statusEl.textContent = `LLM ${d.call}: ${d.stage}...`;
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Stage start:</span> ${d.stage}`);
         });
 
         eventSource.addEventListener('stage_complete', function(e) {
             const d = JSON.parse(e.data);
-            const color = d.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:${color}">Stage complete:</span> ${d.stage} → ${d.decision}`);
-            document.getElementById('agent-decision').textContent = d.decision;
-            document.getElementById('agent-decision').style.color = color;
-            document.getElementById('agent-loops').textContent = d.loop_count;
-            document.getElementById('agent-critique').textContent = d.critique || '(no critique)';
-        });
-
-        eventSource.addEventListener('loop_start', function(e) {
-            const d = JSON.parse(e.data);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Loop back:</span> ${d.stage} (loop ${d.loop_count}/${d.max_loops})`);
-            if (d.critique) {
-                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--text-secondary)">Critique: ${d.critique.substring(0, 200)}${d.critique.length > 200 ? '...' : ''}</span>`);
-            }
-        });
-
-        eventSource.addEventListener('chain_start', function(e) {
-            const d = JSON.parse(e.data);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Chain started</span> from ${d.from_stage} (${d.agent_set})`);
-        });
-
-        eventSource.addEventListener('chain_stage_complete', function(e) {
-            const d = JSON.parse(e.data);
-            const color = d.decision === 'advance' ? 'var(--accent-green)' : 'var(--accent-red)';
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:${color}">Chain stage ${d.completed}:</span> ${d.stage} → ${d.decision}`);
-            refreshStageTabs();
-        });
-
-        eventSource.addEventListener('chain_complete', function(e) {
-            const d = JSON.parse(e.data);
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent)">Chain complete</span> — ${d.total_stages} stages`);
-        });
-
-        eventSource.addEventListener('chain_interrupted', function(e) {
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-yellow)">Chain interrupted</span>`);
-        });
-
-        eventSource.addEventListener('error', function(e) {
-            if (eventSource.readyState === EventSource.CLOSED) return;
-            try {
-                const d = JSON.parse(e.data);
-                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">Error:</span> ${d.error}`);
-            } catch(ex) {
-                appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-red)">SSE connection error</span>`);
-            }
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">Stage complete</span>`);
         });
 
         eventSource.addEventListener('run_complete', function(e) {
             const d = JSON.parse(e.data);
             eventSource.close();
-            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">✓ Run complete</span> (${d.status})`);
-
-            const result = d.result || {};
-            if (result.error) {
-                statusEl.textContent = `Error: ${result.error}`;
-                statusEl.style.color = 'var(--accent-red)';
-            } else {
-                statusEl.textContent = 'Complete';
-                statusEl.style.color = 'var(--accent-green)';
-                toast('Agent run complete', 'success');
-                setTimeout(() => location.reload(), 1500);
-            }
-
-            btn.disabled = false;
-            btn.textContent = '▶ Run Agent';
+            appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> <span style="color:var(--accent-green)">✓ Run complete</span>`);
+            statusEl.textContent = 'Complete';
+            statusEl.style.color = 'var(--accent-green)';
+            toast('Execution complete', 'success');
+            setLockState(false);
+            navigateToStage(VIEWING_STAGE);
             loadRunLog();
         });
 
@@ -666,8 +668,40 @@ async function runAgent() {
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
         statusEl.style.color = 'var(--accent-red)';
-        btn.disabled = false;
-        btn.textContent = '▶ Run Agent';
+        setLockState(false);
+    }
+}
+
+function setLockState(locked) {
+    const controls = [
+        'prompt-editor', 'content-editor', 'execute-btn', 'save-content-btn',
+        'advance-btn', 'auto-btn', 'trigger-select', 'delete-piece-btn'
+    ];
+    controls.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = locked;
+    });
+
+    // Toggle navigation tabs click
+    document.querySelectorAll('.stage-tab').forEach(tab => {
+        if (locked) {
+            tab.style.pointerEvents = 'none';
+            tab.style.opacity = '0.5';
+        } else {
+            tab.style.pointerEvents = '';
+            tab.style.opacity = '';
+        }
+    });
+
+    // Toggle interrupt button visibility
+    const interruptBtn = document.getElementById('interrupt-btn');
+    if (interruptBtn) {
+        if (locked) {
+            interruptBtn.style.display = '';
+            interruptBtn.disabled = false;
+        } else {
+            interruptBtn.style.display = 'none';
+        }
     }
 }
 

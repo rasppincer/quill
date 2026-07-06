@@ -26,7 +26,7 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 │  └─────────────────────────────────────┘    │
 ├─────────────────────────────────────────────┤
 │  LLM Client                                 │  llm.py
-│  OpenAI-compatible, urllib, zero deps       │
+│  OpenAI-compatible, LiteLLM client          │
 ├─────────────────────────────────────────────┤
 │  Pipeline Engine                            │  pipeline.py
 │  Stage definitions, transitions, mode       │
@@ -296,5 +296,5 @@ behave features/api/            # BDD scenarios (hit running API)
 - PyYAML (frontmatter + meta.yaml parsing)
 - Werkzeug ProxyFix (nginx reverse proxy support)
 - Jinja2 (prompt template rendering)
-- **No external LLM client dependencies** — stdlib urllib
+ - **LiteLLM client** — advanced routing, built-in retries, cost auditing
 - **No external search dependencies** — stdlib urllib for SearXNG

@@ -25,42 +25,42 @@ from quill.piece import Piece, load_piece, _stage_filename
 class TestStageState:
     """Piece.get_stage_state / set_stage_state."""
 
-    def test_default_state_is_empty(self, sample_piece):
-        """Stages not in meta.yaml are 'empty' by default."""
+    def test_default_state_is_fresh(self, sample_piece):
+        """Stages not in meta.yaml are 'fresh' by default."""
         piece = load_piece(sample_piece)
-        assert piece.get_stage_state("outline") == "empty"
-        assert piece.get_stage_state("review") == "empty"
+        assert piece.get_stage_state("outline") == "fresh"
+        assert piece.get_stage_state("review") == "fresh"
 
     def test_set_and_get_stage_state(self, sample_piece):
         """set_stage_state persists to meta.yaml, get_stage_state reads it."""
         piece = load_piece(sample_piece)
-        piece.set_stage_state("brief", "ready")
+        piece.set_stage_state("brief", "completed")
         piece.set_stage_state("draft", "generating")
 
         # Reload from disk to verify persistence
         reloaded = load_piece(sample_piece)
-        assert reloaded.get_stage_state("brief") == "ready"
+        assert reloaded.get_stage_state("brief") == "completed"
         assert reloaded.get_stage_state("draft") == "generating"
 
     def test_set_stage_state_preserves_other_stages(self, sample_piece):
         """Setting one stage's state doesn't clobber others."""
         piece = load_piece(sample_piece)
-        piece.set_stage_state("brief", "ready")
-        piece.set_stage_state("outline", "ready")
-        piece.set_stage_state("draft", "superseded")
+        piece.set_stage_state("brief", "completed")
+        piece.set_stage_state("outline", "completed")
+        piece.set_stage_state("draft", "fresh")
 
         reloaded = load_piece(sample_piece)
-        assert reloaded.get_stage_state("brief") == "ready"
-        assert reloaded.get_stage_state("outline") == "ready"
-        assert reloaded.get_stage_state("draft") == "superseded"
+        assert reloaded.get_stage_state("brief") == "completed"
+        assert reloaded.get_stage_state("outline") == "completed"
+        assert reloaded.get_stage_state("draft") == "fresh"
 
     def test_stage_state_in_to_dict(self, sample_piece):
         """to_dict() includes stage_states."""
         piece = load_piece(sample_piece)
-        piece.set_stage_state("brief", "ready")
+        piece.set_stage_state("brief", "completed")
         d = piece.to_dict()
         assert "stage_states" in d
-        assert d["stage_states"]["brief"] == "ready"
+        assert d["stage_states"]["brief"] == "completed"
 
 
 # ---------------------------------------------------------------------------
@@ -69,23 +69,23 @@ class TestStageState:
 
 
 class TestSupersede:
-    """Piece.supersede_from — marks later stages as superseded."""
+    """Piece.supersede_from — marks later stages as superseded (fresh)."""
 
     def test_supersede_marks_later_stages(self, sample_piece):
-        """Stages after the given stage are marked superseded."""
+        """Stages after the given stage are marked fresh."""
         piece = load_piece(sample_piece)
-        # Set up: brief=ready, outline=ready, draft=ready
-        piece.set_stage_state("brief", "ready")
-        piece.set_stage_state("outline", "ready")
-        piece.set_stage_state("draft", "ready")
+        # Set up: brief=completed, outline=completed, draft=completed
+        piece.set_stage_state("brief", "completed")
+        piece.set_stage_state("outline", "completed")
+        piece.set_stage_state("draft", "completed")
 
-        # Supersede from outline — draft and everything after should be superseded
+        # Supersede from outline — draft and everything after should be fresh
         piece.supersede_from("outline")
 
         reloaded = load_piece(sample_piece)
-        assert reloaded.get_stage_state("brief") == "ready"
-        assert reloaded.get_stage_state("outline") == "ready"  # the target stays
-        assert reloaded.get_stage_state("draft") == "superseded"
+        assert reloaded.get_stage_state("brief") == "completed"
+        assert reloaded.get_stage_state("outline") == "completed"  # the target stays
+        assert reloaded.get_stage_state("draft") == "fresh"
 
     def test_supersede_resets_frontier(self, sample_piece):
         """supersede_from also resets current_stage to the given stage."""
@@ -115,7 +115,7 @@ class TestSupersede:
         # review doesn't exist in fixture — should be fine
         piece.supersede_from("brief")
         reloaded = load_piece(sample_piece)
-        assert reloaded.get_stage_state("outline") == "superseded"
+        assert reloaded.get_stage_state("outline") == "fresh"
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ class TestCanNavigate:
 
     def test_ready_stage_is_navigable(self, sample_piece):
         piece = load_piece(sample_piece)
-        piece.set_stage_state("brief", "ready")
+        piece.set_stage_state("brief", "completed")
         assert piece.can_navigate("brief") is True
 
     def test_empty_stage_is_not_navigable(self, sample_piece):
@@ -138,7 +138,7 @@ class TestCanNavigate:
     def test_superseded_stage_is_navigable(self, sample_piece):
         """Superseded stages still have content — user can view them."""
         piece = load_piece(sample_piece)
-        piece.set_stage_state("draft", "superseded")
+        piece.set_stage_state("draft", "fresh")
         assert piece.can_navigate("draft") is True
 
     def test_generating_stage_is_navigable(self, sample_piece):

@@ -470,19 +470,28 @@ class Piece:
     # ── Stage state management ───────────────────────────────────────
 
     def get_stage_state(self, stage: str) -> str:
-        """Get the state of a stage: empty | generating | ready | superseded.
+        """Get the state of a stage: fresh | generating | completed.
 
-        Reads from meta.yaml stage_states dict. Unknown stages default to 'empty'.
+        Reads from meta.yaml stage_states dict. Unknown stages default to 'fresh'.
         """
-        return self.stage_states.get(stage, "empty")
+        val = self.stage_states.get(stage, "fresh")
+        if val == "empty" or val == "superseded":
+            return "fresh"
+        if val == "ready":
+            return "completed"
+        return val
 
     def set_stage_state(self, stage: str, state: str):
         """Set the state of a stage and persist to meta.yaml."""
+        if state == "empty" or state == "superseded":
+            state = "fresh"
+        elif state == "ready":
+            state = "completed"
         self.stage_states[stage] = state
         self._save_stage_states()
 
     def supersede_from(self, stage: str):
-        """Mark all stages after `stage` as superseded, reset frontier, clear content.
+        """Mark all stages after `stage` as superseded (fresh), reset frontier, clear content.
 
         The given stage itself is NOT superseded — it's the new frontier.
         """
@@ -499,7 +508,7 @@ class Piece:
         try:
             session = db_session()
             for s in later_stages:
-                self.stage_states[s] = "superseded"
+                self.stage_states[s] = "fresh"
                 st_state = session.query(StageState).filter_by(document_node_id=self.id, stage=s).first()
                 if not st_state:
                     st_state = StageState(
@@ -507,7 +516,7 @@ class Piece:
                         stage=s,
                     )
                     session.add(st_state)
-                st_state.state = "superseded"
+                st_state.state = "fresh"
                 st_state.body = None
                 st_state.decision = None
                 st_state.critique = None
@@ -524,7 +533,7 @@ class Piece:
 
         # 2. Update filesystem / dual-write
         for s in later_stages:
-            self.stage_states[s] = "superseded"
+            self.stage_states[s] = "fresh"
             if getattr(self, "dual_write", True):
                 try:
                     # Clear content file
@@ -536,6 +545,10 @@ class Piece:
                     decision_f = self.stage_dir() / _stage_filename(s, ".decision.md")
                     if decision_f.exists():
                         decision_f.unlink()
+                    # Clear JSON file
+                    json_f = self.stage_dir() / _stage_filename(s, ".json")
+                    if json_f.exists():
+                        json_f.unlink()
                 except Exception as e:
                     logger.warning("Failed to remove file during supersede: %s", e)
 
@@ -545,13 +558,13 @@ class Piece:
         logger.info("Superseded from stage '%s', frontier reset", stage)
 
     def can_navigate(self, stage: str) -> bool:
-        """Check if a stage is viewable. Empty stages are locked.
+        """Check if a stage is viewable. Fresh stages are locked.
 
         Fallback: if stage not in stage_states, allow up to current_stage
         (backward compat with pieces created before stage_states).
         """
         state = self.get_stage_state(stage)
-        if state != "empty":
+        if state != "fresh":
             return True
         # Stage not in stage_states — fall back to current_stage as frontier
         try:
@@ -688,6 +701,39 @@ class Piece:
                 logger.info("Wrote decision to %s", decision_file)
             except Exception as e:
                 logger.warning("Failed to write decision to %s: %s", decision_file, e)
+
+    def write_json(self, stage: str, content: str):
+        """Write raw JSON output to database and `<stage>.json` file."""
+        # 1. Update database
+        try:
+            session = db_session()
+            st_state = session.query(StageState).filter_by(document_node_id=self.id, stage=stage).first()
+            if not st_state:
+                st_state = StageState(
+                    document_node_id=self.id,
+                    stage=stage,
+                )
+                session.add(st_state)
+            st_state.decision = "advance"
+            st_state.critique = content
+            st_state.updated_at = datetime.utcnow()
+            session.commit()
+            logger.info("Wrote JSON output to database for piece '%s' stage '%s'", self.id, stage)
+        except Exception as e:
+            logger.error("Failed to write JSON output to database: %s", e)
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+
+        # 2. Update filesystem / dual-write
+        if getattr(self, "dual_write", True):
+            try:
+                json_file = self.stage_dir() / _stage_filename(stage, ".json")
+                json_file.write_text(content, encoding="utf-8")
+                logger.info("Wrote JSON output to %s", json_file)
+            except Exception as e:
+                logger.warning("Failed to write JSON output to %s: %s", json_file, e)
 
     def to_dict(self) -> dict:
         """Export as API-friendly dict."""

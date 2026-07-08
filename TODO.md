@@ -111,6 +111,10 @@
 
 - [ ] **Source verification stage** — New stage after research that validates whether the URLs in research.md actually contain the claimed content. Prevents the draft agent from citing snippets that misrepresent the source. Could use web_extract to fetch and compare.
 
+## Infrastructure / Migration
+
+- [ ] **SQLite to Postgres migration script** — Python script using SQLAlchemy/psycopg2 to migrate all piece data and metadata from SQLite to a Postgres instance.
+
 ## Issues from Ferret Protocol (10k word generation)
 
 ### Pipeline state management

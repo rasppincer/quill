@@ -15,7 +15,7 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 │  Agent Runner                               │  runner.py (facade)
 │  ┌─────────────────────────────────────┐    │
 │  │ StageRunner (LLMCaller)             │    │  stage_runner.py
-│  │ Single-call structured execution     │    │
+│  │ Single-call structured execution    │    │
 │  │ Chaptered generation for long-form  │    │
 │  ├─────────────────────────────────────┤    │
 │  │ ChainOrchestrator                   │    │  chain_orchestrator.py

@@ -10,6 +10,7 @@ import urllib.request
 
 LLM_BASE = os.environ.get("QUILL_TEST_LLM_BASE", "http://192.168.0.3:1234")
 LLM_MODEL = os.environ.get("QUILL_TEST_LLM_MODEL", "google/gemma-4-e4b")
+LLM_KEY = os.environ.get("QUILL_API_KEY", "sk-lm-5Rcmzeg3:5xhVqaMmY80HC4AJvvz5")
 
 
 def _llm_available() -> bool:
@@ -37,7 +38,7 @@ class TestLLMIntegration:
 
         client = LLMClient(
             api_base=f"{LLM_BASE}/v1",
-            api_key="",
+            api_key=LLM_KEY,
             model=LLM_MODEL,
             temperature=0.7,
             max_tokens=200,
@@ -62,7 +63,7 @@ class TestLLMIntegration:
 
         client = LLMClient(
             api_base=f"{LLM_BASE}/v1",
-            api_key="",
+            api_key=LLM_KEY,
             model=LLM_MODEL,
             temperature=0.3,
             max_tokens=2000,

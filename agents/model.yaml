@@ -1,4 +1,5 @@
 api_base: http://192.168.0.3:1234/v1
+api_key: sk-lm-5Rcmzeg3:5xhVqaMmY80HC4AJvvz5
 model: google/gemma-4-31b
 temperature: 0.7
 max_tokens: 12288

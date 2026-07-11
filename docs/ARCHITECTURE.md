@@ -150,7 +150,8 @@ agents/<flavor>/<stage>.prompt.md → prompt templates (Jinja2)
 
 Resolution: `stage config > flavor config > global config > defaults`
 
-`api_key` is loaded from `QUILL_API_KEY` env var (not in YAML).
+> [!NOTE]
+> `api_base`, `api_key`, and `model` are strictly derived from environment variables (`QUILL_API_BASE`, `QUILL_API_KEY`, and `QUILL_API_MODEL`/`QUILL_TEST_LLM_MODEL` in `.env`) rather than being editable via `model.yaml` or the UI. The model configuration UI and update endpoints were removed because model setup needs to be associated with a user management/multi-tenant system in the future, at which point it will be stored in the database instead of a global configuration file.
 
 ### Flavor Config (`agents/<flavor>/config.yaml`)
 

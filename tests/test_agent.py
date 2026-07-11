@@ -12,7 +12,6 @@ from quill.agent import (
     AgentDecision,
     load_agent_config,
     load_model_config,
-    save_model_config,
     list_agent_sets,
     list_agent_prompts,
     ContentStageOutput,
@@ -137,17 +136,6 @@ class TestModelConfig:
         cfg = load_model_config()
         assert cfg["model"] == "test-model"
         assert cfg["api_base"] == "http://localhost:9999/v1"
-
-    def test_save_model_config(self, tmp_path, monkeypatch):
-        """Save model config to model.yaml."""
-        cfg_file = tmp_path / "model.yaml"
-        monkeypatch.setattr("quill.agent.MODEL_CONFIG_FILE", cfg_file)
-
-        save_model_config({"model": "new-model", "api_base": "http://test/v1"})
-
-        loaded = yaml.safe_load(cfg_file.read_text())
-        assert loaded["model"] == "new-model"
-        assert loaded["api_base"] == "http://test/v1"
 
     def test_load_missing_returns_empty(self, tmp_path, monkeypatch):
         """Loading non-existent model.yaml returns empty dict."""

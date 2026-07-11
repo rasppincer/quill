@@ -68,22 +68,7 @@ def load_model_config() -> dict:
     return result
 
 
-def save_model_config(cfg: dict):
-    """Save global model configuration to agents/model.yaml."""
-    cfg_to_save = cfg.copy()
-    # Strip environment overrides so we don't save them back to the YAML file
-    if os.environ.get("QUILL_TESTING") != "1":
-        if os.environ.get("QUILL_API_BASE"):
-            cfg_to_save.pop("api_base", None)
-        if os.environ.get("QUILL_API_KEY"):
-            cfg_to_save.pop("api_key", None)
-        if os.environ.get("QUILL_API_MODEL") or os.environ.get("QUILL_TEST_LLM_MODEL"):
-            cfg_to_save.pop("model", None)
 
-    MODEL_CONFIG_FILE.write_text(
-        yaml.dump(cfg_to_save, default_flow_style=False, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
-    )
 
 
 @dataclass

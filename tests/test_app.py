@@ -199,18 +199,7 @@ class TestModelAPI:
         data = resp.get_json()
         assert data["model"] == "test-model"
 
-    def test_update_model_config(self, client):
-        resp = client.put("/api/model", json={"model": "new-model"})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["config"]["model"] == "new-model"
 
-    def test_update_preserves_other_fields(self, client):
-        client.put("/api/model", json={"model": "updated"})
-        resp = client.get("/api/model")
-        data = resp.get_json()
-        assert data["model"] == "updated"
-        assert data["api_base"] == "http://localhost:9999/v1"  # preserved
 
     def test_list_models(self, client):
         """Models endpoint connects to LLM — mock it."""

@@ -17,7 +17,6 @@ from ..agent import (
     list_agent_sets,
     list_agent_prompts,
     load_model_config,
-    save_model_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,23 +115,6 @@ def model_get():
     """Get global model configuration."""
     return jsonify(load_model_config())
 
-
-@bp.route("/api/model", methods=["PUT"])
-def model_put():
-    """Update global model configuration.
-
-    JSON body: any subset of api_base, model, temperature, max_tokens.
-    api_key is not stored here — use QUILL_API_KEY env var instead.
-    """
-    current = load_model_config()
-    data = request.get_json(silent=True) or {}
-    for key in ("api_base", "model", "temperature", "max_tokens"):
-        if key in data:
-            current[key] = data[key]
-    # Strip api_key if sent — it belongs in env, not yaml
-    current.pop("api_key", None)
-    save_model_config(current)
-    return jsonify({"status": "updated", "config": current})
 
 
 @bp.route("/api/models", methods=["GET"])

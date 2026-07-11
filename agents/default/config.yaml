@@ -24,6 +24,10 @@ stages:
     name: Review Agent
     description: Structural critique — organization, completeness, clarity
     temperature: 0.5
+  review_decision:
+    name: Review Decision Agent
+    description: Decides if the review critique is satisfied
+    temperature: 0.1
   revise:
     name: Revise Agent
     description: Applies review feedback to produce revised text
@@ -36,6 +40,10 @@ stages:
     name: Validate Agent
     description: Checks factual accuracy, consistency, logic
     temperature: 0.2
+  validate_decision:
+    name: Validate Decision Agent
+    description: Decides if the validation critique is satisfied
+    temperature: 0.1
   polish:
     name: Polish Agent
     description: Final line-level edits, readability, rhythm

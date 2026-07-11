@@ -70,6 +70,11 @@ class Pipeline:
         stage = self.stages.get(key)
         return stage.mode == "content" if stage else False
 
+    def is_decision_stage(self, key: str) -> bool:
+        """Check if a stage is a decision stage."""
+        stage = self.stages.get(key)
+        return stage.mode == "decision" if stage else False
+
     def can_advance(self, current: str) -> bool:
         """Check if current stage can advance to the next."""
         return self.next_stage(current) is not None

@@ -29,7 +29,10 @@ stages:
     name: "Review Agent"
     description: "Narrative critique — pacing, character, plot, world-building"
     temperature: 0.5
-
+  review_decision:
+    name: "Review Decision Agent"
+    description: "Decides if the narrative review critique is satisfied"
+    temperature: 0.1
   revise:
     name: "Revise Agent"
     description: "Applies narrative feedback to produce revised draft"
@@ -44,6 +47,10 @@ stages:
     name: "Validate Agent"
     description: "Checks character consistency, timeline, internal logic"
     temperature: 0.2
+  validate_decision:
+    name: "Validate Decision Agent"
+    description: "Decides if the narrative validation critique is satisfied"
+    temperature: 0.1
 
   polish:
     name: "Polish Agent"

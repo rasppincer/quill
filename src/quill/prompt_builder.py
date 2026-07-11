@@ -89,13 +89,14 @@ class PromptBuilder:
         return f"{system_prompt}\n\n{cls.date_context()}"
 
     @classmethod
-    def system_prompt(cls, stage: str, piece: "Piece", call_type: str) -> str:
+    def system_prompt(cls, stage: str, piece: "Piece", call_type: str, use_structured: bool = False) -> str:
         """Build a system prompt for a stage.
 
         Args:
             stage: Stage name (e.g. "review", "revise").
             piece: The piece being processed.
-            call_type: One of "generate", "evaluate", or "feedback".
+            call_type: One of "generate", "evaluate", "feedback", or "decision".
+            use_structured: If true, JSON formatting instructions are adapted for structured schema mode.
         """
         if call_type == "generate":
             text = (
@@ -113,6 +114,19 @@ class PromptBuilder:
                 f"You are a {stage} agent for a {piece.genre} {piece.type} "
                 f"in {piece.language}. Be critical and precise."
             )
+        elif call_type == "decision":
+            text = (
+                f"You are a decision-making agent for a {piece.genre} {piece.type} "
+                f"in {piece.language}. Analyze the feedback critique and decide whether "
+                f"to advance or reject."
+            )
+            if use_structured:
+                text += " You must return a JSON object with your decision and reason."
+            else:
+                text += (
+                    "\n\nYou MUST respond with a JSON object inside a ```json markdown block containing:\n"
+                    "- \"decision\": either \"advance\" or \"reject\"\n- \"reason\": a brief explanation."
+                )
         else:
             raise ValueError(f"Unknown call_type: {call_type}")
         return cls.with_date(text)

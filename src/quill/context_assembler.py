@@ -202,7 +202,12 @@ class ContextAssembler:
             },
         }
 
-        system_prompt = PromptBuilder.system_prompt(stage, piece, "generate" if is_content else "feedback")
+        is_decision = sc.pipeline.is_decision_stage(stage)
+        call_type = "generate" if is_content else ("decision" if is_decision else "feedback")
+        from .agent import load_model_config
+        cfg = load_model_config()
+        use_structured = cfg.get("structured_output", False)
+        system_prompt = PromptBuilder.system_prompt(stage, piece, call_type, use_structured=use_structured)
         base["prompt"] = {
             "system": system_prompt,
             "user": sc.prompt,

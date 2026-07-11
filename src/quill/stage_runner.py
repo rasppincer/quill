@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from pydantic import BaseModel, Field
 
 from .agent import AgentDecision, FeedbackStageOutput, ContentStageOutput, load_model_config
 from .llm import LLMClient
@@ -48,6 +49,31 @@ def is_local_api(api_base: str | None) -> bool:
     except Exception:
         pass
     return False
+
+
+class DecisionStageOutput(BaseModel):
+    """Output schema for decision stages."""
+    decision: str = Field(description="The final decision: 'advance' or 'reject'")
+    reason: str = Field(description="Reason/critique backing the decision")
+
+
+def extract_json(text: str) -> str:
+    """Extract the first valid JSON substring from the response text, stripping fences or extra text."""
+    text = text.strip()
+    import re
+    m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    m2 = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+    if m2:
+        return m2.group(1).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start:end+1].strip()
+
+    return text
 
 
 class LLMCaller:
@@ -173,6 +199,67 @@ class LLMCaller:
                 output=raw_response,
                 body=generated_content,
             )
+
+        elif sc.pipeline.is_decision_stage(stage):
+            # Decision stage
+            dec_system = PromptBuilder.system_prompt(stage, piece, "decision", use_structured=use_structured)
+            self.run_logger.log(piece, stage, "decision", dec_system, sc.prompt, trace_id=trace_id)
+            _emit(event_queue, "stage_llm_call", {
+                "stage": stage, "call": "decision", "prompt_chars": len(sc.prompt),
+            })
+            prompt_for_decision, _ = self.apply_token_budget(
+                dec_system, sc.prompt, sc.agent_cfg.max_tokens,
+                call_label="decision", event_queue=event_queue,
+            )
+            try:
+                response = client.chat(
+                    dec_system,
+                    prompt_for_decision,
+                    response_format=DecisionStageOutput if use_structured else None,
+                    piece_id=piece.id,
+                    stage=stage,
+                    call_type="decision",
+                    trace_id=trace_id,
+                )
+            except ConnectionError as e:
+                return AgentDecision(
+                    decision="error", critique="", output="",
+                    error=str(e), stage=stage,
+                )
+
+            decision_val = "reject"
+            reason_val = ""
+            try:
+                if use_structured:
+                    parsed = DecisionStageOutput.model_validate_json(response)
+                    decision_val = parsed.decision
+                    reason_val = parsed.reason
+                else:
+                    clean_res = extract_json(response)
+                    import json
+                    parsed_json = json.loads(clean_res)
+                    decision_val = parsed_json.get("decision", "reject")
+                    reason_val = parsed_json.get("reason", "")
+            except Exception as e:
+                logger.error("Failed to parse decision stage JSON: %s (Raw response: %r)", e, response)
+                reason_val = f"Failed to parse decision. Raw: {response}"
+
+            if decision_val not in ("advance", "reject"):
+                decision_val = "reject"
+
+            piece.write_json(stage, response)
+            piece.write_decision(stage, decision_val, reason_val)
+
+            decision_obj = AgentDecision(
+                decision=decision_val,
+                critique=reason_val,
+                output=response,
+                body=reason_val,
+            )
+            self.run_logger.log(piece, stage, "decision", dec_system, sc.prompt, {
+                "decision": decision_obj.decision, "critique": (decision_obj.critique or "")[:500],
+            }, trace_id=trace_id)
+            return decision_obj
 
         else:
             # Feedback/Critique stage

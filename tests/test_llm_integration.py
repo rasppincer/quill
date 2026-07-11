@@ -36,6 +36,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytestmark
 class TestLLMIntegration:
     """Smoke tests against a real LLM."""
 

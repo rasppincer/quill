@@ -140,40 +140,64 @@ class StageRunner:
         )
 
         is_content = sc.pipeline.is_content_stage(stage)
+        is_decision = sc.pipeline.is_decision_stage(stage)
+        loop_key = stage.replace("_decision", "")
+        loop_count = piece.get_loop_count(loop_key) if is_decision else 0
+        max_loops = sc.agent_cfg.max_loops
 
         _emit(event_queue, "stage_start", {
             "stage": stage, "is_content_stage": is_content,
-            "prompt_chars": len(sc.prompt), "loop_count": 0,
+            "prompt_chars": len(sc.prompt), "loop_count": loop_count,
         })
 
-        # Delegate to unified LLMCaller run_stage
-        decision = self.llm.run_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
-        decision.loop_count = 0
-        decision.stage = stage
+        if is_decision and loop_count >= max_loops:
+            plog.warning("Loop limit reached (%d/%d) for loop group '%s'. Bypassing LLM call and forcing advance.", loop_count, max_loops, loop_key)
+            decision = AgentDecision(
+                decision="advance",
+                critique="Loop limit reached. Forcing advance.",
+                output="{}",
+                stage=stage,
+            )
+            # Write JSON output and decision
+            piece.write_json(stage, decision.output)
+            piece.write_decision(stage, decision.decision, decision.critique)
+        else:
+            # Delegate to unified LLMCaller run_stage
+            decision = self.llm.run_stage(client, stage, piece, sc, event_queue, trace_id=trace_id)
+            decision.stage = stage
 
-        # Execute decision (Always advance, no loop back)
+        # Execute decision stage state updates and database writes
         piece.set_loop_count(stage, 0)
         piece.set_stage_state(stage, "completed")
-        plog.info("Stage '%s' → completed (advance)", stage)
+
+        if is_decision and decision.decision == "reject":
+            # Rejection: increment loop count of the feedback group stages
+            loop_stages = ["review", "revise"] if stage == "review_decision" else ["validate", "polish"]
+            for s in loop_stages:
+                new_count = piece.get_loop_count(s) + 1
+                piece.set_loop_count(s, new_count)
+            plog.info("Stage '%s' → completed (reject, loop group loop count incremented to %d)", stage, loop_count + 1)
+        else:
+            plog.info("Stage '%s' → completed (advance)", stage)
 
         if not is_content:
             piece.write_output(stage, self._format_feedback(decision.critique))
         if is_content:
             self.metrics_svc.compute(piece, stage)
 
-        # Auto-advance only if trigger allows it or forced (chain mode)
-        auto_advance = force_advance or agent_cfg.trigger in ("auto",)
-        next_st = sc.pipeline.next_stage(stage)
+        # Auto-advance only if piece trigger is auto or forced (chain mode)
+        auto_advance = force_advance or piece.trigger == "auto"
+        next_st = sc.pipeline.next_stage(stage, decision.decision) if is_decision else sc.pipeline.next_stage(stage)
         if auto_advance and next_st:
             piece.advance_to(next_st)
             plog.info("Stage '%s' → advance to '%s'", stage, next_st)
         else:
-            logger.info("Stage '%s' → completed (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
+            logger.info("Stage '%s' → completed (no auto-advance, trigger=%s)", stage, piece.trigger)
 
         _emit(event_queue, "stage_complete", {
-            "stage": stage, "decision": "advance",
+            "stage": stage, "decision": decision.decision,
             "critique": (decision.critique or "")[:500],
-            "loop_count": 0, "error": decision.error,
+            "loop_count": loop_count, "error": decision.error,
         })
 
         return decision
@@ -325,14 +349,13 @@ class StageRunner:
             "used_fallback": result.used_fallback,
         }, trace_id=locals().get("trace_id"))
 
-        agent_cfg = load_agent_config(self.agent_set, "brief")
-        auto_advance = force_advance or (agent_cfg.trigger in ("auto",) if agent_cfg else True)
+        auto_advance = force_advance or piece.trigger == "auto"
         next_st = pipeline.next_stage(stage)
         if auto_advance and next_st:
             piece.advance_to(next_st)
             logger.info("Research → advance to '%s'", next_st)
         else:
-            logger.info("Research complete (no auto-advance, trigger=%s)", agent_cfg.trigger if agent_cfg else "?")
+            logger.info("Research complete (no auto-advance, trigger=%s)", piece.trigger)
 
         piece.set_stage_state(stage, "completed")
 

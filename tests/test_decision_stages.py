@@ -121,3 +121,71 @@ class TestLLMCallerDecisionStage:
 
         assert decision.decision == "reject"
         assert "Failed to parse decision" in decision.critique
+
+    @patch("quill.runner.LLMClient")
+    def test_run_decision_stage_bypass_on_limit(self, mock_llm_cls, tmp_output):
+        """Decision stage bypasses LLM call when max_loops is reached."""
+        piece_dir = tmp_output / "dec-piece-bypass"
+        piece_dir.mkdir()
+        meta = {
+            "id": "dec-piece-bypass", "title": "T", "genre": "fiction", "type": "story",
+            "current_stage": "review_decision", "agent_set": "default",
+        }
+        import yaml
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta))
+
+        # Set loop count of review to max_loops (3)
+        from quill.piece import load_piece
+        piece = load_piece(piece_dir)
+        piece.set_loop_count("review", 3)
+
+        mock_client = MagicMock()
+        mock_llm_cls.return_value = mock_client
+
+        from quill.runner import StageRunner
+        runner = StageRunner(agent_set="default")
+
+        decision = runner.run_stage("dec-piece-bypass", "review_decision", output_dir=tmp_output)
+
+        assert decision.decision == "advance"
+        assert "Loop limit reached" in decision.critique
+        mock_client.chat.assert_not_called()
+
+    @patch("quill.runner.LLMClient")
+    def test_run_decision_stage_reject_increments_counts(self, mock_llm_cls, tmp_output):
+        """Decision stage rejection increments the loop counts of review and revise."""
+        piece_dir = tmp_output / "dec-piece-reject"
+        piece_dir.mkdir()
+        meta = {
+            "id": "dec-piece-reject", "title": "T", "genre": "fiction", "type": "story",
+            "current_stage": "review_decision", "agent_set": "default",
+        }
+        import yaml
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta))
+
+        from quill.piece import load_piece
+        piece = load_piece(piece_dir)
+        piece.set_loop_count("review", 1)
+        piece.set_loop_count("revise", 1)
+
+        mock_client = MagicMock()
+        mock_client.api_base = "https://api.openai.com/v1"
+        mock_client.chat.return_value = '```json\n{"decision": "reject", "reason": "Weak opening"}\n```'
+        mock_llm_cls.return_value = mock_client
+
+        from quill.runner import StageRunner
+        runner = StageRunner(agent_set="default")
+
+        # Force piece trigger to auto to check advance to revise
+        piece.trigger = "auto"
+        piece.save()
+
+        decision = runner.run_stage("dec-piece-reject", "review_decision", output_dir=tmp_output)
+
+        assert decision.decision == "reject"
+
+        # Verify piece advanced to revise and loop counts incremented to 2
+        piece = load_piece(piece_dir)
+        assert piece.current_stage == "revise"
+        assert piece.get_loop_count("review") == 2
+        assert piece.get_loop_count("revise") == 2

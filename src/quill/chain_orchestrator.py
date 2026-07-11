@@ -180,7 +180,7 @@ class ChainOrchestrator:
                 logger.info("Chain interrupted for piece '%s' after stage '%s'", piece_id, result.stage)
                 break
 
-            if result.decision == "advance":
+            if result.decision in ("advance", "reject"):
                 piece = load_piece(piece_dir)
                 current = piece.current_stage
             elif result.decision == "loop_back":

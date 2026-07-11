@@ -80,6 +80,16 @@ class TestStageNavigation:
     def test_get_nonexistent_stage(self, simple_pipeline):
         assert simple_pipeline.get_stage("nope") is None
 
+    def test_is_decision_stage(self):
+        stages = {
+            "dec": Stage(key="dec", name="Dec", mode="decision"),
+            "cont": Stage(key="cont", name="Cont", mode="content"),
+        }
+        pipeline = Pipeline(name="test", stages=stages, stage_order=["cont", "dec"])
+        assert pipeline.is_decision_stage("dec") is True
+        assert pipeline.is_decision_stage("cont") is False
+        assert pipeline.is_decision_stage("nonexistent") is False
+
 
 # ---------------------------------------------------------------------------
 # Transitions

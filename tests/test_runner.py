@@ -96,6 +96,30 @@ class TestReadInputs:
         inputs = runner.assembler.read_inputs(piece, "humanize", _make_pipeline())
         assert "revised text" in inputs
 
+    def test_read_inputs_versioned_loop_counts(self, runner, tmp_output):
+        """read_inputs resolves versioned files correctly for loop counts > 0."""
+        from quill.piece import load_piece
+        d = tmp_output / "versioned-inputs"
+        d.mkdir()
+        meta = {"id": "versioned-inputs", "title": "T", "current_stage": "review"}
+        (d / "meta.yaml").write_text(yaml.dump(meta))
+
+        # Write L1 files
+        (d / _stage_filename("revise", loop_count=1)).write_text("Revise L1 content.")
+        (d / _stage_filename("draft")).write_text("Draft content.")
+
+        piece = load_piece(d)
+
+        # At loop_count = 0, should read draft
+        inputs_0 = runner.assembler.read_inputs(piece, "review", _make_pipeline(), loop_count=0)
+        assert "Draft content" in inputs_0
+        assert "Revise L1" not in inputs_0
+
+        # At loop_count = 1, should read revise.L1.md
+        inputs_1 = runner.assembler.read_inputs(piece, "review", _make_pipeline(), loop_count=1)
+        assert "Revise L1 content" in inputs_1
+        assert "Draft" not in inputs_1
+
 
 
 # ---------------------------------------------------------------------------

@@ -167,16 +167,23 @@ class StageRunner:
             decision.stage = stage
 
         # Execute decision stage state updates and database writes
-        piece.set_loop_count(stage, 0)
         piece.set_stage_state(stage, "completed")
 
-        if is_decision and decision.decision == "reject":
-            # Rejection: increment loop count of the feedback group stages
-            loop_stages = ["review", "revise"] if stage == "review_decision" else ["validate", "polish"]
-            for s in loop_stages:
-                new_count = piece.get_loop_count(s) + 1
-                piece.set_loop_count(s, new_count)
-            plog.info("Stage '%s' → completed (reject, loop group loop count incremented to %d)", stage, loop_count + 1)
+        if is_decision:
+            piece.set_loop_count(stage, 0)
+            if decision.decision == "reject":
+                # Rejection: increment loop count of the feedback group stages
+                loop_stages = ["review", "revise"] if stage == "review_decision" else ["validate", "polish"]
+                for s in loop_stages:
+                    new_count = piece.get_loop_count(s) + 1
+                    piece.set_loop_count(s, new_count)
+                plog.info("Stage '%s' → completed (reject, loop group loop count incremented to %d)", stage, loop_count + 1)
+            else:
+                # Advance: clear loop counts of the loop group stages
+                loop_stages = ["review", "revise"] if stage == "review_decision" else ["validate", "polish"]
+                for s in loop_stages:
+                    piece.set_loop_count(s, 0)
+                plog.info("Stage '%s' → completed (advance, loop group loop counts reset)", stage)
         else:
             plog.info("Stage '%s' → completed (advance)", stage)
 

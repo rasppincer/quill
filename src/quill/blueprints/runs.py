@@ -69,7 +69,14 @@ def pieces_run(piece_id: str):
             target_idx = pipeline.stage_order.index(target_stage)
             current_idx = pipeline.stage_order.index(piece.current_stage)
             if target_idx < current_idx:
-                is_loop_revert = pipeline.can_reject_to(piece.current_stage, target_stage)
+                loop_groups = [
+                    {"review", "review_decision", "revise"},
+                    {"validate", "validate_decision", "polish"},
+                ]
+                is_loop_revert = any(
+                    piece.current_stage in group and target_stage in group
+                    for group in loop_groups
+                )
                 if not is_loop_revert and piece.get_loop_count(target_stage) == 0:
                     piece.supersede_from(target_stage)
 

@@ -274,6 +274,103 @@ class TestRunChainEventEmission:
         assert "chain_stage_complete" in event_types
         assert "chain_complete" in event_types
 
+    @patch("quill.runner.LLMClient")
+    def test_chain_with_decision_loop_limits(self, mock_llm_cls, runner, tmp_output, tmp_agents, monkeypatch):
+        """Chain execution handles rejection, increments loop counts, and enforces limits."""
+        monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
+        monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+        monkeypatch.setattr("quill.agent.MODEL_CONFIG_FILE", tmp_agents / "model.yaml")
+
+        piece_dir = tmp_output / "chain-loop-piece"
+        piece_dir.mkdir()
+        meta = {
+            "id": "chain-loop-piece", "title": "Chain Loop", "genre": "fiction",
+            "type": "story", "audience": "general", "tone": "casual",
+            "language": "en", "target_length": "1000 words",
+            "current_stage": "review", "agent_set": "default", "trigger": "auto",
+        }
+        (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
+        (piece_dir / _stage_filename("draft")).write_text("Draft content.")
+        (piece_dir / _stage_filename("review")).write_text("Review content.")
+        (piece_dir / _stage_filename("revise")).write_text("Revise content.")
+
+        # Ensure Project and DocumentNode exist in database to avoid foreign key failures
+        from quill.db import db_session
+        from quill.models import Project, DocumentNode
+        session = db_session()
+        proj = Project(id="chain-loop-piece", title="Chain Loop")
+        node = DocumentNode(id="chain-loop-piece", title="Chain Loop", node_type="chapter", project=proj)
+        session.add(proj)
+        session.add(node)
+        session.commit()
+
+        # Write prompt templates in temporary default agent set directory
+        default_dir = tmp_agents / "default"
+        (default_dir / "review_decision.prompt.md").write_text("# Review Decision\n{{CONTENT}}\n")
+        (default_dir / "validate_decision.prompt.md").write_text("# Validate Decision\n{{CONTENT}}\n")
+        (default_dir / "humanize.prompt.md").write_text("# Humanize\n{{CONTENT}}\n")
+        (default_dir / "validate.prompt.md").write_text("# Validate\n{{CONTENT}}\n")
+        (default_dir / "polish.prompt.md").write_text("# Polish\n{{CONTENT}}\n")
+        (default_dir / "state.prompt.md").write_text("# State\n{{CONTENT}}\n")
+
+        # Update default config.yaml to register these stages
+        cfg = yaml.safe_load((default_dir / "config.yaml").read_text())
+        cfg["max_loops"] = 2
+        cfg.setdefault("stages", {})
+        cfg["stages"]["review_decision"] = {"name": "Review Decision", "temperature": 0.1}
+        cfg["stages"]["validate_decision"] = {"name": "Validate Decision", "temperature": 0.1}
+        cfg["stages"]["humanize"] = {"name": "Humanize", "temperature": 0.4}
+        cfg["stages"]["validate"] = {"name": "Validate", "temperature": 0.2}
+        cfg["stages"]["polish"] = {"name": "Polish", "temperature": 0.3}
+        cfg["stages"]["state"] = {"name": "State", "temperature": 0.3}
+        (default_dir / "config.yaml").write_text(yaml.dump(cfg, default_flow_style=False))
+
+        import os
+        print("TEMPORARY AGENTS DIR FILES:", os.listdir(default_dir))
+        print("TEMPORARY CONFIG:", yaml.safe_load((default_dir / "config.yaml").read_text()))
+
+        mock_client = MagicMock()
+        mock_client.api_base = "https://api.openai.com/v1"
+
+        def mock_chat(*args, **kwargs):
+            stage = kwargs.get("stage")
+            if stage == "review":
+                return '{"critique": "Draft needs stronger opening."}'
+            elif stage == "review_decision":
+                return '{"decision": "reject", "reason": "Draft needs work."}'
+            elif stage == "revise":
+                return '{"content": "New revised draft content."}'
+            elif stage == "humanize":
+                return '{"content": "Humanized draft content."}'
+            elif stage == "validate":
+                return '{"critique": "Validation complete."}'
+            elif stage == "validate_decision":
+                return '{"decision": "advance", "reason": "Validation clean."}'
+            elif stage == "polish":
+                return '{"content": "Polished content."}'
+            elif stage == "state":
+                return '{"state": "Completed."}'
+            return '{"decision": "advance", "reason": "Ok"}'
+
+        mock_client.chat.side_effect = mock_chat
+        mock_llm_cls.return_value = mock_client
+
+        q = queue.Queue()
+        results = runner.run_chain("chain-loop-piece", from_stage="review",
+                                   output_dir=tmp_output, event_queue=q)
+
+        # Since it advanced successfully, loop counts should have been reset to 0
+        from quill.piece import load_piece
+        final_piece = load_piece(piece_dir)
+        assert final_piece.get_loop_count("review") == 0
+        assert final_piece.get_loop_count("revise") == 0
+        assert final_piece.current_stage == "done"
+
+        # Verify the bypassed decision file exists and contains the correct reason
+        dec_file = piece_dir / _stage_filename("review_decision", ".decision.md")
+        assert dec_file.exists()
+        assert "Loop limit reached. Forcing advance." in dec_file.read_text(encoding="utf-8")
+
 
 # ---------------------------------------------------------------------------
 # Async API endpoints

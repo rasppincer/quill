@@ -85,8 +85,16 @@ stages:
       - character_consistency
       - completeness_vs_outline
       - redundancy_scan
-    next: revise
+    next: review_decision
     can_reject_to: draft
+
+  - key: review_decision
+    mode: decision
+    name: Review Decision
+    description: Decide if the piece is ready for humanization or needs revision
+    next:
+      advance: humanize
+      reject: revise
 
   - key: revise
     name: Revise
@@ -95,7 +103,7 @@ stages:
       - apply_review_comments
       - preserve_voice
       - atomic_changes
-    next: humanize
+    next: review
     can_reject_to:
       - review
       - draft
@@ -118,10 +126,18 @@ stages:
       - domain_accuracy
       - consistency_check
       - language_quality
-    next: polish
+    next: validate_decision
     can_reject_to:
       - humanize
       - revise
+
+  - key: validate_decision
+    mode: decision
+    name: Validate Decision
+    description: Decide if the piece is ready for state extraction or needs final polish
+    next:
+      advance: state
+      reject: polish
 
   - key: polish
     name: Polish
@@ -130,7 +146,7 @@ stages:
       - title_and_opening
       - final_word_count
       - formatting
-    next: state
+    next: validate
     can_reject_to: validate
 
   - key: state

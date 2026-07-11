@@ -47,6 +47,26 @@ class TestStageNavigation:
         assert simple_pipeline.next_stage("middle") == "end"
         assert simple_pipeline.next_stage("end") is None
 
+    def test_next_stage_with_decision(self):
+        stages = {
+            "decision_stage": Stage(
+                key="decision_stage",
+                name="Decision",
+                next={"advance": "end", "reject": "start"}
+            ),
+            "start": Stage(key="start", name="Start", next="decision_stage"),
+            "end": Stage(key="end", name="End", next=None)
+        }
+        pipeline = Pipeline(
+            name="decision_test",
+            stages=stages,
+            stage_order=["start", "decision_stage", "end"]
+        )
+        assert pipeline.next_stage("decision_stage", "advance") == "end"
+        assert pipeline.next_stage("decision_stage", "reject") == "start"
+        assert pipeline.next_stage("decision_stage", "nonexistent") is None
+        assert pipeline.next_stage("decision_stage") is None
+
     def test_can_advance(self, simple_pipeline):
         assert simple_pipeline.can_advance("start") is True
         assert simple_pipeline.can_advance("middle") is True
@@ -150,11 +170,11 @@ class TestDefaultPipeline:
 
     def test_loads_default(self, pipeline):
         assert pipeline.name == "default"
-        assert len(pipeline.stages) == 12
+        assert len(pipeline.stages) == 14
 
     def test_stage_order(self, pipeline):
-        expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
-                     "humanize", "validate", "polish", "state", "done"]
+        expected = ["brief", "structure", "outline", "research", "draft", "review", "review_decision", "revise",
+                     "humanize", "validate", "validate_decision", "polish", "state", "done"]
         assert pipeline.stage_order == expected
 
     def test_brief_leads_to_structure(self, pipeline):
@@ -180,9 +200,9 @@ class TestDefaultPipeline:
         """State should use two-call (generate → evaluate) mode."""
         assert pipeline.is_content_stage("state") is True
 
-    def test_polish_next_is_state(self, pipeline):
-        """Polish should advance to state, not done."""
-        assert pipeline.next_stage("polish") == "state"
+    def test_polish_next_is_validate(self, pipeline):
+        """Polish should route back to validate."""
+        assert pipeline.next_stage("polish") == "validate"
 
     def test_state_next_is_done(self, pipeline):
         """State should advance to done."""
@@ -194,13 +214,13 @@ class TestDefaultPipeline:
 
     def test_stage_order_includes_state(self, pipeline):
         """State should be between polish and done in stage order."""
-        expected = ["brief", "structure", "outline", "research", "draft", "review", "revise",
-                     "humanize", "validate", "polish", "state", "done"]
+        expected = ["brief", "structure", "outline", "research", "draft", "review", "review_decision", "revise",
+                     "humanize", "validate", "validate_decision", "polish", "state", "done"]
         assert pipeline.stage_order == expected
 
     def test_stage_count_with_state(self, pipeline):
-        """Pipeline should have 12 stages (including state and structure)."""
-        assert len(pipeline.stages) == 12
+        """Pipeline should have 14 stages (including state and structure)."""
+        assert len(pipeline.stages) == 14
 
     def test_state_stage_inputs(self, pipeline):
         """State stage should read polish.md as input."""

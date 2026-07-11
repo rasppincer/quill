@@ -24,8 +24,8 @@ class Stage:
     key: str
     name: str
     description: str = ""
-    mode: str = "content"  # "content" or "feedback"
-    next: str | None = None
+    mode: str = "content"  # "content", "feedback", or "decision"
+    next: str | dict[str, str] | None = None
     can_reject_to: list[str] = field(default_factory=list)
     required_fields: list[str] = field(default_factory=list)
     required_artifacts: list[str] = field(default_factory=list)
@@ -47,12 +47,23 @@ class Pipeline:
         """Get a stage by key."""
         return self.stages.get(key)
 
-    def next_stage(self, current: str) -> str | None:
-        """Get the next stage after current. Returns None if at 'done'."""
+    def next_stage(self, current: str, decision: str | None = None) -> str | None:
+        """Get the next stage after current. Returns None if at 'done'.
+
+        If the transition is a dictionary and a decision is provided,
+        it resolves based on the decision key.
+        """
         stage = self.stages.get(current)
-        if stage and stage.next:
-            return stage.next
-        return None
+        if not stage or stage.next is None:
+            return None
+
+        if isinstance(stage.next, dict):
+            if decision is None:
+                logger.warning("Stage '%s' requires a decision to resolve next stage, but none provided", current)
+                return None
+            return stage.next.get(decision)
+
+        return stage.next
 
     def is_content_stage(self, key: str) -> bool:
         """Check if a stage is a content generation stage."""

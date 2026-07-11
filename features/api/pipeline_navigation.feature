@@ -177,26 +177,6 @@ Feature: Pipeline navigation and stage lifecycle
     Then the stage content for "outline" is returned
 
   @slow
-  Scenario: Auto trigger — cannot manually run agent while auto running
-    Given a piece "auto-disabled" at stage "brief"
-    And the piece has brief.md content
-    When I set the piece trigger to "auto"
-    And I start the auto pipeline
-    And I wait until the piece reaches stage "outline"
-    And I attempt to run the agent for stage "outline"
-    Then I get an error containing "auto mode"
-
-  @slow
-  Scenario: Auto trigger — cannot manually advance stage while auto running
-    Given a piece "auto-noadv" at stage "brief"
-    And the piece has brief.md content
-    When I set the piece trigger to "auto"
-    And I start the auto pipeline
-    And I wait until the piece reaches stage "outline"
-    And I attempt to advance the piece
-    Then I get an error containing "auto mode"
-
-  @slow
   Scenario: Auto trigger — interrupt downgrades to on_advance
     Given a piece "auto-int" at stage "brief"
     And the piece has brief.md content

@@ -51,6 +51,7 @@ class RunLogger:
             entry.update(result)
 
         log_file = piece.stage_dir() / "run-log.jsonl"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         self._rotate_if_needed(log_file)

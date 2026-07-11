@@ -92,6 +92,38 @@ def create_piece_with_trigger(context, piece_id, stage, trigger="on_advance"):
         yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+    try:
+        from quill.db import db_session
+        from quill.models import Project, DocumentNode, StageState
+        session = db_session()
+        project = session.query(Project).filter_by(id=pid).first()
+        if project:
+            project.current_stage = stage
+            project.trigger = trigger
+        
+        node = session.query(DocumentNode).filter_by(id=pid).first()
+        if node:
+            from quill.piece import _stage_filename, _FRONTMATTER_RE
+            for s in stages:
+                st = session.query(StageState).filter_by(document_node_id=node.id, stage=s).first()
+                if not st:
+                    st = StageState(document_node_id=node.id, stage=s, state="ready")
+                    session.add(st)
+                else:
+                    st.state = "ready"
+                
+                path = OUTPUT_DIR / pid / _stage_filename(s)
+                if path.exists():
+                    text = path.read_text(encoding="utf-8")
+                    m = _FRONTMATTER_RE.match(text)
+                    st.body = text[m.end():] if m else text
+                else:
+                    st.body = f"Content for {s} stage of {title}"
+                if s == stage:
+                    break
+        session.commit()
+    except Exception as e:
+        print(f"Error syncing create_piece_with_trigger to DB: {e}")
     return pid
 
 

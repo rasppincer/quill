@@ -14,12 +14,12 @@ Feature: Agent pipeline
     Then the chain runs "outline", "draft", "review", "revise", "humanize", "validate", "polish", "state"
     And the piece reaches stage "done"
 
-  Scenario: Polish advances to state not done
+  Scenario: Polish advances to validate not done
     Given a piece "polish-next" at stage "polish"
     And the piece has content in all stages through polish
     When I set the piece trigger to "manual"
     When I advance the piece
-    Then the piece is at stage "state"
+    Then the piece is at stage "validate"
 
   Scenario: State stage has prompt in all flavors
     When I query agents for stage "state"

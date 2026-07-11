@@ -64,7 +64,7 @@ def write_stage_file(piece_id, stage, content, with_frontmatter=False, title=Non
 
 
 def set_piece_stage(piece_id, stage):
-    """Directly update meta.yaml to set the current stage."""
+    """Directly update meta.yaml and database to set the current stage."""
     meta_path = OUTPUT_DIR / piece_id / "meta.yaml"
     meta = yaml.safe_load(meta_path.read_text()) or {}
     meta["current_stage"] = stage
@@ -72,6 +72,39 @@ def set_piece_stage(piece_id, stage):
         yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+    try:
+        from quill.db import db_session
+        from quill.models import Project, DocumentNode, StageState
+        session = db_session()
+        project = session.query(Project).filter_by(id=piece_id).first()
+        if project:
+            project.current_stage = stage
+        
+        node = session.query(DocumentNode).filter_by(id=piece_id).first()
+        if node:
+            stages_list = ["brief", "structure", "outline", "draft", "review", "revise", "humanize", "validate", "polish", "state", "done"]
+            from quill.piece import _stage_filename, _FRONTMATTER_RE
+            for s in stages_list:
+                st = session.query(StageState).filter_by(document_node_id=node.id, stage=s).first()
+                if not st:
+                    st = StageState(document_node_id=node.id, stage=s, state="ready")
+                    session.add(st)
+                else:
+                    st.state = "ready"
+                
+                path = OUTPUT_DIR / piece_id / _stage_filename(s)
+                if path.exists():
+                    text = path.read_text(encoding="utf-8")
+                    m = _FRONTMATTER_RE.match(text)
+                    st.body = text[m.end():] if m else text
+                else:
+                    st.body = f"Content for {s} stage"
+                    
+                if s == stage:
+                    break
+        session.commit()
+    except Exception as e:
+        print(f"Error syncing set_piece_stage to DB: {e}")
 
 
 def read_meta(piece_id):

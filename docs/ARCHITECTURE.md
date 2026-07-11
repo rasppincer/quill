@@ -275,8 +275,8 @@ Schema ([models.py](file:///home/bob/projects/quill/src/quill/models.py)):
 **447 pytest tests** — all passing (5 skipped without live external services).
 
 ```bash
-pytest                          # unit tests (~32s)
-behave features/api/            # BDD scenarios (hit running API)
+pytest                          # backend unit + integration tests (~32s)
+npm test                        # frontend JSDOM unit tests
 ```
 
 Test suite uses `sqlite:///:memory:` via `QUILL_TESTING=1` for fast isolated runs without a live Postgres instance.

@@ -277,22 +277,13 @@ QUILL_TEST_REDIS_LIVE=1 pytest tests/test_redis_connectivity.py -v
 
 Unit and integration tests covering the API, pipeline, piece management, and agent system.
 
-### Behave BDD
+### Frontend Vitest Tests
 
-```
-features/api/
-├── pieces.feature          ← 8 scenarios (CRUD, rename, advance, reject, body length, duplicates)
-├── agents.feature          ← 5 scenarios (chain runs, skip logic, output format)
-├── steps/
-│   └── pieces_steps.py     ← step definitions
-└── environment.py          ← test hooks / cleanup
-```
-
-13 scenarios, 69 steps, all passing. Run with:
+Unit and JSDOM integration tests covering piece state updates, dynamic agent loading, and EventSource (SSE) stream handling.
 
 ```bash
-pytest                          # unit + integration tests
-behave features/api/            # BDD scenarios
+npm test                          # run frontend unit tests
+pytest                            # run backend unit + integration tests
 ```
 
 ## Dependencies

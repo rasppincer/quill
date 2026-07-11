@@ -82,39 +82,82 @@ class ContextAssembler:
         )
 
     def read_inputs(self, piece: Piece, stage: str, pipeline, loop_count: int = 0) -> str:
-        """Read input files for a stage.
+        """Read input files for a stage, respecting loop counts for versioned files.
 
         Uses stage-specific input mapping when defined,
         otherwise falls back to reading the previous stage's output.
+        Specialized loops (review, revise, validate, polish) resolve to
+        their corresponding versioned files.
+
+        Args:
+            piece: The piece being executed.
+            stage: The stage key to execute.
+            pipeline: The active pipeline configuration.
+            loop_count: The current stage's loop count.
+
+        Returns:
+            The combined input content from the mapped input files.
         """
         stage_dir = piece.stage_dir()
         inputs: list[str] = []
 
-        # Stage-specific inputs
-        stage_inputs = pipeline.stage_inputs if pipeline else {}
-        if stage in stage_inputs:
-            for input_stage in stage_inputs[stage]:
-                input_stage_name = input_stage.replace(".md", "")
-                fpath = stage_dir / _stage_filename(input_stage_name)
+        # Determine custom loopback files if we are in a loop
+        custom_files = []
+        if stage == "review":
+            if loop_count == 0:
+                custom_files = [("draft", 0)]
+            else:
+                custom_files = [("revise", loop_count)]
+        elif stage == "revise":
+            if loop_count <= 1:
+                custom_files = [("draft", 0), ("review", 0)]
+            else:
+                custom_files = [("revise", loop_count - 1), ("review", loop_count - 1)]
+        elif stage == "validate":
+            if loop_count == 0:
+                custom_files = [("humanize", 0)]
+            else:
+                custom_files = [("polish", loop_count)]
+        elif stage == "polish":
+            if loop_count <= 1:
+                custom_files = [("humanize", 0), ("validate", 0)]
+            else:
+                custom_files = [("polish", loop_count - 1), ("validate", loop_count - 1)]
+
+        if custom_files:
+            for s_name, l_count in custom_files:
+                fname = _stage_filename(s_name, loop_count=l_count)
+                fpath = stage_dir / fname
                 if fpath.exists():
                     text = fpath.read_text(encoding="utf-8")
                     m = _FRONTMATTER_RE.match(text)
-                    inputs.append(f"=== {fpath.name} ===\n{text[m.end():] if m else text}")
+                    inputs.append(f"=== {fname} ===\n{text[m.end():] if m else text}")
         else:
-            # Default: read previous stage's output
-            stage_order = pipeline.stage_order if pipeline else []
-            if stage in stage_order:
-                idx = stage_order.index(stage)
-                if idx > 0:
-                    prev_stage = stage_order[idx - 1]
-                    prev_file = stage_dir / _stage_filename(prev_stage)
-                    if prev_file.exists():
-                        text = prev_file.read_text(encoding="utf-8")
+            # Stage-specific inputs
+            stage_inputs = pipeline.stage_inputs if pipeline else {}
+            if stage in stage_inputs:
+                for input_stage in stage_inputs[stage]:
+                    input_stage_name = input_stage.replace(".md", "")
+                    fpath = stage_dir / _stage_filename(input_stage_name)
+                    if fpath.exists():
+                        text = fpath.read_text(encoding="utf-8")
                         m = _FRONTMATTER_RE.match(text)
-                        inputs.append(
-                            f"=== {_stage_filename(prev_stage)} ===\n"
-                            f"{text[m.end():] if m else text}"
-                        )
+                        inputs.append(f"=== {fpath.name} ===\n{text[m.end():] if m else text}")
+            else:
+                # Default: read previous stage's output
+                stage_order = pipeline.stage_order if pipeline else []
+                if stage in stage_order:
+                    idx = stage_order.index(stage)
+                    if idx > 0:
+                        prev_stage = stage_order[idx - 1]
+                        prev_file = stage_dir / _stage_filename(prev_stage)
+                        if prev_file.exists():
+                            text = prev_file.read_text(encoding="utf-8")
+                            m = _FRONTMATTER_RE.match(text)
+                            inputs.append(
+                                f"=== {_stage_filename(prev_stage)} ===\n"
+                                f"{text[m.end():] if m else text}"
+                            )
 
         return "\n\n".join(inputs) if inputs else "(no input files found)"
 

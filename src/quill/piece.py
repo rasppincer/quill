@@ -53,7 +53,7 @@ def _get_stage_prefix(stage: str) -> str | None:
     return None
 
 
-def _stage_filename(stage: str, suffix: str = ".md") -> str:
+def _stage_filename(stage: str, suffix: str = ".md", loop_count: int = 0) -> str:
     """Return the prefixed filename for a stage file.
 
     Examples: _stage_filename("draft") → "03_draft.md"
@@ -61,9 +61,10 @@ def _stage_filename(stage: str, suffix: str = ".md") -> str:
               _stage_filename("unknown") → "unknown.md"
     """
     prefix = _get_stage_prefix(stage)
-    if prefix:
-        return f"{prefix}_{stage}{suffix}"
-    return f"{stage}{suffix}"
+    stage_part = f"{prefix}_{stage}" if prefix else stage
+    if loop_count > 0:
+        return f"{stage_part}.L{loop_count}{suffix}"
+    return f"{stage_part}{suffix}"
 
 
 @dataclass
@@ -174,7 +175,8 @@ class Piece:
     def stage_file(self, stage: str | None = None) -> Path:
         """Get the file path for a specific stage."""
         stage = stage or self.current_stage
-        return self.stage_dir() / _stage_filename(stage)
+        loop_count = self.get_loop_count(stage)
+        return self.stage_dir() / _stage_filename(stage, loop_count=loop_count)
 
     def list_stages(self) -> list[dict]:
         """List all stages that exist for this piece."""
@@ -188,7 +190,7 @@ class Piece:
                         continue
                     res.append({
                         "stage": s.stage,
-                        "path": str(self.stage_dir() / _stage_filename(s.stage)),
+                        "path": str(self.stage_dir() / _stage_filename(s.stage, loop_count=s.loop_count or 0)),
                         "body_length": len(s.body) if s.body else 0,
                         "updated": s.updated_at.strftime("%Y-%m-%d") if s.updated_at else "",
                     })
@@ -215,6 +217,8 @@ class Piece:
                     body = text[m.end():]
                     # Strip numeric prefix from stem: "03_draft" → "draft"
                     stem = f.stem
+                    if ".L" in stem:
+                        stem, _ = stem.split(".L", 1)
                     if len(stem) > 2 and stem[0:2].isdigit() and stem[2] == "_":
                         stem = stem[3:]
                     stages.append({
@@ -236,7 +240,8 @@ class Piece:
         """
         stages = self.list_stages()
         for entry in stages:
-            entry["display_name"] = _stage_filename(entry["stage"])
+            loop_count = self.get_loop_count(entry["stage"])
+            entry["display_name"] = _stage_filename(entry["stage"], loop_count=loop_count)
         return stages
 
     def save(self, output_dir: Path | None = None) -> Path:
@@ -346,7 +351,7 @@ class Piece:
             d.mkdir(parents=True, exist_ok=True)
 
             # Save stage file
-            path = d / _stage_filename(self.current_stage)
+            path = d / _stage_filename(self.current_stage, loop_count=self.get_loop_count(self.current_stage))
             path.write_text(self.to_markdown(), encoding="utf-8")
 
             # Save/update meta.yaml
@@ -368,7 +373,7 @@ class Piece:
         else:
             base = output_dir or DEFAULT_OUTPUT_DIR
             self._path = base / self.id
-            return self._path / _stage_filename(self.current_stage)
+            return self.stage_file()
 
     def get_loop_count(self, stage: str) -> int:
         """Get the current loop count for a stage from database or meta.yaml."""
@@ -553,14 +558,22 @@ class Piece:
                     if f.exists():
                         f.unlink()
                         logger.info("Superseded: removed %s", f)
+                    # Clear any loop version files on disk
+                    for lf in self.stage_dir().glob(f"*_{s}.L*.md"):
+                        lf.unlink()
+                        logger.info("Superseded: removed loop file %s", lf)
                     # Clear decision file
                     decision_f = self.stage_dir() / _stage_filename(s, ".decision.md")
                     if decision_f.exists():
                         decision_f.unlink()
+                    for df in self.stage_dir().glob(f"*_{s}.L*.decision.md"):
+                        df.unlink()
                     # Clear JSON file
                     json_f = self.stage_dir() / _stage_filename(s, ".json")
                     if json_f.exists():
                         json_f.unlink()
+                    for jf in self.stage_dir().glob(f"*_{s}.L*.json"):
+                        jf.unlink()
                 except Exception as e:
                     logger.warning("Failed to remove file during supersede: %s", e)
 
@@ -661,7 +674,7 @@ class Piece:
         # 2. Update filesystem / dual-write
         if getattr(self, "dual_write", True):
             try:
-                output_file = self.stage_dir() / _stage_filename(stage)
+                output_file = self.stage_file(stage)
                 output_file.write_text(clean_content, encoding="utf-8")
                 logger.info("Wrote output to %s", output_file)
             except Exception as e:
@@ -694,7 +707,8 @@ class Piece:
         # 2. Update filesystem / dual-write
         if getattr(self, "dual_write", True):
             try:
-                decision_file = self.stage_dir() / _stage_filename(stage, ".decision.md")
+                loop_count = self.get_loop_count(stage)
+                decision_file = self.stage_dir() / _stage_filename(stage, ".decision.md", loop_count=loop_count)
                 content = (
                     f"## Decision: {decision_decision}\n\n"
                     f"## Critique\n{decision_critique}\n"
@@ -731,7 +745,8 @@ class Piece:
         # 2. Update filesystem / dual-write
         if getattr(self, "dual_write", True):
             try:
-                json_file = self.stage_dir() / _stage_filename(stage, ".json")
+                loop_count = self.get_loop_count(stage)
+                json_file = self.stage_dir() / _stage_filename(stage, ".json", loop_count=loop_count)
                 json_file.write_text(content, encoding="utf-8")
                 logger.info("Wrote JSON output to %s", json_file)
             except Exception as e:
@@ -850,9 +865,10 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
 
         meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
         current_stage = meta.get("current_stage", "brief")
+        loop_count = meta.get("loops", {}).get(current_stage, 0)
 
         # Load the current stage file
-        stage_file = path / _stage_filename(current_stage)
+        stage_file = path / _stage_filename(current_stage, loop_count=loop_count)
         body = ""
         if stage_file.exists():
             text = stage_file.read_text(encoding="utf-8")

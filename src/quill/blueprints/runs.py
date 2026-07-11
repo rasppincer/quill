@@ -63,14 +63,15 @@ def pieces_run(piece_id: str):
     else:
         target_stage = stage or piece.current_stage
 
-        # If running on an earlier stage, supersede later stages
         from ..pipeline import load_pipeline
         pipeline = load_pipeline("default")
         if target_stage in pipeline.stage_order and piece.current_stage in pipeline.stage_order:
             target_idx = pipeline.stage_order.index(target_stage)
             current_idx = pipeline.stage_order.index(piece.current_stage)
             if target_idx < current_idx:
-                piece.supersede_from(target_stage)
+                is_loop_revert = pipeline.can_reject_to(piece.current_stage, target_stage)
+                if not is_loop_revert and piece.get_loop_count(target_stage) == 0:
+                    piece.supersede_from(target_stage)
 
         trace_id = str(uuid.uuid4())
 

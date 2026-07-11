@@ -163,9 +163,10 @@ class StageRunner:
 
         # Auto-advance only if trigger allows it or forced (chain mode)
         auto_advance = force_advance or agent_cfg.trigger in ("auto",)
-        if auto_advance and sc.stage_def and sc.stage_def.next:
-            piece.advance_to(sc.stage_def.next)
-            plog.info("Stage '%s' → advance to '%s'", stage, sc.stage_def.next)
+        next_st = sc.pipeline.next_stage(stage)
+        if auto_advance and next_st:
+            piece.advance_to(next_st)
+            plog.info("Stage '%s' → advance to '%s'", stage, next_st)
         else:
             logger.info("Stage '%s' → completed (no auto-advance, trigger=%s)", stage, agent_cfg.trigger)
 
@@ -326,10 +327,10 @@ class StageRunner:
 
         agent_cfg = load_agent_config(self.agent_set, "brief")
         auto_advance = force_advance or (agent_cfg.trigger in ("auto",) if agent_cfg else True)
-        stage_def = pipeline.get_stage(stage)
-        if auto_advance and stage_def and stage_def.next:
-            piece.advance_to(stage_def.next)
-            logger.info("Research → advance to '%s'", stage_def.next)
+        next_st = pipeline.next_stage(stage)
+        if auto_advance and next_st:
+            piece.advance_to(next_st)
+            logger.info("Research → advance to '%s'", next_st)
         else:
             logger.info("Research complete (no auto-advance, trigger=%s)", agent_cfg.trigger if agent_cfg else "?")
 

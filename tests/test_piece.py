@@ -412,3 +412,56 @@ class TestDatabasePersistence:
         p5 = Piece(id="test5", title="Test 5", agent_set="", genre="")
         assert p5.resolved_agent_set == "default"
 
+
+class TestVersionedFiles:
+    """Test stage file versioning and loop suffixing."""
+
+    def test_stage_filename_versioning(self):
+        """Test _stage_filename appends loop suffix only when loop_count > 0."""
+        from quill.piece import _stage_filename
+        assert _stage_filename("draft", loop_count=0) == "05_draft.md"
+        assert _stage_filename("draft", loop_count=1) == "05_draft.L1.md"
+        assert _stage_filename("draft", suffix=".decision.md", loop_count=2) == "05_draft.L2.decision.md"
+
+    def test_piece_stage_file_paths(self, tmp_output):
+        """Test Piece.stage_file respect loops counts."""
+        p = Piece(
+            id="v-piece", title="V", genre="fiction", current_stage="draft",
+            _path=tmp_output / "v-piece"
+        )
+        p.save()
+
+        # Default loop count 0
+        assert p.stage_file("draft").name == "05_draft.md"
+
+        # Set loop count to 2
+        p.set_loop_count("draft", 2)
+        assert p.stage_file("draft").name == "05_draft.L2.md"
+
+    def test_write_stage_outputs_versioned(self, tmp_output):
+        """Test writing output, decision, and JSON creates versioned files when loop_count > 0."""
+        p = Piece(
+            id="v-write-piece", title="V Write", genre="fiction", current_stage="review",
+            _path=tmp_output / "v-write-piece"
+        )
+        p.save()
+        p.set_loop_count("review", 1)
+
+        # Write output
+        p.write_output("review", "Critique 1")
+        out_f = p.stage_dir() / "06_review.L1.md"
+        assert out_f.exists()
+        assert "Critique 1" in out_f.read_text(encoding="utf-8")
+
+        # Write decision
+        p.write_decision("review", "loop_back", "Try harder")
+        dec_f = p.stage_dir() / "06_review.L1.decision.md"
+        assert dec_f.exists()
+        assert "Try harder" in dec_f.read_text(encoding="utf-8")
+
+        # Write JSON
+        p.write_json("review", '{"status": "ok"}')
+        json_f = p.stage_dir() / "06_review.L1.json"
+        assert json_f.exists()
+        assert '{"status": "ok"}' in json_f.read_text(encoding="utf-8")
+

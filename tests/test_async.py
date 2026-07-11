@@ -258,6 +258,9 @@ class TestRunChainEventEmission:
         mock_client.chat.return_value = '```json\n{"decision": "advance", "critique": "Good."}\n```'
         mock_llm_cls.return_value = mock_client
 
+        from test_runner import _make_pipeline
+        monkeypatch.setattr("quill.pipeline.load_pipeline", lambda name="default": _make_pipeline())
+
         q = queue.Queue()
         results = runner.run_chain("chain-event-piece", from_stage="outline",
                                    output_dir=tmp_output, event_queue=q)

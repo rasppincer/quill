@@ -97,8 +97,7 @@ class ChainOrchestrator:
                 if not research_cfg.get("enabled"):
                     logger.info("Research disabled for agent set '%s', skipping", self.agent_set)
                     skipped_stages.append(current)
-                    stage_def = pipeline.get_stage(current)
-                    current = stage_def.next if stage_def else None
+                    current = pipeline.next_stage(current)
                     continue
                 result = run_stage_fn(piece_id, current, output_dir, event_queue=event_queue, trace_id=trace_id, force_advance=True)
                 results.append(result)
@@ -115,9 +114,9 @@ class ChainOrchestrator:
                     current, self.agent_set,
                 )
                 skipped_stages.append(current)
-                stage_def = pipeline.get_stage(current)
-                if stage_def and stage_def.next:
-                    current = stage_def.next
+                next_st = pipeline.next_stage(current)
+                if next_st:
+                    current = next_st
                     continue
                 else:
                     break

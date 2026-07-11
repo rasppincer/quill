@@ -25,15 +25,16 @@ DEFAULT_STAGE_INPUTS = {
 
 def _make_pipeline(stage_inputs=None):
     """Build a minimal Pipeline with stage_inputs for testing."""
+    order = ["brief", "outline", "draft", "review", "revise",
+             "humanize", "validate", "polish", "done"]
+    stages = {}
+    for i, s in enumerate(order):
+        nxt = order[i+1] if i < len(order)-1 else None
+        stages[s] = Stage(key=s, name=s, next=nxt)
     return Pipeline(
         name="test",
-        stages={
-            s: Stage(key=s, name=s, next="done" if s == "polish" else None)
-            for s in ["brief", "outline", "draft", "review", "revise",
-                       "humanize", "validate", "polish", "done"]
-        },
-        stage_order=["brief", "outline", "draft", "review", "revise",
-                      "humanize", "validate", "polish", "done"],
+        stages=stages,
+        stage_order=order,
         stage_inputs=stage_inputs or DEFAULT_STAGE_INPUTS,
     )
 
@@ -95,18 +96,6 @@ class TestReadInputs:
         inputs = runner.assembler.read_inputs(piece, "humanize", _make_pipeline())
         assert "revised text" in inputs
 
-    def test_unknown_stage_reads_previous(self, runner, sample_piece, tmp_output):
-        """Stage without explicit mapping reads previous stage + current attempt."""
-        from quill.piece import load_piece
-        from quill.pipeline import load_pipeline
-        piece = load_piece(sample_piece)
-        pipeline = load_pipeline("default")
-
-        # brief has no explicit mapping and is the first stage.
-        # Runner also reads the current stage file as "previous attempt" if it exists.
-        inputs = runner.assembler.read_inputs(piece, "brief", pipeline, loop_count=1)
-        # sample_piece has brief.md, so it gets picked up as "previous attempt"
-        assert "brief" in inputs.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +179,7 @@ class TestRunStage:
 
         # Check meta.yaml was advanced
         piece = load_piece(sample_piece)
-        assert piece.current_stage == "revise"
+        assert piece.current_stage == "review_decision"
 
     @patch("quill.runner.LLMClient")
     def test_content_stage_writes_body(self, mock_llm_cls, runner, sample_piece_with_review, tmp_output, monkeypatch):
@@ -267,6 +256,8 @@ class TestRunChain:
         )
         mock_llm_cls.return_value = mock_client
 
+        monkeypatch.setattr("quill.pipeline.load_pipeline", lambda name="default": _make_pipeline())
+
         results = runner.run_chain("chain-piece", from_stage="outline", output_dir=tmp_output)
 
         # Should have run review and revise (skipped outline, draft, humanize, validate, polish)
@@ -297,6 +288,8 @@ class TestRunChain:
             "current_stage": "outline", "agent_set": "empty",
         }
         (piece_dir / "meta.yaml").write_text(yaml.dump(meta, default_flow_style=False))
+
+        monkeypatch.setattr("quill.pipeline.load_pipeline", lambda name="default": _make_pipeline())
 
         results = runner.run_chain("empty-chain-piece", from_stage="outline", output_dir=tmp_output)
 
@@ -711,43 +704,6 @@ class TestTwoFileOutput:
         assert "Opening is weak" in content
         assert "## Critique" in content
 
-    def test_read_inputs_includes_decision_file(self, runner, tmp_output):
-        """_read_inputs includes .decision.md when it exists (loop context)."""
-        from quill.piece import load_piece, Piece
-
-        d = tmp_output / "loop-piece"
-        d.mkdir()
-        meta = {"id": "loop-piece", "title": "T", "current_stage": "draft"}
-        (d / "meta.yaml").write_text(yaml.dump(meta))
-        (d / _stage_filename("brief")).write_text("The brief.")
-        (d / _stage_filename("draft")).write_text("Previous draft attempt here.")
-        (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
-
-        piece = load_piece(d)
-        inputs = runner.assembler.read_inputs(piece, "draft", _make_pipeline(), loop_count=1)
-
-        assert "Previous draft attempt" in inputs
-        assert "Needs more evidence" in inputs
-        assert "evaluation feedback" in inputs
-
-    def test_read_inputs_excludes_decision_on_first_run(self, runner, tmp_output):
-        """First run (loop_count=0) does NOT include previous attempt or decision."""
-        from quill.piece import load_piece, Piece
-
-        d = tmp_output / "first-run-piece"
-        d.mkdir()
-        meta = {"id": "first-run-piece", "title": "T", "current_stage": "draft"}
-        (d / "meta.yaml").write_text(yaml.dump(meta))
-        (d / _stage_filename("brief")).write_text("The brief.")
-        (d / _stage_filename("draft")).write_text("Previous draft attempt here.")
-        (d / _stage_filename("draft", ".decision.md")).write_text("## Decision: loop_back\n\n## Critique\nNeeds more evidence.\n")
-
-        piece = load_piece(d)
-        inputs = runner.assembler.read_inputs(piece, "draft", _make_pipeline(), loop_count=0)
-
-        assert "Previous draft attempt" not in inputs
-        assert "evaluation feedback" not in inputs
-        assert "brief" in inputs.lower()
 
     @patch("quill.runner.LLMClient")
     def test_run_stage_with_custom_prompt(self, mock_llm_cls, runner, sample_piece, tmp_output, monkeypatch):

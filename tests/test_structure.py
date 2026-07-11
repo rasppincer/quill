@@ -143,12 +143,12 @@ class TestStructurePipeline:
 
     def test_stage_order_with_structure(self, pipeline):
         expected = ["brief", "structure", "outline", "research", "draft",
-                     "review", "revise", "humanize", "validate", "polish",
-                     "state", "done"]
+                    "review", "review_decision", "revise", "humanize", "validate",
+                    "validate_decision", "polish", "state", "done"]
         assert pipeline.stage_order == expected
 
     def test_stage_count_with_structure(self, pipeline):
-        assert len(pipeline.stages) == 12
+        assert len(pipeline.stages) == 14
 
     def test_structure_stage_inputs(self, pipeline):
         assert "structure" in pipeline.stage_inputs

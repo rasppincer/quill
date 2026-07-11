@@ -1,6 +1,4 @@
-api_base: http://192.168.0.3:1234/v1
-api_key: sk-lm-5Rcmzeg3:5xhVqaMmY80HC4AJvvz5
-model: google/gemma-4-31b
+# LLM settings (api_base, api_key, and model are derived from .env or environment variables)
 temperature: 0.7
 max_tokens: 12288
 structured_output: false

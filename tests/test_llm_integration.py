@@ -16,7 +16,14 @@ LLM_KEY = os.environ.get("QUILL_API_KEY", "sk-lm-5Rcmzeg3:5xhVqaMmY80HC4AJvvz5")
 def _llm_available() -> bool:
     """Check if the local LLM server is reachable."""
     try:
-        req = urllib.request.Request(f"{LLM_BASE}/v1/models", method="GET")
+        headers = {}
+        if LLM_KEY:
+            headers["Authorization"] = f"Bearer {LLM_KEY}"
+        req = urllib.request.Request(
+            f"{LLM_BASE}/v1/models",
+            headers=headers,
+            method="GET",
+        )
         with urllib.request.urlopen(req, timeout=3):
             return True
     except Exception:
@@ -41,7 +48,7 @@ class TestLLMIntegration:
             api_key=LLM_KEY,
             model=LLM_MODEL,
             temperature=0.7,
-            max_tokens=200,
+            max_tokens=2000,
         )
         response = client.chat(
             system="You are a creative writer.",

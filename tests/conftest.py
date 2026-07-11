@@ -1,11 +1,19 @@
 """Shared fixtures for Quill test suite."""
 
 import os
+from pathlib import Path
+import pytest
+
+# Set testing defaults
 os.environ["QUILL_TESTING"] = "1"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-import pytest
-from pathlib import Path
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
 
 import yaml
 from quill.piece import _stage_filename
@@ -196,3 +204,21 @@ def client_with_piece(client, sample_piece, tmp_output, monkeypatch):
     """Test client that already has a piece created."""
     monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
     return client
+
+
+_pytest_exit_status = 0
+
+
+def pytest_sessionfinish(session, exitstatus):
+    global _pytest_exit_status
+    _pytest_exit_status = exitstatus
+
+
+def pytest_unconfigure(config):
+    """Force exit the process at the end of the test suite to prevent hanging.
+
+    This is necessary because some background threads (e.g., from LiteLLM, Celery,
+    or connection pools) do not terminate cleanly on shutdown.
+    """
+    import os
+    os._exit(_pytest_exit_status)

@@ -19,8 +19,16 @@ Enqueue a task from Python (or Flask)::
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import logging
 from celery import Celery
+
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 

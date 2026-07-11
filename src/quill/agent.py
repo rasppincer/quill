@@ -38,26 +38,50 @@ def load_model_config() -> dict:
     """
     global _model_config_cache
     if not MODEL_CONFIG_FILE.exists():
-        return {}
-    mtime = MODEL_CONFIG_FILE.stat().st_mtime
-    if _model_config_cache and _model_config_cache[0] == mtime:
-        return _model_config_cache[1]
-    with open(MODEL_CONFIG_FILE) as f:
-        cfg = yaml.safe_load(f) or {}
-    _model_config_cache = (mtime, cfg)
-    # Validate on cache miss (warnings only, never blocks)
-    try:
-        from .config_validation import validate_config, MODEL_SCHEMA
-        validate_config(cfg, MODEL_SCHEMA, context="model.yaml")
-    except Exception:
-        pass
-    return cfg
+        cfg = {}
+    else:
+        mtime = MODEL_CONFIG_FILE.stat().st_mtime
+        if _model_config_cache and _model_config_cache[0] == mtime:
+            cfg = _model_config_cache[1]
+        else:
+            with open(MODEL_CONFIG_FILE) as f:
+                cfg = yaml.safe_load(f) or {}
+            _model_config_cache = (mtime, cfg)
+            # Validate on cache miss (warnings only, never blocks)
+            try:
+                from .config_validation import validate_config, MODEL_SCHEMA
+                validate_config(cfg, MODEL_SCHEMA, context="model.yaml")
+            except Exception:
+                pass
+
+    # Apply environment variable overrides if present (only when not in unit tests)
+    result = cfg.copy()
+    if os.environ.get("QUILL_TESTING") != "1":
+        if os.environ.get("QUILL_API_BASE"):
+            result["api_base"] = os.environ.get("QUILL_API_BASE")
+        if os.environ.get("QUILL_API_KEY"):
+            result["api_key"] = os.environ.get("QUILL_API_KEY")
+        
+        model_env = os.environ.get("QUILL_API_MODEL") or os.environ.get("QUILL_TEST_LLM_MODEL")
+        if model_env:
+            result["model"] = model_env
+    return result
 
 
 def save_model_config(cfg: dict):
     """Save global model configuration to agents/model.yaml."""
+    cfg_to_save = cfg.copy()
+    # Strip environment overrides so we don't save them back to the YAML file
+    if os.environ.get("QUILL_TESTING") != "1":
+        if os.environ.get("QUILL_API_BASE"):
+            cfg_to_save.pop("api_base", None)
+        if os.environ.get("QUILL_API_KEY"):
+            cfg_to_save.pop("api_key", None)
+        if os.environ.get("QUILL_API_MODEL") or os.environ.get("QUILL_TEST_LLM_MODEL"):
+            cfg_to_save.pop("model", None)
+
     MODEL_CONFIG_FILE.write_text(
-        yaml.dump(cfg, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        yaml.dump(cfg_to_save, default_flow_style=False, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
 
@@ -136,13 +160,22 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
 
     # Build config — global model.yaml is base, agent set can override
     stage_cfg = cfg.get("stages", {}).get(stage, {})
+    if os.environ.get("QUILL_TESTING") != "1":
+        api_base = os.environ.get("QUILL_API_BASE") or cfg.get("api_base", global_cfg.get("api_base", "https://api.openai.com/v1"))
+        api_key = os.environ.get("QUILL_API_KEY") or cfg.get("api_key", global_cfg.get("api_key", ""))
+        model = os.environ.get("QUILL_API_MODEL") or cfg.get("model", global_cfg.get("model", "gpt-4o"))
+    else:
+        api_base = cfg.get("api_base", global_cfg.get("api_base", "https://api.openai.com/v1"))
+        api_key = os.environ.get("QUILL_API_KEY") or cfg.get("api_key", global_cfg.get("api_key", ""))
+        model = cfg.get("model", global_cfg.get("model", "gpt-4o"))
+
     return AgentConfig(
         stage=stage,
         name=stage_cfg.get("name", f"{stage} agent"),
         description=stage_cfg.get("description", ""),
-        api_base=cfg.get("api_base", global_cfg.get("api_base", "https://api.openai.com/v1")),
-        api_key=os.environ.get("QUILL_API_KEY") or cfg.get("api_key", global_cfg.get("api_key", "")),
-        model=cfg.get("model", global_cfg.get("model", "gpt-4o")),
+        api_base=api_base,
+        api_key=api_key,
+        model=model,
         temperature=stage_cfg.get("temperature", cfg.get("temperature", global_cfg.get("temperature", 0.7))),
         max_tokens=stage_cfg.get("max_tokens", cfg.get("max_tokens", global_cfg.get("max_tokens", 4096))),
         max_loops=stage_cfg.get("max_loops", cfg.get("max_loops", 3)),

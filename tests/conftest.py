@@ -1,6 +1,7 @@
 """Shared fixtures for Quill test suite."""
 
 import os
+os.environ["QUILL_TESTING"] = "1"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 import pytest

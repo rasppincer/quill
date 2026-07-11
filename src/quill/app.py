@@ -33,8 +33,9 @@ def create_app() -> Flask:
     )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 
-    # Database configuration
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL") or "sqlite:///quill.db"
+    # Database configuration — DATABASE_URL is required (enforced by db.py).
+    from .db import DATABASE_URL
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     # Initialize database and migrations

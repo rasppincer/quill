@@ -1,22 +1,29 @@
-# Ticket 77: Dynamic Workflow DAG Parser (Refactor Pipeline YAML)
+# Ticket 77: Dynamic Workflow DAG Parser
 
 ## Description
-Refactor `src/quill/pipeline.py` to parse arbitrary Directed Acyclic Graph (DAG) state transitions from workflow files instead of expecting a linear order.
+Evolve `src/quill/pipeline.py` beyond an ordered list to support arbitrary graph-shaped workflows with conditional branching and parallel paths.
 
-## Background
-Currently, pipelines are linear sequences with a simple `next` property. To support parallel reviews, branching, and complex loop routes, the pipeline must behave as a true DAG.
+## Status
+**Partially addressed.** The `new_pipe_implementation_plan` work added decision-stage dict transitions:
+```python
+next: str | dict[str, str] | None  # e.g. {"advance": "humanize", "reject": "revise"}
+```
+This supports conditional branching at decision stages and is working in production. However, the pipeline is still fundamentally an ordered list (`stage_order: list[str]`) — parallel paths, non-linear fan-out, and cycle validation are not implemented.
 
-## Tasks
-- [ ] Update `workflows/default.yaml` to specify workflow transitions as an adjacency list of edges (from -> to) or conditional branches.
-- [ ] Update the `Pipeline` class to construct a DAG and compute valid execution paths.
-- [ ] Implement cycle/DAG validation on workflow load to ensure no infinite loops.
+## What Was Done
+- [x] `Stage.next` accepts `dict[str, str]` for decision-based transitions.
+- [x] `Pipeline.next_stage(current, decision=None)` resolves both string and dict next values.
+- [x] `default.yaml` uses dict `next:` for `review_decision` and `validate_decision`.
 
-## Success Criteria
-- [ ] Pipeline loading validates DAG configuration.
-- [ ] Transition engine supports branching stage routes and conditional jumps.
+## Remaining Tasks (larger refactor — future scope)
+- [ ] Replace `stage_order: list[str]` with an edge-based adjacency structure parsed from YAML.
+- [ ] Implement DAG validation on workflow load (cycle detection, unreachable stage detection).
+- [ ] Support fan-out / parallel stage execution (e.g. run `review` and `validate` in parallel).
+- [ ] Update `progress()` to work without a linear index (e.g. topological distance from start).
+- [ ] Update `default.yaml` schema to use edge declarations if/when the DAG parser is added.
 
 ## Priority
-Medium
+Low — current decision-stage branching covers immediate needs. Full DAG is a larger architectural investment with no blocking use-case yet.
 
 ---
 **Next Expected Ticket Number**: 78

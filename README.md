@@ -13,16 +13,16 @@ Quill started as a **tracking pipeline** — manual advance/reject buttons, no a
 ## Workflow
 
 ```
-┌─────────┐   ┌──────────┐   ┌───────┐   ┌────────┐   ┌────────┐   ┌──────────┐   ┌──────────┐   ┌───────┐   ┌──────┐
-│  BRIEF  │──▶│ OUTLINE  │──▶│ DRAFT │──▶│ REVIEW │──▶│ REVISE │──▶│ HUMANIZE │──▶│ VALIDATE │──▶│ POLISH│──▶│ DONE │
-│         │   │          │   │       │   │        │   │        │   │          │   │          │   │       │   │      │
-│ Topic   │   │ Sections │   │ Write │   │ Read + │   │ Apply  │   │ Strip    │   │ Fact-    │   │ Final │   │      │
-│ Audience│   │ Pacing   │   │ chunks│   │ annotate│  │ feedback│  │ AI-isms  │   │ check   │   │ pass  │   │      │
-│ Tone    │   │ Flow     │   │       │   │ Flag   │   │ Revise │   │ Add voice│   │ Domain  │   │       │   │      │
-│ Length  │   │ Beats    │   │       │   │ issues │   │ draft  │   │          │   │ accuracy│   │       │   │      │
-└─────────┘   └──────────┘   └───────┘   └────────┘   └────────┘   └──────────┘   └──────────┘   └───────┘   └──────┘
-                                                                              │                    ▲
-                                                                              └── iterate ────────┘
+┌─────────┐   ┌──────────┐   ┌────────┐   ┌───────┐   ┌────────┐   ┌──────────────┐   ┌────────┐   ┌──────────┐   ┌──────────────┐   ┌───────┐   ┌──────┐
+│  BRIEF  │──▶│ OUTLINE  │──▶│ DRAFT  │──▶│ REVIEW│──▶│REVIEW  │──▶│    REVISE    │──▶│HUMANIZE│──▶│ VALIDATE │──▶│  VALIDATE    │──▶│ POLISH│──▶│ DONE │
+│         │   │          │   │        │   │       │   │DECISION│   │              │   │        │   │          │   │  DECISION    │   │       │   │      │
+│ Topic   │   │ Sections │   │ Write  │   │ Read +│   │advance │   │ Apply        │   │ Strip  │   │ Fact-    │   │ advance      │   │ Final │   │      │
+│ Audience│   │ Pacing   │   │ chunks │   │ annotate  │ reject─┐│   │ feedback     │   │ AI-isms│   │ check    │   │ reject─┐     │   │ pass  │   │      │
+│ Tone    │   │ Flow     │   │        │   │ Flag  │   │        ││   │              │   │        │   │          │   │        │     │   │       │   │      │
+│ Length  │   │ Beats    │   │        │   │ issues│   └────────┘│   │              │   │        │   │          │   └────────┘     │   │       │   │      │
+└─────────┘   └──────────┘   └────────┘   └───────┘            │   └──────────────┘   └────────┘   └──────────┘                  │   └───────┘   └──────┘
+                                                                └──────────────────────────────────────────────────────────────────────▶ (back to REVISE)
+                                                                                                                                     └──▶ (back to POLISH)
 ```
 
 Each stage is **atomic** — one concern per stage, one file per stage. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
@@ -33,28 +33,28 @@ Each stage is **atomic** — one concern per stage, one file per stage. See [doc
 2. **Outline** — Structure before prose (sections, pacing, beats, arcs)
 3. **Draft** — Write in chunks (follow outline, allow organic detours)
 4. **Review** — Read and annotate (pacing, logic, consistency, completeness)
-5. **Revise** — Apply review feedback to produce revised draft
-6. **Humanize** — Strip AI-isms, inject personality, match language voice
-7. **Validate** — Domain-specific fact checking (game refs, trading logic, cultural details)
-8. **Polish** — Final line-level edits (word choice, rhythm, formatting)
-9. **Done** — Published version
+5. **Review Decision** — LLM evaluates review critique: `advance` → Revise, `reject` → loop back
+6. **Revise** — Apply review feedback to produce revised draft
+7. **Humanize** — Strip AI-isms, inject personality, match language voice
+8. **Validate** — Domain-specific fact checking (game refs, trading logic, cultural details)
+9. **Validate Decision** — LLM evaluates validate critique: `advance` → Polish, `reject` → loop back
+10. **Polish** — Final line-level edits (word choice, rhythm, formatting)
+11. **Done** — Published version
 
-### Iterate Loop
+### Automated Loopback
 
-Polish can bounce back to validate for iterative refinement. Each pass tightens the text without changing scope.
+Decision stages (`review_decision`, `validate_decision`) automate the revision loop. They call an LLM to evaluate the preceding feedback stage and return `advance` or `reject`. On `reject`, loop counts increment and each pass is preserved with versioned file suffixes (`.L1.md`, `.L2.md`, ...). Once `max_loops` is reached, the pipeline advances regardless.
 
 ## Agent System
 
-All stages (outline through polish) are **agent-driven**. The chain can run from brief→done fully automated. Each stage has a prompt template and an LLM agent that uses a **two-call approach**:
+All stages (outline through polish) are **agent-driven**. The chain can run from brief→done fully automated. Each stage executes as a **single LLM call** returning structured JSON:
 
-1. **Generate call** — reads the previous stage's output and produces the content for the current stage (e.g., outline from brief, draft from outline, review from draft). The generated text is written to `{stage}.md` immediately.
-2. **Evaluate call** — a separate LLM call evaluates the generated content and returns a structured JSON decision: `advance` or `loop_back`, plus critique. The evaluation is written to `{stage}.decision.md`.
-3. **Decides** — advance to next stage, or loop back to redo the current stage
-4. **Loops** up to `max_loops` times per stage (default: 3)
+- **Content stages** (outline, draft, revise, humanize, polish) — return `ContentStageOutput`, written to `{stage}.md`.
+- **Feedback stages** (review, validate) — return `FeedbackStageOutput` with a detailed critique, written to `{stage}.md`.
+- **Decision stages** (review_decision, validate_decision) — return `DecisionStageOutput` with `decision: advance|reject` and a `reason`, routing the pipeline.
 
-On **loop_back**, the next iteration receives both the previous generated text (`{stage}.md`) and the evaluation feedback (`{stage}.decision.md`), so the agent can see what it wrote and what was wrong with it.
+Loop versioning preserves all iterations: `.L1.md`, `.L2.md`, etc. are written on each loop pass so no generated content is lost.
 
-This two-file design eliminates the risk of losing generated content on loop_back and prevents LLM-generated content from accidentally triggering decisions via instructional text.
 
 ### Template Variables
 
@@ -173,16 +173,17 @@ GET  /api/pieces/<id>/runs/<run_id>/events — SSE live progress stream
 GET  /api/pieces/<id>/prompt/<stage> — debug: show composed prompt
 ```
 
-## CLI Commands
+### CLI Commands
 
-### Sync Legacy Pieces
-To import existing pieces stored under the `output/` directory into the SQLite database:
+#### Sync Legacy Pieces
+To import existing pieces stored under the `output/` directory into the database:
 ```bash
 PYTHONPATH=src .venv/bin/flask --app quill.app sync-legacy [--force]
 ```
 Options:
 * `--force` / `-f`: Force update/overwrite existing database records from filesystem files.
 * Safe by default: Checks the database first and skips any pieces that are actively in progress (stage state is `generating`).
+
 
 ## Dashboard
 
@@ -211,7 +212,7 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 ## Celery Workers
 
-Async stage runs currently use a `ThreadPoolExecutor` inside the Flask process. `celery_app.py` provides a drop-in Celery+Redis backend for crash-resilient, horizontally-scalable execution (wiring into the API is ticket 74).
+Async stage runs currently use a `ThreadPoolExecutor` inside the Flask process. `celery_app.py` provides a drop-in Celery+Redis backend for crash-resilient, horizontally-scalable execution (completing the wiring into the API layer is tracked in [Ticket 74](tickets/ticket_74_task_worker.md)).
 
 ### Setup
 
@@ -270,7 +271,7 @@ QUILL_TEST_REDIS_LIVE=1 pytest tests/test_redis_connectivity.py -v
 
 ## Testing
 
-**410 pytest tests** — all passing (2 connectivity tests skipped without `QUILL_TEST_REDIS_LIVE=1`).
+**447 pytest tests** — all passing.
 
 ### Pytest
 
@@ -298,7 +299,8 @@ behave features/api/            # BDD scenarios
 
 - Flask (API + template server)
 - PyYAML (frontmatter + meta.yaml parsing)
-- SQLAlchemy + Flask-SQLAlchemy + Flask-Migrate (database)
+- SQLAlchemy + Flask-SQLAlchemy + Flask-Migrate (PostgreSQL ORM + migrations)
+- psycopg2-binary (PostgreSQL driver)
 - LiteLLM (unified LLM provider interface)
 - Celery + redis-py (distributed task queue — worker optional)
 - Werkzeug ProxyFix (reverse proxy support)

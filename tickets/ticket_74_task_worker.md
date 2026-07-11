@@ -1,23 +1,31 @@
-# Ticket 74: Port RunManager to Distributed Task Worker
+# Ticket 74: Port RunManager to Celery Task Worker
 
 ## Description
-Rewrite `src/quill/run_manager.py` to submit agent runs as Celery tasks instead of thread pool submissions.
+Complete the switch from `RunManager` (ThreadPoolExecutor + in-memory SSE queues) to Celery task dispatch for background agent execution.
 
-## Background
-The ThreadPoolExecutor needs to be deprecated in favor of Celery task delays. The background agent execution must be managed as a task state in the database/Redis backend.
+## Status
+**Partially done.** The Celery infrastructure is in place:
+- `src/quill/celery_app.py` defines `run_stage_task` (single stage) and handles `run_chain` internally.
+- `celery_app.conf` is configured with Redis broker/backend, `task_acks_late`, `worker_prefetch_multiplier=1`, and `worker_concurrency` from env.
+- Celery worker can be started with `celery -A quill.celery_app worker --loglevel=info`.
 
-## Tasks
-- [ ] Refactor `RunManager.start_run()` to enqueue a Celery task `run_stage_task` or `run_chain_task`.
-- [ ] Define Celery task definitions in `src/quill/tasks.py` that call `StageRunner`.
-- [ ] Handle task state tracking (pending, running, success, failure) in the database.
+**What is NOT done:** the web layer (`src/quill/blueprints/runs.py`) still dispatches via `RunManager` (ThreadPoolExecutor + in-memory event queues). The hand-off from HTTP request → Celery task has not been wired.
+
+## Remaining Tasks
+- [ ] Update `blueprints/runs.py` POST `/runs` handler to call `run_stage_task.delay(piece_id, stage, agent_set, chain)` instead of `RunManager().start_run(...)`.
+- [ ] Replace `RunManager().is_piece_running(piece_id)` check with a Celery task state lookup (query Redis backend by task ID).
+- [ ] Persist the Celery `AsyncResult` task ID in the database (or Redis) so the events endpoint can subscribe to it.
+- [ ] Update `RunManager.is_interrupted()` / `clear_interrupt()` to work with Celery task revocation (`celery_app.control.revoke(task_id, terminate=True)`).
+- [ ] Remove or deprecate `RunManager._executor` (ThreadPoolExecutor) once Celery dispatch is confirmed working.
 
 ## Success Criteria
-- [ ] Running stage/chain triggers enqueues a Celery task.
-- [ ] Celery worker executes the stage runner code in a separate process.
-- [ ] Re-running or interrupting tasks is handled safely via task IDs.
+- [ ] Running stage/chain from the dashboard enqueues a Celery task (visible in Flower or Redis CLI).
+- [ ] Celery worker executes `StageRunner` in a separate process.
+- [ ] Interrupting a run (`POST /runs/<id>/interrupt`) terminates the Celery task cleanly.
+- [ ] All existing run API tests pass.
 
 ## Priority
-High
+High — blocks Ticket 75 (Redis Pub/Sub events)
 
 ---
 **Next Expected Ticket Number**: 75

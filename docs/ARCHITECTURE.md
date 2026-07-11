@@ -48,19 +48,24 @@ Quill is an **agentic writing workflow engine**. It runs long-form content throu
 
 ## Pipeline
 
-10-stage linear pipeline:
+12-stage pipeline with automated loopback decision stages:
 
 ```
-brief → outline → research → draft → review → revise → humanize → validate → polish → done
-         content   special    content  feedback  content   content   feedback   content
+brief → outline → research → draft → review → review_decision → revise → humanize → validate → validate_decision → polish → done
+         content   special    content  feedback    decision        content   content   feedback      decision          content
+                                                    ↓ reject                                          ↓ reject
+                                                   revise ──────────────────────────────────────── polish
 ```
+
+Decision stages evaluate feedback and either advance the pipeline or loop back for revision.
 
 ### Stage Modes
 
 Each stage has a `mode` declared in `workflows/default.yaml`:
 
 - **`content`** (default): Single-call returning `ContentStageOutput` (containing the generated text/JSON), saved to `<stage>.json` and `<stage>.md`. Used for outline, draft, revise, humanize, polish.
-- **`feedback`**: Single-call returning `FeedbackStageOutput` (containing the critique and advancement decision), saved to `<stage>.json` and `<stage>.md`. Used for review, validate.
+- **`feedback`**: Single-call returning `FeedbackStageOutput` (containing the critique), saved to `<stage>.json` and `<stage>.md`. Used for review, validate.
+- **`decision`**: Single-call returning `DecisionStageOutput` (`decision: advance|reject`, `reason`). Inspects the preceding feedback stage and routes the pipeline accordingly. Used for `review_decision` and `validate_decision`.
 - **`research`**: Special stage — LLM generates search queries, SearXNG fetches results, saved as-is to `research.md`.
 
 ### Stage Inputs
@@ -182,9 +187,9 @@ Agents return structured JSON:
 
 If the LLM returns malformed JSON, `agent.py` falls back to heuristic parsing with negative lookahead to avoid matching "loop_back" in instructional text.
 
-### Loop Tracking & Guardrails (Removed)
+### Loop Tracking & Guardrails
 
-With the pipeline pivot to single-call execution, loop-back checks, loop counts, loop tracking, and loop guardrails have been removed. Stages advance immediately to `completed` upon run completion.
+Loop counts are tracked per stage in the database (`StageState.loop_count`). Decision stages (`review_decision`, `validate_decision`) increment the loop count of their feedback group on `reject` and reset it on `advance`. Each loop run writes versioned files (`.L1.md`, `.L2.md`, etc.) to the filesystem so all iterations are preserved for diagnostics. If the loop count reaches `max_loops`, the decision stage bypasses the LLM call and forces `advance`.
 
 ## Research Stage
 
@@ -242,14 +247,20 @@ logs/
 
 `PieceLogHandler` routes records with `piece_id` to per-piece files. `TimedRotatingFileHandler` for daily rotation. Old piece logs auto-cleaned after 3 days. No stdout — logs only. `QUILL_LOG_LEVEL` env var (default INFO).
 
-## Database Schema
+## Database
 
-Quill uses a relational database schema (implemented via SQLAlchemy in [models.py](file:///home/bob/projects/quill/src/quill/models.py)) to replace `meta.yaml` and filesystem-based frontmatter/metrics tracking:
+Quill uses **PostgreSQL** (required — no SQLite fallback). `DATABASE_URL` must be set in the environment. The schema is managed via SQLAlchemy + Flask-Migrate (Alembic).
 
-- **Project**: Holds top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set).
-- **DocumentNode**: Represents files, chapters, or scenes in a hierarchical tree structure with self-referential parent-child relationships.
-- **StageState**: Tracks workflow state (`fresh`, `generating`, `completed`), content body, and critiques for each stage of a `DocumentNode`.
-- **Metrics**: Holds per-stage mechanical readability scores and word counts.
+```
+postgresql://user:pass@host:5432/quill
+```
+
+Schema ([models.py](file:///home/bob/projects/quill/src/quill/models.py)):
+
+- **Project**: Top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set).
+- **DocumentNode**: Hierarchical tree structure with self-referential parent-child relationships. Supports Project → Chapter → Scene nesting.
+- **StageState**: Workflow state (`fresh`, `generating`, `completed`), content body, loop count, and decision/critique for each stage of a node.
+- **Metrics**: Per-stage mechanical readability scores and word counts.
 - **AgentLog**: Append-only execution record of LLM calls, prompts, character/token counts, costs, and critiques.
 
 ## Observability
@@ -261,18 +272,23 @@ Quill uses a relational database schema (implemented via SQLAlchemy in [models.p
 
 ## Testing
 
-**440 pytest tests + 32 behave BDD scenarios** — all passing.
+**447 pytest tests** — all passing (5 skipped without live external services).
 
 ```bash
-pytest                          # unit tests (2.5s)
+pytest                          # unit tests (~32s)
 behave features/api/            # BDD scenarios (hit running API)
 ```
+
+Test suite uses `sqlite:///:memory:` via `QUILL_TESTING=1` for fast isolated runs without a live Postgres instance.
 
 ## Dependencies
 
 - Flask (API + Jinja2 template server)
 - PyYAML (frontmatter + meta.yaml parsing)
+- SQLAlchemy + Flask-SQLAlchemy + Flask-Migrate (PostgreSQL ORM + migrations)
+- psycopg2-binary (PostgreSQL driver)
 - Werkzeug ProxyFix (nginx reverse proxy support)
 - Jinja2 (prompt template rendering)
- - **LiteLLM client** — advanced routing, built-in retries, cost auditing
-- **No external search dependencies** — stdlib urllib for SearXNG
+- LiteLLM (unified LLM provider interface, retries, cost auditing)
+- Celery + redis-py (distributed task queue — worker optional, see Ticket 74)
+- tenacity (retry logic for LLM calls)

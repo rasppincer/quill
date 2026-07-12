@@ -3,6 +3,8 @@ const PIECE_ID = pieceData.piece_id;
 const CURRENT_STAGE = pieceData.current_stage;
 const PIECE_AGENT_SET = pieceData.piece_agent_set;
 const PIPELINE_ORDER = pieceData.pipeline_order;
+const PIECE_CHILDREN = pieceData.children || [];
+let SELECTED_PIECE_ID = PIECE_ID;
 let VIEWING_STAGE = CURRENT_STAGE;
 
 // ── Stage navigation ──────────────────────────────────────────────
@@ -20,6 +22,21 @@ async function navigateToStage(stage) {
     document.getElementById('viewing-stage-display').textContent = stage.charAt(0).toUpperCase() + stage.slice(1);
     document.getElementById('content-heading').textContent = `Stage Content — ${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
 
+    const CHAPTERED_STAGES = ["draft", "review", "revise", "humanize", "validate", "polish", "state"];
+    const isChaptered = CHAPTERED_STAGES.includes(stage) && PIECE_CHILDREN.length > 0;
+    const chapterTabs = document.getElementById('chapter-tabs');
+    if (chapterTabs) {
+        if (isChaptered) {
+            chapterTabs.style.display = 'flex';
+        } else {
+            chapterTabs.style.display = 'none';
+            SELECTED_PIECE_ID = PIECE_ID;
+            document.querySelectorAll('.chapter-tab').forEach(t => t.classList.remove('active'));
+            const parentTab = document.querySelector('.chapter-tab[data-chapter="parent"]');
+            if (parentTab) parentTab.classList.add('active');
+        }
+    }
+
     const promptTextarea = document.getElementById('prompt-editor');
     const contentTextarea = document.getElementById('content-editor');
     const jsonContent = document.getElementById('raw-json-content');
@@ -30,7 +47,7 @@ async function navigateToStage(stage) {
 
     // 1. Fetch Stage Content
     try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/stages/${stage}`);
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${SELECTED_PIECE_ID}/stages/${stage}`);
         const data = await resp.json();
 
         if (data.error) {
@@ -97,7 +114,7 @@ async function navigateToStage(stage) {
 
     // 2. Fetch Prompt
     try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/prompt/${stage}`);
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${SELECTED_PIECE_ID}/prompt/${stage}`);
         const data = await resp.json();
 
         if (data.error) {
@@ -585,7 +602,7 @@ async function saveContent() {
     saveStatus.style.color = 'var(--text-muted)';
 
     try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/stages/${VIEWING_STAGE}`, {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${SELECTED_PIECE_ID}/stages/${VIEWING_STAGE}`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ content })
@@ -634,7 +651,7 @@ async function executeStage() {
     function ts() { return new Date().toLocaleTimeString(); }
 
     try {
-        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/run-async`, {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${SELECTED_PIECE_ID}/run-async`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ stage: VIEWING_STAGE, custom_prompt: customPrompt })
@@ -653,7 +670,7 @@ async function executeStage() {
         appendLog(`<span style="color:var(--text-muted)">[${ts()}]</span> Connected. Run: ${runId}`);
 
         // Connect to SSE
-        const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/runs/${runId}/events`);
+        const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${SELECTED_PIECE_ID}/runs/${runId}/events`);
 
         eventSource.addEventListener('stage_start', function(e) {
             const d = JSON.parse(e.data);
@@ -866,3 +883,16 @@ async function generateAudio() {
         // Non-critical — ignore network errors on startup
     }
 })();
+
+function selectChapter(chapterId) {
+    if (chapterId === 'parent') {
+        SELECTED_PIECE_ID = PIECE_ID;
+    } else {
+        SELECTED_PIECE_ID = chapterId;
+    }
+    document.querySelectorAll('.chapter-tab').forEach(t => t.classList.remove('active'));
+    const tab = document.querySelector(`.chapter-tab[data-chapter="${chapterId}"]`);
+    if (tab) tab.classList.add('active');
+    
+    navigateToStage(VIEWING_STAGE);
+}

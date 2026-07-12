@@ -26,7 +26,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import Project, DocumentNode, StageState
+from .models import Project, DocumentNode, StageState, utc_now
 from .db import db_session
 
 logger = logging.getLogger(__name__)
@@ -276,7 +276,7 @@ class Piece:
                         project.created_at = datetime.strptime(self.created, "%Y-%m-%d")
                 except Exception:
                     pass
-                project.updated_at = datetime.utcnow()
+                project.updated_at = utc_now()
 
                 # Ensure DocumentNode exists for project root
                 node = session.query(DocumentNode).filter_by(id=self.id).first()
@@ -289,7 +289,7 @@ class Piece:
                     )
                     session.add(node)
                 node.title = self.title
-                node.updated_at = datetime.utcnow()
+                node.updated_at = utc_now()
             else:
                 # Child piece (chapter/scene)
                 node = session.query(DocumentNode).filter_by(id=self.id).first()
@@ -302,7 +302,7 @@ class Piece:
                     )
                     session.add(node)
                 node.title = self.title
-                node.updated_at = datetime.utcnow()
+                node.updated_at = utc_now()
 
             # Merge current_stage into stage_states if not already there
             stages_to_save = dict(self.stage_states)
@@ -319,7 +319,7 @@ class Piece:
                     session.add(st_state)
                 st_state.state = stage_state_val
                 st_state.loop_count = self.get_loop_count(stage_name)
-                st_state.updated_at = datetime.utcnow()
+                st_state.updated_at = utc_now()
 
                 # If this is the current stage, save the body
                 if stage_name == self.current_stage:
@@ -406,7 +406,7 @@ class Piece:
                 )
                 session.add(st_state)
             st_state.loop_count = count
-            st_state.updated_at = datetime.utcnow()
+            st_state.updated_at = utc_now()
             session.commit()
         except Exception as e:
             logger.error("Failed to set loop count in database for piece '%s' stage '%s': %s", self.id, stage, e)
@@ -447,7 +447,7 @@ class Piece:
                 project = session.query(Project).filter_by(id=self.id).first()
                 if project:
                     project.current_stage = next_stage
-                    project.updated_at = datetime.utcnow()
+                    project.updated_at = utc_now()
             
             st_state = session.query(StageState).filter_by(document_node_id=self.id, stage=next_stage).first()
             if not st_state:
@@ -456,7 +456,7 @@ class Piece:
                     stage=next_stage,
                 )
                 session.add(st_state)
-            st_state.updated_at = datetime.utcnow()
+            st_state.updated_at = utc_now()
             
             session.commit()
             logger.info("Advanced database to stage '%s'", next_stage)
@@ -538,7 +538,7 @@ class Piece:
                 st_state.decision = None
                 st_state.critique = None
                 st_state.loop_count = 0
-                st_state.updated_at = datetime.utcnow()
+                st_state.updated_at = utc_now()
             session.commit()
             logger.info("Superseded later stages in database for piece '%s'", self.id)
         except Exception as e:
@@ -605,7 +605,7 @@ class Piece:
                     session.add(st_state)
                 st_state.state = stage_state_val
                 st_state.loop_count = self.get_loop_count(stage_name)
-                st_state.updated_at = datetime.utcnow()
+                st_state.updated_at = utc_now()
             session.commit()
         except Exception as e:
             logger.error("Failed to save stage states to database for piece '%s': %s", self.id, e)
@@ -658,7 +658,7 @@ class Piece:
                 )
                 session.add(st_state)
             st_state.body = clean_content
-            st_state.updated_at = datetime.utcnow()
+            st_state.updated_at = utc_now()
             session.commit()
             logger.info("Wrote output to database for piece '%s' stage '%s'", self.id, stage)
         except Exception as e:
@@ -694,7 +694,7 @@ class Piece:
                 session.add(st_state)
             st_state.decision = decision_decision
             st_state.critique = decision_critique
-            st_state.updated_at = datetime.utcnow()
+            st_state.updated_at = utc_now()
             session.commit()
             logger.info("Wrote decision to database for piece '%s' stage '%s'", self.id, stage)
         except Exception as e:
@@ -732,7 +732,7 @@ class Piece:
                 session.add(st_state)
             st_state.decision = "advance"
             st_state.critique = content
-            st_state.updated_at = datetime.utcnow()
+            st_state.updated_at = utc_now()
             session.commit()
             logger.info("Wrote JSON output to database for piece '%s' stage '%s'", self.id, stage)
         except Exception as e:

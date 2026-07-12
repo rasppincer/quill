@@ -35,6 +35,24 @@ def client_with_piece(client, sample_piece, tmp_output, monkeypatch):
     return client
 
 
+@pytest.fixture(autouse=True)
+def mock_llm_client(request):
+    """Mock LLMClient globally for all app tests except TestRunAgent."""
+    if "TestRunAgent" in request.node.nodeid:
+        yield
+        return
+
+    with patch("quill.runner.LLMClient") as mock_cls:
+        mock_instance = MagicMock()
+        mock_instance.chat.return_value = (
+            '{"decision": "advance", "reason": "Mocked reason", '
+            '"critique": "Mocked critique", "content": "Mocked content"}'
+        )
+        mock_cls.return_value = mock_instance
+        yield
+
+
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------

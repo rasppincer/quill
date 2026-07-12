@@ -6,10 +6,16 @@ tracking of project metadata, stage status, metrics, and agent logs.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def utc_now() -> datetime:
+    """Return timezone-naive UTC datetime."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 
 class Base(DeclarativeBase):
@@ -34,9 +40,9 @@ class Project(Base):
     current_stage: Mapped[str] = mapped_column(String, default="brief")
     agent_set: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     trigger: Mapped[str] = mapped_column(String, default="on_advance")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
@@ -63,9 +69,9 @@ class DocumentNode(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     node_type: Mapped[str] = mapped_column(String, default="chapter")  # project | chapter | scene
     order_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
@@ -103,7 +109,7 @@ class StageState(Base):
     decision: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     critique: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
@@ -129,7 +135,7 @@ class Metrics(Base):
     type_token_ratio: Mapped[float] = mapped_column(Float, default=0.0)
     passive_voice_pct: Mapped[float] = mapped_column(Float, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
@@ -148,7 +154,7 @@ class AgentLog(Base):
     document_node_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("document_nodes.id", ondelete="CASCADE"), nullable=True
     )
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     stage: Mapped[str] = mapped_column(String, nullable=False)
     call_type: Mapped[str] = mapped_column(String, nullable=False)  # generate | agent | evaluate | research
     model: Mapped[Optional[str]] = mapped_column(String, nullable=True)

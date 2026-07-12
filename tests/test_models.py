@@ -218,3 +218,16 @@ def test_cascade_delete(db_session):
     assert db_session.query(StageState).count() == 0
     assert db_session.query(Metrics).count() == 0
     assert db_session.query(AgentLog).count() == 0
+
+
+def test_utc_now():
+    """Test the timezone-naive UTC datetime helper function."""
+    from quill.models import utc_now
+    from datetime import datetime, timezone
+    now = utc_now()
+    assert now.tzinfo is None
+    # Make sure it matches UTC time closely
+    utc_now_val = datetime.now(timezone.utc).replace(tzinfo=None)
+    diff = abs((now - utc_now_val).total_seconds())
+    assert diff < 5
+

@@ -33,7 +33,7 @@ def dashboard_piece(piece_id: str):
     progress = pipeline.progress(piece.current_stage)
 
     # Include metrics for current stage
-    stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
+    stage_file = piece.stage_file(piece.current_stage)
     metrics = maybe_recompute(stage_file)
 
     return render_template(

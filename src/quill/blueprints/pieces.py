@@ -250,7 +250,7 @@ def pieces_get(piece_id: str):
     d["progress"] = pipeline.progress(piece.current_stage)
 
     # Include metrics for current stage
-    stage_file = piece.stage_dir() / _stage_filename(piece.current_stage)
+    stage_file = piece.stage_file(piece.current_stage)
     d["metrics"] = maybe_recompute(stage_file)
 
     # Read body from stage file when piece.body is empty
@@ -505,7 +505,7 @@ def pieces_advance(piece_id: str):
     # in the DB.  If we call piece.save() with the stale DB body we would overwrite
     # the user's content.  Read the on-disk body first so the DB and file stay in sync.
     if not piece._is_legacy:
-        old_stage_file = piece.stage_dir() / _stage_filename(old_stage)
+        old_stage_file = piece.stage_file(old_stage)
         if old_stage_file.exists():
             _text = old_stage_file.read_text(encoding="utf-8")
             _m = _FRONTMATTER_RE.match(_text)
@@ -515,7 +515,7 @@ def pieces_advance(piece_id: str):
     # Advance: update meta.yaml to point to next stage
     piece.current_stage = next_stage
     # Only clear body if the next stage file doesn't already exist
-    next_stage_file = piece.stage_dir() / _stage_filename(next_stage)
+    next_stage_file = piece.stage_file(next_stage)
     if not next_stage_file.exists():
         piece.body = ""
     else:
@@ -526,7 +526,7 @@ def pieces_advance(piece_id: str):
     piece.save()
 
     # Compute metrics for the stage we just left (if it has content)
-    old_stage_file = piece.stage_dir() / _stage_filename(old_stage)
+    old_stage_file = piece.stage_file(old_stage)
     if old_stage_file.exists():
         maybe_recompute(old_stage_file)
 
@@ -537,8 +537,25 @@ def pieces_advance(piece_id: str):
         "progress": pipeline.progress(piece.current_stage),
     }
 
-    # If trigger is on_advance or auto, run agent on the new stage
-    if piece.trigger in ("on_advance", "auto"):
+    # If trigger is auto, start the full remaining chain asynchronously so the
+    # pipeline continues past the first stage (rather than stopping after the
+    # advance endpoint returns).  Return a run_id for SSE progress streaming.
+    # If trigger is on_advance, run only the new stage synchronously (one step).
+    if piece.trigger == "auto":
+        from ..run_manager import RunManager as _RunManager
+        agent_set = piece.resolved_agent_set
+        manager = _RunManager()
+        run_id = manager.start_run(
+            piece_id=piece_id,
+            stage=piece.current_stage,
+            agent_set=agent_set,
+            chain=True,
+        )
+        if run_id is None:
+            return jsonify({"error": f"Piece '{piece_id}' already has a running job"}), 409
+        result_data["run_id"] = run_id
+        result_data["chain"] = True
+    elif piece.trigger == "on_advance":
         from ..runner import StageRunner
         import uuid as _uuid
         agent_set = piece.resolved_agent_set
@@ -593,7 +610,7 @@ def pieces_reject(piece_id: str):
             for s in stages_to_clear:
                 del piece.stage_states[s]
                 # Clear stage content files
-                stage_file = piece.stage_dir() / _stage_filename(s)
+                stage_file = piece.stage_file(s)
                 if stage_file.exists():
                     # Write frontmatter only (preserve file, clear body)
                     meta = piece.to_frontmatter()
@@ -603,7 +620,7 @@ def pieces_reject(piece_id: str):
 
     # Load body from target stage file
     if not piece._is_legacy:
-        target_file = piece.stage_dir() / _stage_filename(target)
+        target_file = piece.stage_file(target)
         if target_file.exists():
             text = target_file.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)
@@ -635,7 +652,7 @@ def pieces_stage_navigate(piece_id: str, stage: str):
     if not piece.can_navigate(stage):
         return jsonify({"error": f"Stage '{stage}' has not yet been reached"}), 404
 
-    stage_file = piece.stage_dir() / _stage_filename(stage)
+    stage_file = piece.stage_file(stage)
     body = ""
     if stage_file.exists():
         text = stage_file.read_text(encoding="utf-8")
@@ -645,7 +662,7 @@ def pieces_stage_navigate(piece_id: str, stage: str):
     metrics = maybe_recompute(stage_file) if stage_file.exists() else None
 
     # Load raw JSON response if it exists
-    json_file = piece.stage_dir() / _stage_filename(stage, ".json")
+    json_file = piece.stage_dir() / _stage_filename(stage, ".json", loop_count=piece.get_loop_count(stage))
     raw_json = None
     if json_file.exists():
         try:
@@ -683,7 +700,7 @@ def pieces_stage_save(piece_id: str, stage: str):
 
     # Check if stage is fresh
     state = piece.get_stage_state(stage)
-    if state == "fresh" or not (piece.stage_dir() / _stage_filename(stage)).exists():
+    if state == "fresh" or not piece.stage_file(stage).exists():
         # Fresh stage: find the preceding stage to write to
         if stage in stage_order:
             idx = stage_order.index(stage)
@@ -696,7 +713,7 @@ def pieces_stage_save(piece_id: str, stage: str):
     else:
         target_stage = stage
 
-    target_file = piece.stage_dir() / _stage_filename(target_stage)
+    target_file = piece.stage_file(target_stage)
 
     # Save content with frontmatter
     if target_file.exists():

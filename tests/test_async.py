@@ -359,11 +359,11 @@ class TestRunChainEventEmission:
         results = runner.run_chain("chain-loop-piece", from_stage="review",
                                    output_dir=tmp_output, event_queue=q)
 
-        # Since it advanced successfully, loop counts should have been reset to 0
+        # Since it advanced successfully, loop counts should be preserved at the limit (2)
         from quill.piece import load_piece
         final_piece = load_piece(piece_dir)
-        assert final_piece.get_loop_count("review") == 0
-        assert final_piece.get_loop_count("revise") == 0
+        assert final_piece.get_loop_count("review") == 2
+        assert final_piece.get_loop_count("revise") == 2
         assert final_piece.current_stage == "done"
 
         # Verify the bypassed decision file exists and contains the correct reason

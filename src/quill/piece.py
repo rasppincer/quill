@@ -176,29 +176,6 @@ class Piece:
         """Get the file path for a specific stage."""
         stage = stage or self.current_stage
         loop_count = self.get_loop_count(stage)
-        
-        # If loop_count is 0, check if a looped version exists on disk
-        if loop_count == 0:
-            default_path = self.stage_dir() / _stage_filename(stage, loop_count=0)
-            if not default_path.exists():
-                d = self.stage_dir()
-                if d.exists():
-                    prefix = _get_stage_prefix(stage)
-                    stage_part = f"{prefix}_{stage}" if prefix else stage
-                    candidates = []
-                    for f in d.glob(f"{stage_part}.L*.md"):
-                        if f.name.endswith(".md") and not f.name.endswith((".decision.md", ".metrics.md", ".generate-prompt.md", ".evaluate-prompt.md")):
-                            stem = f.stem
-                            if ".L" in stem:
-                                try:
-                                    _, loop_str = stem.split(".L", 1)
-                                    val = int(loop_str)
-                                    candidates.append((val, f))
-                                except ValueError:
-                                    pass
-                    if candidates:
-                        return max(candidates, key=lambda x: x[0])[1]
-                        
         return self.stage_dir() / _stage_filename(stage, loop_count=loop_count)
 
     def list_stages(self) -> list[dict]:

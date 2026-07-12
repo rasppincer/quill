@@ -138,7 +138,7 @@ class ContextAssembler:
             if stage in stage_inputs:
                 for input_stage in stage_inputs[stage]:
                     input_stage_name = input_stage.replace(".md", "")
-                    fpath = stage_dir / _stage_filename(input_stage_name)
+                    fpath = stage_dir / _stage_filename(input_stage_name, loop_count=piece.get_loop_count(input_stage_name))
                     if fpath.exists():
                         text = fpath.read_text(encoding="utf-8")
                         m = _FRONTMATTER_RE.match(text)
@@ -150,12 +150,12 @@ class ContextAssembler:
                     idx = stage_order.index(stage)
                     if idx > 0:
                         prev_stage = stage_order[idx - 1]
-                        prev_file = stage_dir / _stage_filename(prev_stage)
+                        prev_file = stage_dir / _stage_filename(prev_stage, loop_count=piece.get_loop_count(prev_stage))
                         if prev_file.exists():
                             text = prev_file.read_text(encoding="utf-8")
                             m = _FRONTMATTER_RE.match(text)
                             inputs.append(
-                                f"=== {_stage_filename(prev_stage)} ===\n"
+                                f"=== {prev_file.name} ===\n"
                                 f"{text[m.end():] if m else text}"
                             )
 

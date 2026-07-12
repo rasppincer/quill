@@ -74,3 +74,31 @@ def test_read_inputs_does_not_inject_loop_artefacts(piece_with_stale_loop, monke
     assert "DECISION CRITIQUE CONTENT" not in result, (
         "read_inputs injected the decision critique — loop-back block not removed"
     )
+
+
+def test_read_inputs_resolves_looped_inputs(tmp_path):
+    from quill.piece import Piece
+    from quill.context_assembler import ContextAssembler
+    from quill.pipeline import Pipeline, Stage
+
+    # Setup a dummy piece with loops
+    piece = Piece(id="test_piece")
+    piece._path = tmp_path
+
+    # Write a loop count mapping to yaml instead of database mocking
+    meta_path = tmp_path / "meta.yaml"
+    meta_path.write_text("loops:\n  revise: 3\n  draft: 0\n")
+
+    # Write the stage files on disk
+    (tmp_path / "08_revise.L3.md").write_text("---\ntitle: Test\n---\nLooped revise content")
+
+    pipeline = Pipeline(
+        name="default",
+        stage_inputs={"humanize": ["revise.md"]},
+        stages={"humanize": Stage(key="humanize", name="Humanize")}
+    )
+
+    assembler = ContextAssembler()
+    content = assembler.read_inputs(piece, "humanize", pipeline)
+    assert "Looped revise content" in content
+

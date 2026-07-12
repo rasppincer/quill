@@ -4,4 +4,4 @@
 - [x] Task 2: Adapt Runner & Piece Mappings to the New Schema (commits 796c24a, review clean)
 - [x] Task 3: Create the Stateless WorkflowEngine (commits 13a70c8, review clean)
 - [x] Task 4: Implement HTTP Coordinator Callback Endpoint (commits 94ce6f3, review clean)
-- [ ] Task 5: Adapt Celery Tasks to Stateless Worker Execution
+- [x] Task 5: Adapt Celery Tasks to Stateless Worker Execution (commits 2726a62, review clean)

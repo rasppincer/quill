@@ -222,6 +222,97 @@ class TestStageSaveAPI:
         assert "content" in data
         assert "raw_json" in data
 
+    def test_save_child_stage_reassembles_parent(self, client, tmp_output):
+        import yaml
+        from quill.db import db_session
+        from quill.models import DocumentNode, StageState
+
+        db = db_session()
+
+        # 1. Setup parent piece
+        parent_id = "parent-proj"
+        parent_dir = tmp_output / parent_id
+        parent_dir.mkdir()
+        parent_meta = {
+            "id": parent_id,
+            "title": "Parent Project",
+            "genre": "fiction",
+            "current_stage": "draft",
+            "children": [f"{parent_id}-chapter-1", f"{parent_id}-chapter-2"],
+        }
+        (parent_dir / "meta.yaml").write_text(yaml.dump(parent_meta), encoding="utf-8")
+
+        from quill.models import Project
+        project = Project(id=parent_id, title="Parent Project")
+        db.add(project)
+
+        parent_node = DocumentNode(
+            id=parent_id,
+            project_id=parent_id,
+            title="Parent Project",
+            node_type="project",
+        )
+        db.add(parent_node)
+
+        parent_state = StageState(
+            document_node_id=parent_id,
+            stage="draft",
+            status="completed",
+            output_text="Initial parent content",
+        )
+        db.add(parent_state)
+
+        # 2. Setup child pieces
+        for i in [1, 2]:
+            child_id = f"{parent_id}-chapter-{i}"
+            child_dir = tmp_output / child_id
+            child_dir.mkdir()
+            child_meta = {
+                "id": child_id,
+                "title": f"Chapter {i}",
+                "genre": "fiction",
+                "current_stage": "draft",
+                "parent": parent_id,
+            }
+            (child_dir / "meta.yaml").write_text(yaml.dump(child_meta), encoding="utf-8")
+            (child_dir / "05_draft.md").write_text(f"---\nid: {child_id}\n---\nChapter {i} initial draft", encoding="utf-8")
+
+            child_node = DocumentNode(
+                id=child_id,
+                project_id=parent_id,
+                title=f"Chapter {i}",
+                node_type="chapter",
+                parent_id=parent_id,
+            )
+            db.add(child_node)
+
+            child_state = StageState(
+                document_node_id=child_id,
+                stage="draft",
+                status="completed",
+                output_text=f"Chapter {i} initial draft",
+            )
+            db.add(child_state)
+
+        db.commit()
+
+        # 3. Put new content to Chapter 1
+        resp = client.put(f"/api/pieces/{parent_id}-chapter-1/stages/draft", json={
+            "content": "Chapter 1 updated draft content"
+        })
+        assert resp.status_code == 200
+
+        # 4. Verify parent's draft file contains updated chapter content
+        parent_draft_file = parent_dir / "05_draft.md"
+        assert parent_draft_file.exists()
+        parent_text = parent_draft_file.read_text(encoding="utf-8")
+        assert "Chapter 1 updated draft content" in parent_text
+        assert "Chapter 2 initial draft" in parent_text
+
+        # 5. Verify parent's DB stage state body is updated
+        updated_parent_state = db.query(StageState).filter_by(document_node_id=parent_id, stage="draft").first()
+        assert "Chapter 1 updated draft content" in updated_parent_state.body
+
 
 # ---------------------------------------------------------------------------
 # Model config

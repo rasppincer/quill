@@ -124,10 +124,25 @@ def test_stage_state_relationships(db_session):
 
     # Test compatibility aliases
     assert state.body == "This is output content."
-    assert state.critique == "This is output content."
-    assert state.decision == "This is output content."
-    assert state.state == "processing"
+    assert state.critique is None
+    assert state.decision is None
+    assert state.state == "generating"
     assert state.loop_count == 2
+
+    # Test JSON compatibility aliases
+    json_state = StageState(
+        document_node_id="test-node",
+        stage="outline",
+        status="completed",
+        iteration=2,
+        output_text='{"body": "outline body", "decision": "advance", "critique": "good"}'
+    )
+    assert json_state.body == "outline body"
+    assert json_state.decision == "advance"
+    assert json_state.critique == "good"
+    assert json_state.state == "ready"
+    assert json_state.loop_count == 1
+
 
 
 

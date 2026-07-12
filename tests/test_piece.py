@@ -465,3 +465,38 @@ class TestVersionedFiles:
         assert json_f.exists()
         assert '{"status": "ok"}' in json_f.read_text(encoding="utf-8")
 
+
+class TestPieceStageStatusTranslation:
+    """Test Piece stage state status translations to/from DB."""
+
+    def test_piece_stage_status_translation(self):
+        from quill.piece import Piece
+        from quill.models import StageState
+        from quill.db import db_session
+
+        session = db_session()
+
+        # 1. Create a piece and check get_stage_state/set_stage_state mapping
+        p = Piece(id="trans-piece", title="Translation Test")
+        
+        # Test default
+        assert p.get_stage_state("draft") == "fresh"
+
+        # Set to generating
+        p.set_stage_state("draft", "generating")
+        assert p.get_stage_state("draft") == "generating"
+
+        # Verify DB StageState status is mapping correctly
+        st = session.query(StageState).filter_by(document_node_id="trans-piece", stage="draft").first()
+        assert st is not None
+        assert st.status == "processing"
+
+        # Set to completed
+        p.set_stage_state("draft", "completed")
+        assert p.get_stage_state("draft") == "completed"
+
+        st = session.query(StageState).filter_by(document_node_id="trans-piece", stage="draft").first()
+        assert st.status == "completed"
+
+
+

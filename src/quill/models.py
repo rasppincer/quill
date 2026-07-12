@@ -115,36 +115,81 @@ class StageState(Base):
     )
 
     # Backward compatibility properties mapping old columns to new columns
+    def _get_json_data(self) -> dict:
+        if self.output_text and self.output_text.strip().startswith("{") and self.output_text.strip().endswith("}"):
+            try:
+                import json
+                data = json.loads(self.output_text)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+        return {}
+
+    def _set_json_value(self, key: str, value: Optional[str]):
+        data = self._get_json_data()
+        if not data and self.output_text and not (self.output_text.strip().startswith("{") and self.output_text.strip().endswith("}")):
+            # Convert existing plain text to "body" or similar depending on context
+            # By default, treat it as "body"
+            data["body"] = self.output_text
+
+        if value is None:
+            data.pop(key, None)
+        else:
+            data[key] = value
+
+        if not data:
+            self.output_text = None
+        elif len(data) == 1 and "body" in data:
+            self.output_text = data["body"]
+        else:
+            import json
+            self.output_text = json.dumps(data)
+
     @property
     def body(self) -> Optional[str]:
+        data = self._get_json_data()
+        if data:
+            return data.get("body")
         return self.output_text
 
     @body.setter
     def body(self, value: Optional[str]):
-        self.output_text = value
+        self._set_json_value("body", value)
 
     @property
     def critique(self) -> Optional[str]:
-        return self.output_text
+        data = self._get_json_data()
+        if data:
+            return data.get("critique")
+        return None
 
     @critique.setter
     def critique(self, value: Optional[str]):
-        self.output_text = value
+        self._set_json_value("critique", value)
 
     @property
     def decision(self) -> Optional[str]:
-        return self.output_text
+        data = self._get_json_data()
+        if data:
+            return data.get("decision")
+        return None
 
     @decision.setter
     def decision(self, value: Optional[str]):
-        self.output_text = value
+        self._set_json_value("decision", value)
+
+
+
 
     @property
     def state(self) -> str:
         if self.status == "completed":
             return "ready"
         if self.status == "new":
-            return "empty"
+            return "fresh"
+        if self.status == "processing":
+            return "generating"
         return self.status
 
     @state.setter
@@ -153,6 +198,8 @@ class StageState(Base):
             self.status = "completed"
         elif value in ("empty", "fresh", "new"):
             self.status = "new"
+        elif value in ("generating", "processing"):
+            self.status = "processing"
         else:
             self.status = value
 

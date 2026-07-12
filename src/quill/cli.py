@@ -69,7 +69,7 @@ def sync_legacy_command(force: bool):
         # 1. Safety check: skip if actively generating in the database
         active_generating = (
             session.query(StageState)
-            .filter_by(document_node_id=piece_id, state="generating")
+            .filter(StageState.document_node_id == piece_id, StageState.status == "processing")
             .first()
         )
         if active_generating:

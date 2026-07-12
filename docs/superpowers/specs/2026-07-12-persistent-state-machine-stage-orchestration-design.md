@@ -16,7 +16,12 @@ Modify `StageState` to act as a historical and generic record of stage execution
 
 Create a stateless workflow manager class `WorkflowEngine`:
 * Expose `evaluate_and_dispatch(session, node_id, completed_stage)` to determine the next step in the pipeline.
-* Implement sequential step evaluation for parent-child node relationships (capping the hierarchy at 3 levels max: Project -> Chapter -> Scene).
+* Implement sequential step evaluation for parent-child node relationships, capping the hierarchy at **2 levels max** (`Project` -> `Chapter`).
+* Support three configurable revision loop strategies:
+  * `full`: Re-runs all chapters sequentially on transition back to a generative stage.
+  * `surgical`: Re-runs only the chapters flagged by the review/critique.
+  * `cascade` (Default): Re-runs the earliest flagged chapter and all downstream chapters to maintain context continuity.
+* **Global Critique Fallback:** If the parent review does not identify specific chapters (or outputs general bulk-text feedback), the engine defaults the target to Chapter 1, effectively running a `full` sequential rewrite.
 * Implement sliding context assembly by fetching previous chapter outputs ($N-1$), NarrativeState summaries ($1 \dots N-2$), outline sketches ($N+1, N+2$), and parent briefs from the database.
 * Delegate execution by enqueuing a Celery task with a coordinator callback URL argument.
 
@@ -38,9 +43,9 @@ Refactor Celery task executions:
 ## Verification Plan
 
 ### Automated Tests
-* Create unit tests to verify stateless transition evaluations:
-  * When a child node (Chapter 1) completes stage `S`, verify it enqueues a task for Chapter 2 with correct sliding context.
-  * When the final child node (Chapter $N$) completes stage `S`, verify it triggers parent stage completion, concatenates outputs, and transitions parent state.
+* Create unit tests to verify stateless transition evaluations under the different revision strategies (`full`, `surgical`, `cascade`):
+  * Verify that a global critique triggers a full cascade starting from Chapter 1.
+  * Verify that a targeted critique on Chapter 2 under `cascade` strategy triggers Chapter 2 & 3, leaving Chapter 1 untouched.
   * Verify that a failed stage execution can be resumed, restarting exactly from the failed chapter.
   * Verify that setting `is_active=False` preserves previous iteration history in the database.
 

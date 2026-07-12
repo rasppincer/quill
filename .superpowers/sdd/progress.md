@@ -1,5 +1,7 @@
-# Frontend-related Behave Tests Migration Progress Ledger
+# Persistent State-Based Stage Orchestration Progress Ledger
 
-- [x] Task 1: Create Frontend Unit Tests for Agent Option Injection (piece_agents.test.js) (commits cb4a352..cb4a352, review clean)
-- [x] Task 2: Create Frontend Unit Tests for EventSource (SSE) Handlers (piece_sse.test.js) (commits cb4a352..3efa791, review clean)
-- [ ] Task 3: Remove BDD Scenarios and Run Full Verification
+- [x] Task 1: Update Database Model and Generate Alembic Migration (commits 3cafba5, review clean)
+- [ ] Task 2: Adapt Runner & Piece Mappings to the New Schema
+- [ ] Task 3: Create the Stateless WorkflowEngine
+- [ ] Task 4: Implement HTTP Coordinator Callback Endpoint
+- [ ] Task 5: Adapt Celery Tasks to Stateless Worker Execution

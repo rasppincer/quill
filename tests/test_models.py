@@ -101,11 +101,12 @@ def test_stage_state_relationships(db_session):
     stage_state = StageState(
         document_node_id="test-node",
         stage="draft",
-        state="generating",
-        loop_count=2,
-        body="This is draft content.",
-        decision="loop_back",
-        critique="Needs more depth.",
+        status="processing",
+        iteration=3,
+        output_text="This is output content.",
+        prompt_template_path="path/to/template.md",
+        system_prompt="sys",
+        user_prompt="usr"
     )
     db_session.add(stage_state)
     db_session.commit()
@@ -114,11 +115,20 @@ def test_stage_state_relationships(db_session):
     assert len(retrieved_node.stage_states) == 1
     state = retrieved_node.stage_states[0]
     assert state.stage == "draft"
-    assert state.state == "generating"
+    assert state.status == "processing"
+    assert state.iteration == 3
+    assert state.output_text == "This is output content."
+    assert state.prompt_template_path == "path/to/template.md"
+    assert state.system_prompt == "sys"
+    assert state.user_prompt == "usr"
+
+    # Test compatibility aliases
+    assert state.body == "This is output content."
+    assert state.critique == "This is output content."
+    assert state.decision == "This is output content."
+    assert state.state == "processing"
     assert state.loop_count == 2
-    assert state.body == "This is draft content."
-    assert state.decision == "loop_back"
-    assert state.critique == "Needs more depth."
+
 
 
 def test_metrics_retrieval(db_session):
@@ -230,4 +240,31 @@ def test_utc_now():
     utc_now_val = datetime.now(timezone.utc).replace(tzinfo=None)
     diff = abs((now - utc_now_val).total_seconds())
     assert diff < 5
+
+
+def test_stage_state_persistent_fields(db_session):
+    from quill.models import StageState
+    state = StageState(
+        document_node_id="test-project",
+        stage="draft",
+        iteration=2,
+        is_active=True,
+        status="processing",
+        prompt_template_path="default/draft.prompt.md",
+        system_prompt="system",
+        user_prompt="user",
+        output_text="output"
+    )
+    db_session.add(state)
+    db_session.commit()
+    
+    saved = db_session.query(StageState).filter_by(document_node_id="test-project").first()
+    assert saved.iteration == 2
+    assert saved.is_active is True
+    assert saved.status == "processing"
+    assert saved.prompt_template_path == "default/draft.prompt.md"
+    assert saved.system_prompt == "system"
+    assert saved.user_prompt == "user"
+    assert saved.output_text == "output"
+
 

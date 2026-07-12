@@ -94,7 +94,7 @@ class DocumentNode(Base):
 
 
 class StageState(Base):
-    """The workflow state, loop counts, content, and decisions for each stage of a DocumentNode."""
+    """The workflow state, content, and inputs/outputs for a specific iteration of a stage."""
 
     __tablename__ = "stage_states"
 
@@ -102,18 +102,71 @@ class StageState(Base):
     document_node_id: Mapped[str] = mapped_column(
         String, ForeignKey("document_nodes.id", ondelete="CASCADE"), nullable=False
     )
-    stage: Mapped[str] = mapped_column(String, nullable=False)  # brief | outline | draft | revise
-    state: Mapped[str] = mapped_column(String, default="empty")  # empty | generating | ready | superseded
-    loop_count: Mapped[int] = mapped_column(Integer, default=0)
-    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    decision: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    critique: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stage: Mapped[str] = mapped_column(String, nullable=False)
+    iteration: Mapped[int] = mapped_column(Integer, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String, default="new")  # new | processing | completed | failed
+    prompt_template_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utc_now, onupdate=utc_now
     )
 
+    # Backward compatibility properties mapping old columns to new columns
+    @property
+    def body(self) -> Optional[str]:
+        return self.output_text
+
+    @body.setter
+    def body(self, value: Optional[str]):
+        self.output_text = value
+
+    @property
+    def critique(self) -> Optional[str]:
+        return self.output_text
+
+    @critique.setter
+    def critique(self, value: Optional[str]):
+        self.output_text = value
+
+    @property
+    def decision(self) -> Optional[str]:
+        return self.output_text
+
+    @decision.setter
+    def decision(self, value: Optional[str]):
+        self.output_text = value
+
+    @property
+    def state(self) -> str:
+        if self.status == "completed":
+            return "ready"
+        if self.status == "new":
+            return "empty"
+        return self.status
+
+    @state.setter
+    def state(self, value: str):
+        if value in ("ready", "completed"):
+            self.status = "completed"
+        elif value in ("empty", "fresh", "new"):
+            self.status = "new"
+        else:
+            self.status = value
+
+    @property
+    def loop_count(self) -> int:
+        return max(0, self.iteration - 1)
+
+    @loop_count.setter
+    def loop_count(self, value: int):
+        self.iteration = value + 1
+
     # Relationships
     document_node: Mapped[DocumentNode] = relationship("DocumentNode", back_populates="stage_states")
+
 
 
 class Metrics(Base):

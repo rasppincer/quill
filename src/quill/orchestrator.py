@@ -338,7 +338,11 @@ class Orchestrator:
 
             # Store full text for close neighbor context
             if result.decision != "error":
-                output_file = child_dir / _stage_filename(stage)
+                try:
+                    child_piece = load_piece(child_dir)
+                    output_file = child_piece.stage_file(stage)
+                except Exception:
+                    output_file = child_dir / _stage_filename(stage)
                 if output_file.exists():
                     prior_full_texts[i] = self._strip_frontmatter(
                         output_file.read_text(encoding="utf-8")
@@ -625,16 +629,43 @@ class Orchestrator:
             stage: pipeline stage whose outputs to concatenate
             base: output directory
         """
-        from .piece import _stage_filename
+        from .piece import _stage_filename, load_piece
 
         if not child_ids:
             return
 
-        stage_file = _stage_filename(stage)
+        parent_id = child_ids[0].rsplit("-chapter-", 1)[0]
+        parent_dir = base / parent_id
+
+        if parent_dir.exists():
+            try:
+                parent_piece = load_piece(parent_dir)
+                loop_count = parent_piece.get_loop_count(stage)
+            except Exception:
+                loop_count = 0
+        else:
+            try:
+                child_dir = base / child_ids[0]
+                child_piece = load_piece(child_dir)
+                loop_count = child_piece.get_loop_count(stage)
+            except Exception:
+                loop_count = 0
+
+        stage_file = _stage_filename(stage, loop_count=loop_count)
         parts = []
 
         for child_id in child_ids:
-            child_file = base / child_id / stage_file
+            child_dir = base / child_id
+            child_file = None
+            if child_dir.exists():
+                try:
+                    child_piece = load_piece(child_dir)
+                    child_file = child_piece.stage_file(stage)
+                except Exception:
+                    pass
+            if child_file is None:
+                child_file = child_dir / stage_file
+
             if child_file.exists():
                 text = child_file.read_text(encoding="utf-8")
                 # Strip frontmatter
@@ -646,13 +677,6 @@ class Orchestrator:
         if not parts:
             return
 
-        # Write assembled output to parent (at base level)
-        # The parent piece directory is the base itself for child pieces
-        # But the parent's own directory is one level up from children
-        # For now, write to the parent piece directory
-        # (parent_id is derived from child_id pattern: parent-chapter-N)
-        parent_id = child_ids[0].rsplit("-chapter-", 1)[0]
-        parent_dir = base / parent_id
         if not parent_dir.exists():
             parent_dir.mkdir(parents=True, exist_ok=True)
 

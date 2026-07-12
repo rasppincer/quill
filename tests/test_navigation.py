@@ -160,3 +160,36 @@ class TestSupersession:
         piece = load_piece(d)
         assert piece.get_stage_state("draft") == "fresh"
         assert piece.current_stage == "outline"
+
+
+def test_workflow_callback_endpoint(client):
+    """Test the workflow callback endpoint updates status and dispatches."""
+    from quill.db import db_session
+    from quill.models import Project, DocumentNode, StageState
+    from unittest.mock import patch
+
+    session = db_session()
+    # Setup node in DB
+    project = Project(id="callback-proj", title="Callback Project", current_stage="brief")
+    node = DocumentNode(id="callback-node", project_id="callback-proj", node_type="project", title="Node")
+    st = StageState(document_node_id="callback-node", stage="brief", status="processing")
+    session.add_all([project, node, st])
+    session.commit()
+
+    with patch("quill.engine.WorkflowEngine.evaluate_and_dispatch") as mock_eval:
+        response = client.post("/api/workflow/callback", json={
+            "node_id": "callback-node",
+            "stage": "brief",
+            "status": "completed"
+        })
+        assert response.status_code == 200
+        assert response.get_json() == {"status": "ok"}
+        
+        # Verify status updated
+        session.expire_all()
+        st_updated = session.query(StageState).filter_by(document_node_id="callback-node", stage="brief").first()
+        assert st_updated.status == "completed"
+        
+        # Verify evaluate_and_dispatch called
+        mock_eval.assert_called_once()
+

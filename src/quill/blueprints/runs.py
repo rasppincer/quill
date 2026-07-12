@@ -324,3 +324,41 @@ def pieces_interrupt(piece_id: str):
         "trigger": "on_advance",
         "status": "interrupt_requested",
     })
+
+
+@bp.route("/api/workflow/callback", methods=["POST"])
+def workflow_callback():
+    """Centrally coordinate workflow callback from Celery tasks."""
+    data = request.get_json(silent=True) or {}
+    node_id = data.get("node_id")
+    stage = data.get("stage")
+    status = data.get("status")
+
+    if not node_id or not stage:
+        return jsonify({"error": "Missing node_id or stage"}), 400
+
+    from ..db import db_session
+    from ..engine import workflow_engine
+    
+    session = db_session()
+    try:
+        from ..models import StageState
+        st = session.query(StageState).filter_by(document_node_id=node_id, stage=stage).first()
+        if st:
+            if status == "completed":
+                st.status = "completed"
+            elif status == "failed":
+                st.status = "failed"
+            session.commit()
+
+        workflow_engine.evaluate_and_dispatch(session, node_id, stage)
+        session.commit()
+    except Exception as e:
+        logger.error("Error in workflow callback for node '%s' stage '%s': %s", node_id, stage, e)
+        session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db_session.remove()
+
+    return jsonify({"status": "ok"}), 200
+

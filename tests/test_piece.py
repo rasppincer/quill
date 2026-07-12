@@ -438,6 +438,31 @@ class TestVersionedFiles:
         p.set_loop_count("draft", 2)
         assert p.stage_file("draft").name == "05_draft.L2.md"
 
+    def test_piece_stage_file_fallback_highest_loop(self, tmp_output):
+        """Test Piece.stage_file falls back to highest loop count file when default is missing."""
+        p = Piece(
+            id="v-piece-fallback", title="V Fallback", genre="fiction", current_stage="revise",
+            _path=tmp_output / "v-piece-fallback"
+        )
+        p.save()
+        
+        # Write loop-versioned files directly onto disk
+        p.stage_dir().mkdir(exist_ok=True, parents=True)
+        # Unlink the default unversioned file created by p.save()
+        (p.stage_dir() / "08_revise.md").unlink(missing_ok=True)
+        (p.stage_dir() / "08_revise.L1.md").write_text("L1 content", encoding="utf-8")
+        (p.stage_dir() / "08_revise.L3.md").write_text("L3 content", encoding="utf-8")
+        (p.stage_dir() / "08_revise.L2.md").write_text("L2 content", encoding="utf-8")
+        
+        # When loop_count is 0, it should fallback to L3 since 08_revise.md doesn't exist
+        p.set_loop_count("revise", 0)
+        assert p.stage_file("revise").name == "08_revise.L3.md"
+        
+        # If default 08_revise.md does exist, it should not fallback
+        (p.stage_dir() / "08_revise.md").write_text("Default content", encoding="utf-8")
+        assert p.stage_file("revise").name == "08_revise.md"
+
+
     def test_write_stage_outputs_versioned(self, tmp_output):
         """Test writing output, decision, and JSON creates versioned files when loop_count > 0."""
         p = Piece(

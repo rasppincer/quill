@@ -485,10 +485,10 @@ class Orchestrator:
                 f"```yaml\n{merged.to_yaml()}```"
             )
 
-        from .agent import AGENTS_DIR
-        template_path = AGENTS_DIR / self.agent_set / "chapter_brief.prompt.md"
+        from .agent import AGENTS_DIR, get_prompt_filename
+        template_path = AGENTS_DIR / self.agent_set / get_prompt_filename("chapter_brief")
         if not template_path.exists():
-            template_path = AGENTS_DIR / "default" / "chapter_brief.prompt.md"
+            template_path = AGENTS_DIR / "default" / get_prompt_filename("chapter_brief")
 
         template = template_path.read_text(encoding="utf-8")
         structure_body = self._strip_frontmatter(structure_text)

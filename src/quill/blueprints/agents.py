@@ -144,7 +144,7 @@ def agents_for_stage(stage: str):
     result = []
     for d in sorted(_agent_mod.AGENTS_DIR.iterdir()):
         if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
-            prompt_file = d / f"{stage}.prompt.md"
+            prompt_file = d / _agent_mod.get_prompt_filename(stage)
             if prompt_file.exists():
                 cfg = yaml.safe_load((d / "config.yaml").read_text()) or {}
                 result.append({
@@ -201,10 +201,14 @@ def agents_update_config(agent_set: str):
 @bp.route("/api/agents/<agent_set>/<stage>/prompt", methods=["GET"])
 def agents_get_prompt(agent_set: str, stage: str):
     """Get prompt template for a stage."""
-    prompt_file = _agent_mod.AGENTS_DIR / agent_set / f"{stage}.prompt.md"
+    prompt_file = _agent_mod.AGENTS_DIR / agent_set / _agent_mod.get_prompt_filename(stage)
     if not prompt_file.exists():
         return jsonify({"error": f"Prompt not found"}), 404
-    return jsonify({"stage": stage, "content": prompt_file.read_text(encoding="utf-8")})
+    return jsonify({
+        "stage": stage,
+        "filename": prompt_file.name,
+        "content": prompt_file.read_text(encoding="utf-8")
+    })
 
 
 @bp.route("/api/agents/<agent_set>/<stage>/prompt", methods=["PUT"])
@@ -215,7 +219,7 @@ def agents_update_prompt(agent_set: str, stage: str):
     if not content:
         return jsonify({"error": "Missing 'content'"}), 400
 
-    prompt_file = _agent_mod.AGENTS_DIR / agent_set / f"{stage}.prompt.md"
+    prompt_file = _agent_mod.AGENTS_DIR / agent_set / _agent_mod.get_prompt_filename(stage)
     if not prompt_file.parent.exists():
         return jsonify({"error": f"Agent set '{agent_set}' not found"}), 404
 

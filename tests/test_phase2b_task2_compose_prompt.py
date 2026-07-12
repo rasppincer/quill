@@ -43,7 +43,8 @@ def piece_for_compose(tmp_output, tmp_agents, monkeypatch):
 
     # Add structure prompt to the non-fiction agent set in tmp_agents
     nonfiction_dir = tmp_agents / "non-fiction"
-    (nonfiction_dir / "structure.prompt.md").write_text(
+    from quill.agent import get_prompt_filename
+    (nonfiction_dir / get_prompt_filename("structure")).write_text(
         "# Structure\n\n{{CONTENT}}\n", encoding="utf-8"
     )
     # Ensure config.yaml lists structure

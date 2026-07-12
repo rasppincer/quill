@@ -190,12 +190,13 @@ class TestAgentsForStage:
     def test_all_flavors_for_stage_with_all_prompts(self, tmp_agents, monkeypatch):
         """Stage where all flavors have a prompt returns all."""
         monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+        from quill.agent import get_prompt_filename
 
         # All three fixtures have review.prompt.md
         result = []
         for d in sorted(tmp_agents.iterdir()):
             if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
-                prompt_file = d / "review.prompt.md"
+                prompt_file = d / get_prompt_filename("review")
                 if prompt_file.exists():
                     result.append(d.name)
 
@@ -206,13 +207,14 @@ class TestAgentsForStage:
     def test_flavor_excluded_when_prompt_missing(self, tmp_agents, monkeypatch):
         """Flavor without a prompt for the requested stage is excluded."""
         monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+        from quill.agent import get_prompt_filename
 
         # non-fiction has no outline.prompt.md — must not appear
         # default also has no outline.prompt.md in the fixture
         result = []
         for d in sorted(tmp_agents.iterdir()):
             if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
-                prompt_file = d / "outline.prompt.md"
+                prompt_file = d / get_prompt_filename("outline")
                 if prompt_file.exists():
                     result.append(d.name)
 
@@ -223,11 +225,12 @@ class TestAgentsForStage:
     def test_flavor_excluded_for_draft(self, tmp_agents, monkeypatch):
         """non-fiction without draft.prompt.md is excluded from draft stage."""
         monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+        from quill.agent import get_prompt_filename
 
         result = []
         for d in sorted(tmp_agents.iterdir()):
             if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
-                prompt_file = d / "draft.prompt.md"
+                prompt_file = d / get_prompt_filename("draft")
                 if prompt_file.exists():
                     result.append(d.name)
 
@@ -238,9 +241,10 @@ class TestAgentsForStage:
     def test_newly_added_prompt_makes_flavor_visible(self, tmp_agents, monkeypatch):
         """Adding a missing prompt file makes the flavor appear for that stage."""
         monkeypatch.setattr("quill.agent.AGENTS_DIR", tmp_agents)
+        from quill.agent import get_prompt_filename
 
         # Verify non-fiction is NOT visible for outline
-        prompt_file = tmp_agents / "non-fiction" / "outline.prompt.md"
+        prompt_file = tmp_agents / "non-fiction" / get_prompt_filename("outline")
         assert not prompt_file.exists()
 
         # Add the prompt
@@ -250,7 +254,7 @@ class TestAgentsForStage:
         result = []
         for d in sorted(tmp_agents.iterdir()):
             if d.is_dir() and (d / "config.yaml").exists() and d.name != "__pycache__":
-                if (d / "outline.prompt.md").exists():
+                if (d / get_prompt_filename("outline")).exists():
                     result.append(d.name)
 
         assert "non-fiction" in result

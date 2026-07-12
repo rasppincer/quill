@@ -75,7 +75,7 @@
                 html += '<div class="section" style="margin-top:12px;cursor:pointer" onclick="window.editPrompt(\'' + p.stage + '\')">';
                 html += '<div style="display:flex;justify-content:space-between;align-items:center">';
                 html += '<div><span style="color:var(--text-muted);font-size:12px;margin-right:8px">' + (i+1) + '.</span><strong>' + esc(p.title) + '</strong>';
-                html += '<span style="color:var(--text-muted);font-size:12px;margin-left:8px">' + p.stage + '.prompt.md · ' + p.length + ' chars</span></div>';
+                html += '<span style="color:var(--text-muted);font-size:12px;margin-left:8px">' + (p.filename || (p.stage + '.prompt.md')) + ' · ' + p.length + ' chars</span></div>';
                 html += '<span style="color:var(--accent-blue);font-size:13px">Edit →</span>';
                 html += '</div></div>';
             });
@@ -88,7 +88,7 @@
         fetchJson(BASE + '/' + currentSet + '/' + stage + '/prompt').then(function(data) {
             document.getElementById('agent-detail').style.display = 'none';
             document.getElementById('prompt-editor').style.display = 'block';
-            document.getElementById('editor-title').textContent = currentSet + ' / ' + stage + '.prompt.md';
+            document.getElementById('editor-title').textContent = currentSet + ' / ' + (data.filename || (stage + '.prompt.md'));
             document.getElementById('prompt-content').value = data.content || '';
             document.getElementById('save-status').textContent = '';
         });

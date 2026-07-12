@@ -689,10 +689,10 @@ class TestChapterBriefGenerator:
         assert "suspicious" in prompt or "Aris" in prompt
 
     def test_brief_prompt_template_exists(self):
-        """All 3 flavors should have chapter_brief.prompt.md."""
+        """All 3 flavors should have 00_chapter_brief.prompt.md."""
         from pathlib import Path
         for flavor in ["default", "fiction", "non-fiction"]:
-            path = Path(f"agents/{flavor}/chapter_brief.prompt.md")
+            path = Path(f"agents/{flavor}/00_chapter_brief.prompt.md")
             assert path.exists(), f"Missing {path}"
 
 

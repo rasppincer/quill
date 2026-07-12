@@ -306,12 +306,13 @@ class TestRunChainEventEmission:
 
         # Write prompt templates in temporary default agent set directory
         default_dir = tmp_agents / "default"
-        (default_dir / "review_decision.prompt.md").write_text("# Review Decision\n{{CONTENT}}\n")
-        (default_dir / "validate_decision.prompt.md").write_text("# Validate Decision\n{{CONTENT}}\n")
-        (default_dir / "humanize.prompt.md").write_text("# Humanize\n{{CONTENT}}\n")
-        (default_dir / "validate.prompt.md").write_text("# Validate\n{{CONTENT}}\n")
-        (default_dir / "polish.prompt.md").write_text("# Polish\n{{CONTENT}}\n")
-        (default_dir / "state.prompt.md").write_text("# State\n{{CONTENT}}\n")
+        from quill.agent import get_prompt_filename
+        (default_dir / get_prompt_filename("review_decision")).write_text("# Review Decision\n{{CONTENT}}\n")
+        (default_dir / get_prompt_filename("validate_decision")).write_text("# Validate Decision\n{{CONTENT}}\n")
+        (default_dir / get_prompt_filename("humanize")).write_text("# Humanize\n{{CONTENT}}\n")
+        (default_dir / get_prompt_filename("validate")).write_text("# Validate\n{{CONTENT}}\n")
+        (default_dir / get_prompt_filename("polish")).write_text("# Polish\n{{CONTENT}}\n")
+        (default_dir / get_prompt_filename("state")).write_text("# State\n{{CONTENT}}\n")
 
         # Update default config.yaml to register these stages
         cfg = yaml.safe_load((default_dir / "config.yaml").read_text())

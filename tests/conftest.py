@@ -76,12 +76,13 @@ def tmp_agents(tmp_path):
     )
 
     # Prompt templates
-    (default_dir / "review.prompt.md").write_text(
+    from quill.agent import get_prompt_filename
+    (default_dir / get_prompt_filename("review")).write_text(
         "# Review Agent\n\nReview this:\n{{CONTENT}}\n\n"
         'Respond with ```json\n{"decision": "advance", "critique": "..."}\n```',
         encoding="utf-8",
     )
-    (default_dir / "revise.prompt.md").write_text(
+    (default_dir / get_prompt_filename("revise")).write_text(
         "# Revise Agent\n\nRevise this:\n{{CONTENT}}\n\n"
         'Revised text here.\n\n```json\n{"decision": "advance", "critique": "..."}\n```',
         encoding="utf-8",
@@ -107,7 +108,7 @@ def tmp_agents(tmp_path):
         yaml.dump(fiction_cfg, default_flow_style=False), encoding="utf-8"
     )
     for stage in ("outline", "draft", "review", "revise"):
-        (fiction_dir / f"{stage}.prompt.md").write_text(
+        (fiction_dir / get_prompt_filename(stage)).write_text(
             f"# {stage.title()} Agent\n\n{{{{CONTENT}}}}\n",
             encoding="utf-8",
         )
@@ -130,7 +131,7 @@ def tmp_agents(tmp_path):
         yaml.dump(nonfiction_cfg, default_flow_style=False), encoding="utf-8"
     )
     for stage in ("review", "revise"):
-        (nonfiction_dir / f"{stage}.prompt.md").write_text(
+        (nonfiction_dir / get_prompt_filename(stage)).write_text(
             f"# {stage.title()} Agent\n\n{{{{CONTENT}}}}\n",
             encoding="utf-8",
         )

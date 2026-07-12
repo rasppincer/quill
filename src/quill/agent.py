@@ -109,6 +109,26 @@ class AgentDecision:
     error: str = ""
 
 
+def get_prompt_filename(stage: str) -> str:
+    """Get the filename of the prompt template for a stage, including execution order prefix if applicable."""
+    if stage == "chapter_brief":
+        return "00_chapter_brief.prompt.md"
+    try:
+        from pathlib import Path
+        import yaml
+        workflow_path = Path(__file__).resolve().parent / ".." / ".." / "workflows" / "default.yaml"
+        if workflow_path.exists():
+            with open(workflow_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            stage_order = [s["key"] for s in data.get("stages", [])]
+            if stage in stage_order:
+                idx = stage_order.index(stage)
+                return f"{idx + 1:02d}_{stage}.prompt.md"
+    except Exception:
+        pass
+    return f"{stage}.prompt.md"
+
+
 def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
     """Load agent config for a stage from an agent set.
 
@@ -118,7 +138,7 @@ def load_agent_config(agent_set: str, stage: str) -> AgentConfig | None:
     """
     config_dir = AGENTS_DIR / agent_set
     config_file = config_dir / "config.yaml"
-    prompt_file = config_dir / f"{stage}.prompt.md"
+    prompt_file = config_dir / get_prompt_filename(stage)
 
     if not config_file.exists():
         logger.warning("Agent config not found: %s", config_file)
@@ -210,13 +230,19 @@ def list_agent_prompts(agent_set: str) -> list[dict]:
         return []
     prompts = []
     for f in sorted(config_dir.glob("*.prompt.md")):
-        stage = f.stem.replace(".prompt", "")
+        if f.name == "evaluate.prompt.md":
+            stage = "evaluate"
+        else:
+            stage = f.name.replace(".prompt.md", "")
+            if "_" in stage and stage[:2].isdigit():
+                stage = stage[3:]
         content = f.read_text(encoding="utf-8")
         # Extract first line as title
         title = content.split("\n")[0].lstrip("# ").strip() if content else stage
         prompts.append({
             "stage": stage,
             "file": str(f),
+            "filename": f.name,
             "title": title,
             "length": len(content),
         })

@@ -373,9 +373,9 @@ class TestAgentAPI:
         Regression test: app.py previously hardcoded Path.parents[2]/agents
         instead of using AGENTS_DIR, so tests clobbered production prompt files.
         """
-        from quill.agent import AGENTS_DIR
+        from quill.agent import AGENTS_DIR, get_prompt_filename
         real_agents = Path(__file__).resolve().parents[2] / "agents"
-        real_review = real_agents / "default" / "review.prompt.md"
+        real_review = real_agents / "default" / get_prompt_filename("review")
 
         # Read the real prompt before the test
         real_before = real_review.read_text(encoding="utf-8") if real_review.exists() else ""
@@ -391,7 +391,7 @@ class TestAgentAPI:
         assert real_before == real_after, "Prompt PUT wrote to real agents dir instead of tmp!"
 
         # Tmp file must have the new content
-        tmp_review = tmp_agents / "default" / "review.prompt.md"
+        tmp_review = tmp_agents / "default" / get_prompt_filename("review")
         assert tmp_review.exists()
         assert "Test Isolation Check" in tmp_review.read_text(encoding="utf-8")
 

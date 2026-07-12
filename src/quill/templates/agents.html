@@ -42,18 +42,7 @@
             <div style="display:flex;gap:8px;align-items:center">
                 <input id="set-max-loops" type="number" min="1" max="20" value="3" style="width:60px;padding:4px 8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:14px;text-align:center">
                 <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
-            </div>
-        </div>
-        <div class="meta-item">
-            <div class="label">Trigger</div>
-            <div style="display:flex;gap:8px;align-items:center">
-                <select id="set-trigger" style="padding:4px 8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);font-size:13px">
-                    <option value="on_advance">on_advance — run agent, user clicks Advance</option>
-                    <option value="auto">auto — run agent + auto-advance (chain mode)</option>
-                    <option value="manual">manual — run agent only on explicit click</option>
-                </select>
-                <button class="btn" onclick="saveFlavorConfig()" style="font-size:11px;padding:4px 8px">Save</button>
-                <span id="flavor-config-status" style="color:var(--text-muted);font-size:13px"></span>
+                <span id="flavor-config-status" style="margin-left:8px;color:var(--text-muted);font-size:13px"></span>
             </div>
         </div>
     </div>

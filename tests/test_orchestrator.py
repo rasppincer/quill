@@ -296,7 +296,7 @@ class TestOrchestratorRunStage:
         parent_dir.mkdir()
         (parent_dir / "meta.yaml").write_text(
             "id: parent-piece\ntitle: Test Story\ngenre: fiction\ntype: story\n"
-            "language: en\ncurrent_stage: draft\n"
+            "language: en\ncurrent_stage: draft\ntrigger: auto\n"
         )
         (parent_dir / "02_structure.md").write_text(
             "## Segment 1: The Setup\n## Segment 2: The Conflict\n## Segment 3: The Resolution\n"

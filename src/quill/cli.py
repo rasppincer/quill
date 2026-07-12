@@ -140,6 +140,7 @@ def sync_legacy_command(force: bool):
                     )
                     session.add(node)
                 node.title = title
+                node.trigger = meta.get("trigger", "on_advance")
                 node.updated_at = project.updated_at
             else:
                 # Child DocumentNode
@@ -153,6 +154,7 @@ def sync_legacy_command(force: bool):
                     )
                     session.add(node)
                 node.title = title
+                node.trigger = meta.get("trigger", "on_advance")
                 updated_str = meta.get("updated", "")
                 if updated_str:
                     try:

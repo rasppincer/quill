@@ -116,6 +116,10 @@ def pieces_create():
     if get_piece(piece_id):
         return jsonify({"error": f"Piece '{piece_id}' already exists"}), 409
 
+    trigger = data.get("trigger", "on_advance")
+    if trigger not in ("manual", "on_advance", "auto"):
+        trigger = "on_advance"
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     piece = Piece(
         id=piece_id,
@@ -130,6 +134,7 @@ def pieces_create():
         current_stage="brief",
         created=now,
         updated=now,
+        trigger=trigger,
         body=data.get("body", ""),
     )
 

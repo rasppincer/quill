@@ -63,7 +63,6 @@
             if (deleteBtn) deleteBtn.style.display = (name === 'default') ? 'none' : '';
             document.getElementById('delete-flavor-status').textContent = '';
             document.getElementById('set-max-loops').value = (data.config && data.config.max_loops != null) ? data.config.max_loops : 3;
-            document.getElementById('set-trigger').value = (data.config && data.config.trigger) || 'on_advance';
             document.getElementById('flavor-config-status').textContent = '';
 
             var list = document.getElementById('prompt-list');
@@ -174,13 +173,12 @@
     window.saveFlavorConfig = function() {
         if (!currentSet) return;
         var maxLoops = parseInt(document.getElementById('set-max-loops').value) || 3;
-        var trigger = document.getElementById('set-trigger').value;
         var status = document.getElementById('flavor-config-status');
 
         fetchJson(BASE + '/' + currentSet, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({max_loops: maxLoops, trigger: trigger})
+            body: JSON.stringify({max_loops: maxLoops})
         }).then(function(data) {
             if (data.error) {
                 status.textContent = data.error;
@@ -189,7 +187,7 @@
             } else {
                 status.textContent = '✓ Saved';
                 status.style.color = 'var(--accent-green)';
-                toast('Trigger: ' + trigger, 'success');
+                toast('Saved configuration', 'success');
                 setTimeout(function() { status.textContent = ''; }, 2000);
             }
         }).catch(function(err) {

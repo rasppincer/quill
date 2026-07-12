@@ -194,3 +194,28 @@ class TestPieceTrigger:
 
         piece = load_piece(piece_dir)
         assert piece.trigger == "auto"
+
+    def test_child_piece_trigger_independence(self, sample_piece):
+        """Child piece trigger persists and is independent from parent project trigger."""
+        parent = load_piece(sample_piece)
+        parent.trigger = "auto"
+        parent.save()
+
+        # Create a child piece
+        child = Piece(
+            id="test-piece-chapter-1",
+            title="Chapter 1",
+            parent="test-piece",
+            current_stage="draft",
+            body="Chapter 1 content",
+        )
+        child.trigger = "manual"
+        child.save()
+
+        # Load child back and assert trigger is manual, NOT inherited/overridden by parent's auto
+        reloaded_child = load_piece(sample_piece.parent / "test-piece-chapter-1")
+        assert reloaded_child.trigger == "manual"
+
+        # Load parent back and assert trigger is auto
+        reloaded_parent = load_piece(sample_piece)
+        assert reloaded_parent.trigger == "auto"

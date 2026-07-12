@@ -410,7 +410,7 @@ class Orchestrator:
                     "created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "parent": parent.id,
-                    "trigger": "auto",
+                    "trigger": parent.trigger or "on_advance",
                 }
                 (child_dir / "meta.yaml").write_text(
                     _yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False),

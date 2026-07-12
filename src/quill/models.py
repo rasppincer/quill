@@ -70,6 +70,7 @@ class DocumentNode(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     node_type: Mapped[str] = mapped_column(String, default="chapter")  # project | chapter | scene
     order_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    trigger: Mapped[str] = mapped_column(String, default="on_advance")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utc_now, onupdate=utc_now

@@ -289,6 +289,7 @@ class Piece:
                     )
                     session.add(node)
                 node.title = self.title
+                node.trigger = self.trigger or "on_advance"
                 node.updated_at = utc_now()
             else:
                 # Child piece (chapter/scene)
@@ -302,6 +303,7 @@ class Piece:
                     )
                     session.add(node)
                 node.title = self.title
+                node.trigger = self.trigger or "on_advance"
                 node.updated_at = utc_now()
 
             # Merge current_stage into stage_states if not already there
@@ -842,7 +844,7 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
                 created=project.created_at.strftime("%Y-%m-%d") if (project and project.created_at) else "",
                 updated=node.updated_at.strftime("%Y-%m-%d") if node.updated_at else "",
                 agent_set=project.agent_set if (project and not is_child) else "",
-                trigger=project.trigger if (project and not is_child) else "on_advance",
+                trigger=node.trigger or "on_advance",
                 stage_states=stage_states,
                 children=children,
                 parent=node.parent_id or "",
@@ -852,7 +854,6 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
             )
             if is_child and project:
                 piece.agent_set = project.agent_set or ""
-                piece.trigger = project.trigger or "on_advance"
             return piece
     except Exception as e:
         logger.warning("Failed to load piece '%s' from database, falling back to filesystem: %s", piece_id, e)

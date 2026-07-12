@@ -196,23 +196,23 @@ Frontend lives in the One Ring dashboard at `/quill/dashboard`. Four pages:
 
 ## Conventions
 
-- Pieces are directories with `meta.yaml` + per-stage files
-- `meta.yaml` is the single source of truth for metadata and current stage
-- Content stages produce two files: `{stage}.md` (generated text) and `{stage}.decision.md` (evaluation)
-- Feedback stages produce one file: `{stage}.md` (critique, clean markdown)
-- Output files prefixed with stage number: `01_brief.md`, `03_draft.md`, `09_done.md`
-- Prompt templates use Jinja2 syntax with `{% if is_looping %}` conditionals
-- Debug: `debug_prompts: true` in model.yaml dumps actual prompts to files at runtime
-- Structured output: `structured_output: true` in model.yaml requests JSON from provider
-- Async: `POST /run-async` + SSE at `/runs/<id>/events` for non-blocking execution
-- Works standalone (port 8325) or via nginx (`/quill/`)
-- ProxyFix handles `X-Forwarded-Prefix` for correct URL generation behind nginx
-- Agent loop history tracked in `meta.yaml` under `loop_history`
-- Text metrics (Flesch Reading Ease, word count, etc.) computed per-stage as `.metrics.yaml` files
+- PostgreSQL database is the single source of truth for all piece metadata, stage states, loop iterations, and content output text.
+- Directories with `meta.yaml` + per-stage files are used for local exports and legacy compatibility.
+- Content stages produce two outputs: `{stage}.md` (generated text) and `{stage}.decision.md` (evaluation), mapped to the database.
+- Feedback stages produce one output: `{stage}.md` (critique, clean markdown).
+- Output files are prefixed with stage numbers: `01_brief.md`, `03_draft.md`, `09_done.md`.
+- Prompt templates use Jinja2 syntax with `{% if is_looping %}` conditionals.
+- Debug: `debug_prompts: true` in model.yaml dumps actual prompts to files at runtime.
+- Structured output: `structured_output: true` in model.yaml requests JSON from provider.
+- Async: Celery queue handles execution with coordination HTTP callbacks.
+- Works standalone (port 8325) or via nginx (`/quill/`).
+- ProxyFix handles `X-Forwarded-Prefix` for correct URL generation behind nginx.
+- Agent loop history and revision loop strategies are managed directly in the database.
+- Text metrics (Flesch Reading Ease, word count, etc.) are computed per-stage.
 
 ## Celery Workers
 
-Async stage runs currently use a `ThreadPoolExecutor` inside the Flask process. `celery_app.py` provides a drop-in Celery+Redis backend for crash-resilient, horizontally-scalable execution (completing the wiring into the API layer is tracked in [Ticket 74](tickets/ticket_74_task_worker.md)).
+Async stage runs are fully offloaded to Celery task workers with Redis as the broker/backend. When execution completes, workers hit the central coordinator endpoint (`/api/workflow/callback`) to trigger the stateless `WorkflowEngine` transition evaluation.
 
 ### Setup
 

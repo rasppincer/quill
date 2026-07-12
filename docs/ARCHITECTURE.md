@@ -203,50 +203,55 @@ Between outline and draft. Fetches reference material from SearXNG:
 
 Configured per flavor via `research.enabled` and `research.required` in config.yaml.
 
-## File Structure
+## Workflow Engine & Execution Coordination
 
-Each piece lives in its own directory under `output/`:
+Quill orchestrates pipelines via a database-centric persistent state machine (`WorkflowEngine` in [engine.py](file:///home/bob/projects/quill/src/quill/engine.py)) and asynchronous Celery tasks.
 
-```
-quill/output/
-└── <piece-id>/
-    ├── meta.yaml              ← source of truth (current_stage, metadata, loops, stage_states, trigger)
-    ├── 01_brief.md            ← brief content (with YAML frontmatter)
-    ├── 02_outline.md          ← structure, arcs, pacing map
-    ├── 02_outline.decision.md ← evaluation of outline
-    ├── 03_research.md         ← web research results (if research stage ran)
-    ├── 04_draft.md            ← the actual prose (chaptered: ## Part N headers)
-    ├── 04_draft.decision.md   ← evaluation of draft (JSON decision + critique)
-    ├── 04_draft.generate_ch1-prompt.md  ← debug: per-chapter prompts
-    ├── 05_review.md           ← reviewer annotations + feedback
-    ├── 06_revise.md           ← draft revised per review feedback
-    ├── 06_revise.decision.md  ← evaluation of revision
-    ├── 07_humanize.md         ← de-AI'd version
-    ├── 08_validate.md         ← fact-checked version
-    ├── 09_polish.md           ← final line edits
-    ├── 09_done.md             ← published version
-    ├── *.metrics.yaml         ← per-stage readability metrics
-    └── run-log.jsonl          ← append-only run history
-```
+### Stateless Central Coordination
 
-Content stages produce two files:
-- `{stage}.md` — generated content (prose/markdown)
-- `{stage}.json` — raw structured JSON output
-
-### Logging
-
-Two-tier logging in `logs/`:
+To avoid circular imports and worker-to-worker process contention, workers do not trigger evaluations directly. Instead, when a Celery task finishes execution, it sends a POST request callback to the centralized Flask coordination endpoint at `/api/workflow/callback`. The Flask handler updates the DB state and invokes `workflow_engine.evaluate_and_dispatch(session, node_id, stage)` to determine the next step in the pipeline.
 
 ```
-logs/
-├── quill.log                    ← common log (startup, config, non-piece events)
-├── quill.log.2026-06-27         ← rotated (3 days retention)
-└── pieces/
-    ├── my-story_20260627.log    ← per-piece log (stage transitions, LLM calls)
-    └── ...
+┌─────────────────┐      delay      ┌───────────────┐
+│ WorkflowEngine  │────────────────▶│ Celery Worker │
+│                 │                 │ (StageRunner) │
+└─────────────────┘                 └───────────────┘
+         ▲                                  │
+         │          POST callback           │
+         └──────────────────────────────────┘
 ```
 
-`PieceLogHandler` routes records with `piece_id` to per-piece files. `TimedRotatingFileHandler` for daily rotation. Old piece logs auto-cleaned after 3 days. No stdout — logs only. `QUILL_LOG_LEVEL` env var (default INFO).
+### Sequential Chapter Progression
+
+* The tree hierarchy is capped at 2 levels max (`Project` -> `Chapter`).
+* Early stages (brief, structure, outline, research) run on the Project node.
+* Chaptered stages (draft, review, revise, humanize, validate, polish, state) run sequentially per chapter. For stage $S$, Chapter $1$ executes, then Chapter $2$, up to Chapter $N$. Once all chapters complete stage $S$, the parent project transitions to stage $S+1$, which starts executing again sequentially from Chapter $1$.
+
+### Revision Loop Strategies
+
+When a parent decision stage (e.g. `review_decision`) decides to `reject`, the project transitions to a revision stage (e.g. `revise`) and applies one of three configurable revision strategies on the chapter nodes:
+* `full`: Re-runs all chapters sequentially.
+* `surgical`: Re-runs only the chapters explicitly flagged by chapter numbers or names in the critique text.
+* `cascade` (Default): Re-runs the earliest flagged chapter and all downstream chapters to maintain context consistency.
+* **Global Critique Fallback**: If the parent review does not identify specific chapters (general feedback), the engine defaults to Chapter 1, effectively running a `full` sequential rewrite.
+
+For skipped chapters under `surgical` or `cascade`, the engine copies the output of the preceding stage and automatically marks the stage state as `completed` with the copied content, preserving the full iteration history.
+
+### Sliding Context Construction
+
+When a chaptered stage is dispatched, a sliding context window is assembled:
+1. **Distant Chapters**: Merged structured `NarrativeState` summaries from the database for chapters $1 \dots N-2$.
+2. **Close Neighbor**: Full text output of chapter $N-1$ to avoid seams.
+3. **Forward Outlines**: Outlines for chapters $N+1$ and $N+2$ extracted from the structure output.
+4. **Parent Brief**: Top-level brief text.
+
+
+## File Structure & Persistence
+
+The database is the absolute source of truth for all piece metadata, stage states, loop iterations, and content output text. The filesystem `output/` directory is utilized for legacy compatibility, local exports, and local debugging dumps.
+
+Content stages write their output directly to the `StageState.output_text` field in the database. Serialized proxy properties on `StageState` map `body`, `critique`, and `decision` to/from a single text or JSON payload transparently.
+
 
 ## Database
 
@@ -258,9 +263,9 @@ postgresql://user:pass@host:5432/quill
 
 Schema ([models.py](file:///home/bob/projects/quill/src/quill/models.py)):
 
-- **Project**: Top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set).
-- **DocumentNode**: Hierarchical tree structure with self-referential parent-child relationships. Supports Project → Chapter → Scene nesting.
-- **StageState**: Workflow state (`fresh`, `generating`, `completed`), content body, loop count, and decision/critique for each stage of a node.
+- **Project**: Top-level piece metadata (title, genre, type, constraints, target length, trigger, agent_set, revision_strategy).
+- **DocumentNode**: Hierarchical tree structure with self-referential parent-child relationships. Capped at 2 levels: Project → Chapter.
+- **StageState**: Workflow state (`fresh`/`new`, `processing`, `completed`), content body, loop count/iteration, and decision/critique for each stage of a node.
 - **Metrics**: Per-stage mechanical readability scores and word counts.
 - **AgentLog**: Append-only execution record of LLM calls, prompts, character/token counts, costs, and critiques.
 

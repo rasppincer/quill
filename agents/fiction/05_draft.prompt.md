@@ -4,10 +4,12 @@ You are writing a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 
 ## Input
+```
 {{CONTENT}}
+```
 
 ## Task
-Produce a full fiction draft using the outline and brief above. Focus on:
+Produce a full fiction draft using the outline above. Focus on:
 1. **Vivid prose** — sensory details, concrete imagery, varied sentence rhythm
 2. **Dialogue** — natural, character-distinct voices; advance plot or reveal character
 3. **Show don't tell** — reveal emotion through action and detail, not exposition

@@ -4,7 +4,13 @@ You are generating a fiction outline for a {{GENRE}} {{TYPE}} in {{LANGUAGE}}.
 Title: {{TITLE}}
 
 ## Brief
+```
 {{CONTENT}}
+```
+
+## Output Format
+
+Use `## Segment N: Title` headers for each major section. 
 
 ## Task
 Create a structured narrative outline from the brief above. Focus on:
@@ -14,23 +20,3 @@ Create a structured narrative outline from the brief above. Focus on:
 4. **Scene breakdown** — each scene with setting, characters, purpose, and emotional beat
 5. **Tension** — escalating stakes, obstacles, and turning points
 6. **Theme** — how the story's theme emerges through events
-
-{{METRICS}}
-
-## Output Format
-
-Use `## Part N: Title` headers for each major section. Example:
-
-```
-## Part 1: The Setup
-[plot points, character introductions, setting]
-
-## Part 2: The Conflict
-[inciting incident, rising tension]
-
-## Part 3: The Climax
-[turning point, confrontation]
-
-## Part 4: The Resolution
-[falling action, denouement]
-```

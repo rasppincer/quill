@@ -732,3 +732,17 @@ class TestAudioAPI:
         assert "presets" in data
         assert "en" in data["presets"]
         assert len(data["presets"]["en"]) >= 3
+
+
+# ---------------------------------------------------------------------------
+# Timing Instrumentation
+# ---------------------------------------------------------------------------
+
+from quill.timeit import timeit
+
+for name, obj in list(globals().items()):
+    if isinstance(obj, type) and name.startswith("Test"):
+        for attr_name, attr_val in list(obj.__dict__.items()):
+            if attr_name.startswith("test_") and callable(attr_val):
+                setattr(obj, attr_name, timeit(f"{name}.{attr_name}")(attr_val))
+

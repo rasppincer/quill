@@ -24,11 +24,11 @@ def _resolve_stage_file(piece, stage: str):
 
     Returns (stage_file_path, resolved_stage) or (None, stage) if not found.
     """
-    stage_file = piece.stage_dir() / _stage_filename(stage)
+    stage_file = piece.stage_file(stage)
     if not stage_file.exists():
         # "done" is a terminal stage with no content file — fall back to polish
         if stage == "done":
-            stage_file = piece.stage_dir() / _stage_filename("polish")
+            stage_file = piece.stage_file("polish")
             stage = "polish"
     if not stage_file.exists():
         # Fallback: scan for any file matching the stage name (handles

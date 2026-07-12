@@ -75,7 +75,7 @@ class RunLogger:
     def _dump_prompt(piece: "Piece", stage: str, call_type: str, system: str, user: str):
         """Write full prompt to a debug file."""
         from .piece import _stage_filename
-        debug_file = piece.stage_dir() / _stage_filename(stage, f".{call_type}-prompt.md")
+        debug_file = piece.stage_dir() / _stage_filename(stage, f".{call_type}-prompt.md", loop_count=piece.get_loop_count(stage))
         content = (
             f"# Debug: {call_type} prompt for {stage}\n"
             f"# Piece: {piece.id}\n\n"

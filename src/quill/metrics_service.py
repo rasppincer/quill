@@ -27,7 +27,7 @@ class MetricsService:
     def compute(self, piece: Piece, stage: str):
         """Compute and save text metrics for a stage's output file."""
         from .metrics import compute_and_save
-        stage_file = piece.stage_dir() / _stage_filename(stage)
+        stage_file = piece.stage_file(stage)
         if stage_file.exists():
             try:
                 metrics = compute_and_save(stage_file)
@@ -62,7 +62,7 @@ class MetricsService:
                 input_stages = []
 
         for input_stage in input_stages:
-            stage_file = stage_dir / _stage_filename(input_stage)
+            stage_file = piece.stage_file(input_stage)
             m = load_metrics(stage_file) if stage_file.exists() else None
             if m:
                 lines.append(f"--- {input_stage} metrics ---")
@@ -74,7 +74,7 @@ class MetricsService:
                 lines.append(f"  Passive voice: {m.get('passive_voice_pct', 'n/a')}%")
 
         # Also include current stage metrics if looping
-        current_stage_file = stage_dir / _stage_filename(stage)
+        current_stage_file = piece.stage_file(stage)
         if current_stage_file.exists():
             m = load_metrics(current_stage_file)
             if m:
@@ -93,7 +93,7 @@ class MetricsService:
         """
         from .metrics import load_metrics
         stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
+        stage_file = piece.stage_file(stage)
 
         current = load_metrics(stage_file)
         if not current:
@@ -140,7 +140,7 @@ class MetricsService:
         """Save current metrics as baseline for loop guardrail comparison."""
         from .metrics import load_metrics
         stage_dir = piece.stage_dir()
-        stage_file = stage_dir / _stage_filename(stage)
+        stage_file = piece.stage_file(stage)
         current = load_metrics(stage_file)
         if current:
             snapshot_file = stage_dir / _stage_filename(stage, ".guardrail-metrics.yaml")

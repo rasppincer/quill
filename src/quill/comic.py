@@ -353,7 +353,7 @@ def generate_comic(piece: Piece, stage: str | None = None,
     # Try the target stage, then fall back to any stage with content
     content = ""
     for try_stage in [target_stage, "done", "polish", "humanize", "revise", "draft"]:
-        stage_file = stage_dir / _stage_filename(try_stage)
+        stage_file = piece.stage_file(try_stage)
         if stage_file.exists():
             text = stage_file.read_text(encoding="utf-8")
             m = _FRONTMATTER_RE.match(text)

@@ -179,11 +179,7 @@ class StageRunner:
                     piece.set_loop_count(s, new_count)
                 plog.info("Stage '%s' → completed (reject, loop group loop count incremented to %d)", stage, loop_count + 1)
             else:
-                # Advance: clear loop counts of the loop group stages
-                loop_stages = ["review", "revise"] if stage == "review_decision" else ["validate", "polish"]
-                for s in loop_stages:
-                    piece.set_loop_count(s, 0)
-                plog.info("Stage '%s' → completed (advance, loop group loop counts reset)", stage)
+                plog.info("Stage '%s' → completed (advance)", stage)
         else:
             plog.info("Stage '%s' → completed (advance)", stage)
 

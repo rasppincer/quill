@@ -40,6 +40,7 @@ class Project(Base):
     current_stage: Mapped[str] = mapped_column(String, default="brief")
     agent_set: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     trigger: Mapped[str] = mapped_column(String, default="on_advance")
+    revision_strategy: Mapped[str] = mapped_column(String, default="cascade")  # cascade | full | surgical
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utc_now, onupdate=utc_now

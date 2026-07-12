@@ -10,7 +10,7 @@ from pathlib import Path
 from flask.cli import with_appcontext
 
 from .db import db_session
-from .models import Project, DocumentNode, StageState, Metrics
+from .models import Project, DocumentNode, StageState, Metrics, utc_now
 from .piece import DEFAULT_OUTPUT_DIR, _stage_filename, _FRONTMATTER_RE
 from .metrics import compute_metrics
 
@@ -127,7 +127,7 @@ def sync_legacy_command(force: bool):
                     except Exception:
                         pass
                 else:
-                    project.updated_at = datetime.utcnow()
+                    project.updated_at = utc_now()
 
                 # Project DocumentNode
                 node = session.query(DocumentNode).filter_by(id=piece_id).first()
@@ -160,7 +160,7 @@ def sync_legacy_command(force: bool):
                     except Exception:
                         pass
                 else:
-                    node.updated_at = datetime.utcnow()
+                    node.updated_at = utc_now()
 
             # 4. Parse stages and metrics
             if is_legacy:
@@ -290,7 +290,7 @@ def sync_legacy_command(force: bool):
                     st_state.body = body_content
                     st_state.decision = decision_val
                     st_state.critique = critique_val
-                    st_state.updated_at = datetime.utcnow()
+                    st_state.updated_at = utc_now()
 
                     # Parse or compute metrics
                     metrics_file = path / metrics_filename
@@ -327,7 +327,7 @@ def sync_legacy_command(force: bool):
                         metric.avg_sentence_length = metrics_data.get("avg_sentence_length", 0.0)
                         metric.type_token_ratio = metrics_data.get("type_token_ratio", 0.0)
                         metric.passive_voice_pct = metrics_data.get("passive_voice_pct", 0.0)
-                        metric.updated_at = datetime.utcnow()
+                        metric.updated_at = utc_now()
 
             session.commit()
             click.echo(f"Successfully synced piece '{piece_id}' ('{title}').")

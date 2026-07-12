@@ -110,6 +110,24 @@ class TestPiecesAPI:
         assert data["id"] == "my-blog-post"
         assert data["stage"] == "brief"
 
+    def test_create_piece_with_brief(self, client, tmp_output):
+        resp = client.post("/api/pieces", json={
+            "title": "My Blog Post with Brief",
+            "genre": "non-fiction",
+            "type": "blog",
+            "audience": "developers",
+            "tone": "technical",
+            "body": "This is my brief content.",
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["id"] == "my-blog-post-with-brief"
+        
+        # Verify the stage file was written with the brief content
+        brief_file = tmp_output / "my-blog-post-with-brief" / "01_brief.md"
+        assert brief_file.exists()
+        assert "This is my brief content." in brief_file.read_text()
+
     def test_create_piece_missing_title(self, client):
         resp = client.post("/api/pieces", json={"genre": "fiction"})
         assert resp.status_code == 400

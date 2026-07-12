@@ -397,7 +397,7 @@ class TestDebugPrompt:
         assert "prompt" in data
         assert data["prompt"]["char_count"] > 0
 
-    def test_debug_prompt_content_stage_shows_both_calls(self, client, sample_piece_with_review, tmp_output, monkeypatch):
+    def test_debug_prompt_content_stage(self, client, sample_piece_with_review, tmp_output, monkeypatch):
         """Content stage debug shows single prompt user and system keys."""
         monkeypatch.setattr("quill.piece.DEFAULT_OUTPUT_DIR", tmp_output)
         # Advance to revise (a content stage that has a prompt in the fixture)

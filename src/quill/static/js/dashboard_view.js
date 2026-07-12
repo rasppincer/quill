@@ -73,10 +73,13 @@ async function createPiece(e) {
         tone: document.getElementById('f-tone').value,
         language: document.getElementById('f-language').value,
         target_length: document.getElementById('f-length').value,
+        body: document.getElementById('f-body').value,
+        trigger: document.querySelector('input[name="trigger"]:checked').value,
     };
     const result = await api('/api/pieces', { method: 'POST', body: JSON.stringify(body) });
     if (result) {
         toast(`Created "${result.title}"`, 'success');
+        document.getElementById('create-form').reset();
         closeModal();
         loadPieces();
     }

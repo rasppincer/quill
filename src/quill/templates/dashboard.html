@@ -68,6 +68,25 @@
                 <label>Target Length</label>
                 <input type="text" id="f-length" placeholder="e.g. 5000-8000 words">
 
+                <label>Brief / Prompt</label>
+                <textarea id="f-body" placeholder="Outline the main goals, characters, plot points, or requirements..."></textarea>
+
+                <label>Trigger Mode</label>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;margin-bottom:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);padding:10px">
+                    <div style="display:flex;align-items:center;gap:8px" title="manual - trigger both `agent execution` and `stage advance` operations manually">
+                        <input type="radio" name="trigger" id="t-manual" value="manual" style="width:auto;margin:0">
+                        <label for="t-manual" style="display:inline;margin:0;cursor:pointer;color:var(--text-primary)">Manual</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px" title="semi - trigger `agent execution` immediately, while `stage advance` manually">
+                        <input type="radio" name="trigger" id="t-semi" value="on_advance" checked style="width:auto;margin:0">
+                        <label for="t-semi" style="display:inline;margin:0;cursor:pointer;color:var(--text-primary)">Semi</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px" title="auto - trigger both `agent execution` and `stage advance` operations automatically">
+                        <input type="radio" name="trigger" id="t-auto" value="auto" style="width:auto;margin:0">
+                        <label for="t-auto" style="display:inline;margin:0;cursor:pointer;color:var(--text-primary)">Auto</label>
+                    </div>
+                </div>
+
                 <div class="modal-actions">
                     <button type="button" class="btn" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn primary">Create</button>

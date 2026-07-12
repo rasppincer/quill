@@ -759,26 +759,60 @@ def pieces_stage_save(piece_id: str, stage: str):
     # Re-assemble the parent piece if this is a child
     if piece.parent:
         try:
-            from ..orchestrator import Orchestrator
+            from ..models import StageState as SS
             parent_piece = get_piece(piece.parent)
             if parent_piece and parent_piece.children:
-                # Re-assemble outputs into parent's folder using Orchestrator's static method
-                Orchestrator._assemble_outputs(parent_piece.children, target_stage, target_file.parents[1])
-                
-                # Sync assembled body to database for the parent
-                parent_assembled_file = target_file.parents[1] / piece.parent / target_file.name
-                if parent_assembled_file.exists():
-                    parent_text = parent_assembled_file.read_text(encoding="utf-8")
-                    m_parent = _FRONTMATTER_RE.match(parent_text)
-                    parent_body = parent_text[m_parent.end():] if m_parent else parent_text
-                    
-                    parent_st_state = session.query(StageState).filter_by(
+                # Collect content for each sibling: prefer disk file, fall back to DB
+                parts = []
+                all_children_have_content = True
+                for child_id in parent_piece.children:
+                    child_body = None
+                    # Try to read from disk first
+                    child_piece = get_piece(child_id)
+                    if child_piece:
+                        child_file = child_piece.stage_file(target_stage)
+                        if child_file.exists():
+                            text = child_file.read_text(encoding="utf-8")
+                            m_child = _FRONTMATTER_RE.match(text)
+                            child_body = text[m_child.end():].strip() if m_child else text.strip()
+                    # Fall back to DB StageState.body
+                    if not child_body:
+                        st = session.query(SS).filter_by(
+                            document_node_id=child_id, stage=target_stage
+                        ).first()
+                        if st and st.body:
+                            child_body = st.body.strip()
+                    if child_body:
+                        parts.append(child_body)
+                    else:
+                        all_children_have_content = False
+
+                if parts and all_children_have_content:
+                    # Only write the assembled file when ALL children have content
+                    parent_piece_dir = target_file.parents[1] / piece.parent
+                    parent_piece_dir.mkdir(parents=True, exist_ok=True)
+                    assembled = "\n\n---\n\n".join(parts)
+                    loop_count = parent_piece.get_loop_count(target_stage)
+                    from ..piece import _stage_filename as _sfn
+                    parent_stage_file = parent_piece_dir / _sfn(target_stage, loop_count=loop_count)
+                    parent_stage_file.write_text(assembled, encoding="utf-8")
+
+                    # Sync assembled body to database for the parent
+                    parent_st_state = session.query(SS).filter_by(
                         document_node_id=piece.parent, stage=target_stage
                     ).first()
                     if parent_st_state:
-                        parent_st_state.body = parent_body
+                        parent_st_state.body = assembled
                         session.commit()
-                        logger.info("Auto-assembled parent piece '%s' stage '%s' after saving child", piece.parent, target_stage)
+                        logger.info(
+                            "Auto-assembled parent piece '%s' stage '%s' from %d children",
+                            piece.parent, target_stage, len(parts),
+                        )
+                elif parts:
+                    logger.info(
+                        "Skipping auto-reassembly for '%s' stage '%s': only %d/%d children have content",
+                        piece.parent, target_stage, len(parts), len(parent_piece.children),
+                    )
         except Exception as ex:
             logger.warning("Failed to auto-reassemble parent piece '%s': %s", piece.parent, ex)
 

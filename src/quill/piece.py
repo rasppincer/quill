@@ -851,9 +851,18 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
             if body is None:
                 body = ""
                 
-            # Children mapping
+            # Children mapping — DB is authoritative; fall back to meta.yaml when DB list is empty
             children = [c.id for c in node.children]
+            if not children and path.is_dir():
+                meta_file = path / "meta.yaml"
+                if meta_file.exists():
+                    try:
+                        meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
+                        children = meta.get("children", []) or []
+                    except Exception:
+                        pass
             
+
             piece = Piece(
                 id=piece_id,
                 title=node.title,

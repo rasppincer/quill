@@ -62,23 +62,7 @@ def pieces_run(piece_id: str):
         })
     else:
         target_stage = stage or piece.current_stage
-
-        from ..pipeline import load_pipeline
-        pipeline = load_pipeline("default")
-        if target_stage in pipeline.stage_order and piece.current_stage in pipeline.stage_order:
-            target_idx = pipeline.stage_order.index(target_stage)
-            current_idx = pipeline.stage_order.index(piece.current_stage)
-            if target_idx < current_idx:
-                loop_groups = [
-                    {"review", "review_decision", "revise"},
-                    {"validate", "validate_decision", "polish"},
-                ]
-                is_loop_revert = any(
-                    piece.current_stage in group and target_stage in group
-                    for group in loop_groups
-                )
-                if not is_loop_revert and piece.get_loop_count(target_stage) == 0:
-                    piece.supersede_from(target_stage)
+        piece.handle_revert(target_stage)
 
         trace_id = str(uuid.uuid4())
 
@@ -239,6 +223,36 @@ def pieces_debug_prompt(piece_id: str, stage: str):
     if "error" in result:
         return jsonify(result), 404
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Active-run query (one-shot, no polling)
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/api/pieces/<piece_id>/active-run")
+def pieces_active_run(piece_id: str):
+    """Return the active run_id for this piece, if a chain is running.
+
+    The piece page calls this once on load to reconnect SSE if a pipeline
+    was started before the page was opened (e.g. after a dashboard redirect).
+    Returns {} when idle so the client can check cheaply without polling.
+    """
+    piece = get_piece(piece_id)
+    if not piece:
+        return jsonify({"error": f"Piece '{piece_id}' not found"}), 404
+
+    manager = RunManager()
+    with manager._run_lock:
+        for run_id, info in manager._runs.items():
+            if info["piece_id"] == piece_id and info["status"] == "running":
+                return jsonify({
+                    "run_id": run_id,
+                    "stage": info.get("stage", ""),
+                    "chain": info.get("chain", False),
+                })
+
+    return jsonify({})
 
 
 # ---------------------------------------------------------------------------

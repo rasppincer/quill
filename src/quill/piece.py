@@ -532,6 +532,30 @@ class Piece:
         self.stage_states[stage] = state
         self._save_stage_states()
 
+    def handle_revert(self, target_stage: str):
+        """If target_stage is an earlier stage than current_stage, handles the revert transition
+        by superseding downstream stages (unless it is a loop-revert within the same loop group).
+        """
+        from .pipeline import load_pipeline
+        pipeline = load_pipeline("default")
+        if target_stage not in pipeline.stage_order or self.current_stage not in pipeline.stage_order:
+            return
+            
+        target_idx = pipeline.stage_order.index(target_stage)
+        current_idx = pipeline.stage_order.index(self.current_stage)
+        if target_idx < current_idx:
+            # We are reverting. Supersede later stages unless we are in the same loop group.
+            loop_groups = [
+                {"review", "review_decision", "revise"},
+                {"validate", "validate_decision", "polish"},
+            ]
+            is_loop_revert = any(
+                self.current_stage in group and target_stage in group
+                for group in loop_groups
+            )
+            if not is_loop_revert:
+                self.supersede_from(target_stage)
+
     def supersede_from(self, stage: str):
         """Mark all stages after `stage` as superseded (fresh), reset frontier, clear content.
 

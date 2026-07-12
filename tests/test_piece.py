@@ -524,4 +524,44 @@ class TestPieceStageStatusTranslation:
         assert st.status == "completed"
 
 
+class TestPieceHandleRevert:
+    def test_handle_revert_inside_loop_group_does_not_supersede(self, sample_piece):
+        from quill.piece import load_piece
+        p = load_piece(sample_piece)
+        p.current_stage = "review_decision"
+        p.set_stage_state("review", "completed")
+        p.set_stage_state("revise", "completed")
+        p.set_stage_state("review_decision", "completed")
+        
+        # Reverting from review_decision to revise is a loop-revert.
+        # It should NOT call supersede_from.
+        p.handle_revert("revise")
+        
+        reloaded = load_piece(sample_piece)
+        assert reloaded.get_stage_state("review") == "completed"
+        assert reloaded.get_stage_state("revise") == "completed"
+
+    def test_handle_revert_outside_loop_group_supersedes(self, sample_piece):
+        from quill.piece import load_piece
+        p = load_piece(sample_piece)
+        p.current_stage = "humanize"
+        p.set_stage_state("brief", "completed")
+        p.set_stage_state("outline", "completed")
+        p.set_stage_state("draft", "completed")
+        p.set_stage_state("review", "completed")
+        p.set_stage_state("revise", "completed")
+        p.set_stage_state("humanize", "completed")
+        
+        # Reverting from humanize to revise is NOT a loop-revert.
+        # It should trigger supersede_from on target_stage.
+        p.handle_revert("revise")
+        
+        reloaded = load_piece(sample_piece)
+        assert reloaded.get_stage_state("draft") == "completed"
+        assert reloaded.get_stage_state("revise") == "completed"
+        # humanize is downstream of revise, so it should be reset to fresh
+        assert reloaded.get_stage_state("humanize") == "fresh"
+
+
+
 

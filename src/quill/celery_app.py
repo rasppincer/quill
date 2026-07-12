@@ -67,12 +67,16 @@ def run_stage_task(
     stage: str,
     agent_set: str = "default",
     chain: bool = False,
+    callback_url: str | None = None,
+    extra_context: dict | None = None,
 ) -> dict:
     """Execute a Quill stage (or full chain) in a worker process.
 
     Args:
         piece_id: Identifier of the piece to process.
         stage: Stage name to start from.
+        callback_url: Optional URL to send completion callback POST request.
+        extra_context: Optional additional template context variables.
         agent_set: Agent configuration set to use.
         chain: If True, run all remaining stages after ``stage``.
 
@@ -81,20 +85,22 @@ def run_stage_task(
         ``loop_count``, and ``error``.
     """
     import uuid
+    import requests
     from .runner import StageRunner
     from .db import db_session
 
     logger.info(
-        "Worker: starting run piece=%s stage=%s agent_set=%s chain=%s",
-        piece_id, stage, agent_set, chain,
+        "Worker: starting run piece=%s stage=%s agent_set=%s chain=%s callback=%s",
+        piece_id, stage, agent_set, chain, callback_url,
     )
 
+    result_dict = {}
     try:
         runner = StageRunner(agent_set=agent_set)
 
         if chain:
             results = runner.run_chain(piece_id, from_stage=stage)
-            return {
+            result_dict = {
                 "chain": True,
                 "results": [
                     {
@@ -109,8 +115,8 @@ def run_stage_task(
             }
         else:
             trace_id = str(uuid.uuid4())
-            result = runner.run_stage(piece_id, stage, trace_id=trace_id)
-            return {
+            result = runner.run_stage(piece_id, stage, trace_id=trace_id, extra_context=extra_context)
+            result_dict = {
                 "stage": result.stage,
                 "decision": result.decision,
                 "critique": result.critique,
@@ -118,9 +124,24 @@ def run_stage_task(
                 "error": result.error,
             }
 
+        # Send successful callback
+        if callback_url:
+            payload = {
+                "node_id": piece_id,
+                "stage": stage,
+                "status": "completed" if not result_dict.get("error") else "failed",
+                "error": result_dict.get("error"),
+            }
+            try:
+                requests.post(callback_url, json=payload, timeout=10)
+            except Exception as cb_err:
+                logger.error("Worker: failed to send completed callback to %s: %s", callback_url, cb_err)
+
+        return result_dict
+
     except Exception as exc:
         logger.exception("Worker: run failed piece=%s stage=%s", piece_id, stage)
-        return {
+        err_dict = {
             "stage": stage,
             "decision": None,
             "critique": None,
@@ -128,6 +149,22 @@ def run_stage_task(
             "error": str(exc),
         }
 
+        # Send failed callback
+        if callback_url:
+            payload = {
+                "node_id": piece_id,
+                "stage": stage,
+                "status": "failed",
+                "error": str(exc),
+            }
+            try:
+                requests.post(callback_url, json=payload, timeout=10)
+            except Exception as cb_err:
+                logger.error("Worker: failed to send failed callback to %s: %s", callback_url, cb_err)
+
+        return err_dict
+
     finally:
         # Release the scoped DB session used inside StageRunner
         db_session.remove()
+

@@ -274,7 +274,7 @@ class WorkflowEngine:
         callback_url = os.environ.get("QUILL_COORDINATOR_CALLBACK_URL", "http://localhost:8325/api/workflow/callback")
         
         logger.info("Enqueuing Celery task for node '%s' stage '%s'", node_id, stage)
-        run_stage_task.delay(node_id, stage, callback_url, extra_context=extra_context)
+        run_stage_task.delay(node_id, stage, callback_url=callback_url, extra_context=extra_context)
 
     def _build_sliding_context(self, session: Session, project: Project, chapters: List[DocumentNode], current_idx: int, stage: str) -> Dict[str, Any]:
         """Build sliding window context for chapter prompts."""

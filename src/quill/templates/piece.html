@@ -39,6 +39,20 @@
     {% endfor %}
 </div>
 
+<!-- Chapter tabs (shown for parent piece with children) -->
+{% if piece.children %}
+<div id="chapter-tabs" class="chapter-tabs" style="display: none;">
+    <div class="chapter-tab active" data-chapter="parent" onclick="selectChapter('parent')">
+        Parent (Assembled)
+    </div>
+    {% for child_id in piece.children %}
+    <div class="chapter-tab" data-chapter="{{ child_id }}" onclick="selectChapter('{{ child_id }}')">
+        {{ child_id.split('-chapter-')[-1]|replace('-', ' ')|title }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Stats cards -->
 <div class="cards">
     <div class="card">
@@ -249,7 +263,8 @@
     "piece_id": {{ piece.id|tojson }},
     "current_stage": {{ piece.current_stage|tojson }},
     "piece_agent_set": {{ piece.resolved_agent_set|tojson }},
-    "pipeline_order": {{ pipeline_order|tojson }}
+    "pipeline_order": {{ pipeline_order|tojson }},
+    "children": {{ piece.children|tojson }}
 }
 </script>
 <script src="{{ base }}/static/js/piece.js"></script>

@@ -278,6 +278,41 @@ tbody tr:hover { background: rgba(88, 166, 255, 0.04); }
     border-color: var(--accent-blue);
 }
 
+/* ── Chapter tabs (navigable pipeline) ─────────────────── */
+.chapter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.chapter-tab {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.chapter-tab:hover {
+    border-color: var(--accent-purple);
+    color: var(--text-primary);
+}
+
+.chapter-tab.active {
+    background: rgba(188, 140, 255, 0.1);
+    border-color: var(--accent-purple);
+    color: var(--accent-purple);
+    font-weight: 500;
+}
+
 .stage-tab.ready {
     color: var(--accent-green);
 }

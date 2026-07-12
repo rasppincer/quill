@@ -257,6 +257,11 @@ async function toggleAuto() {
 function connectAutoSSE(runId) {
     const eventSource = new EventSource(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/runs/${runId}/events`);
 
+    // Refresh tabs when a new stage begins (shows "generating" badge)
+    eventSource.addEventListener('stage_start', function(e) {
+        refreshStageTabs();
+    });
+
     eventSource.addEventListener('chain_stage_complete', function(e) {
         const d = JSON.parse(e.data);
         // Update stage tab states
@@ -526,8 +531,17 @@ async function advance() {
 
     const result = await api(`/api/pieces/${PIECE_ID}/advance`, { method: 'POST' });
     if (result) {
-        toast(`Advanced to ${result.current_stage}`, 'success');
-        setTimeout(() => location.reload(), 500);
+        if (result.run_id) {
+            // Auto mode: chain started — show interrupt button and stream progress
+            toast('Advanced — auto pipeline running…', 'success');
+            document.getElementById('auto-btn').style.display = 'none';
+            document.getElementById('interrupt-btn').style.display = '';
+            updateButtonStates();
+            connectAutoSSE(result.run_id);
+        } else {
+            toast(`Advanced to ${result.current_stage}`, 'success');
+            setTimeout(() => location.reload(), 500);
+        }
     } else {
         if (btn) { btn.disabled = false; btn.textContent = `Advance →`; }
     }
@@ -830,3 +844,25 @@ async function generateAudio() {
     btn.disabled = false;
     btn.textContent = '🔊 Audio';
 }
+
+// ── Active-run reconnect on page load ─────────────────────────────
+// One-shot check (no polling): if a chain is running when this page opens,
+// reconnect to its SSE stream so the UI stays live.
+(async function checkActiveRun() {
+    try {
+        const resp = await fetch(`${SCRIPT_ROOT}/api/pieces/${PIECE_ID}/active-run`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.run_id) {
+            // A chain is actively running — hook up the progress stream
+            const autoBtn = document.getElementById('auto-btn');
+            const interruptBtn = document.getElementById('interrupt-btn');
+            if (autoBtn) autoBtn.style.display = 'none';
+            if (interruptBtn) interruptBtn.style.display = '';
+            updateButtonStates();
+            connectAutoSSE(data.run_id);
+        }
+    } catch (e) {
+        // Non-critical — ignore network errors on startup
+    }
+})();

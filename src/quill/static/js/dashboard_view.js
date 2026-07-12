@@ -78,9 +78,24 @@ async function createPiece(e) {
     };
     const result = await api('/api/pieces', { method: 'POST', body: JSON.stringify(body) });
     if (result) {
-        toast(`Created "${result.title}"`, 'success');
         document.getElementById('create-form').reset();
         closeModal();
+
+        // If auto trigger and brief provided, kick off the full chain immediately
+        if (body.trigger === 'auto' && body.body && body.body.trim()) {
+            toast(`Created "${result.title}" — starting auto pipeline…`, 'success');
+            const autoResp = await api(`/api/pieces/${result.id}/auto`, { method: 'POST' });
+            if (autoResp && !autoResp.error) {
+                // Redirect to piece page so the user can watch progress
+                window.location.href = `${SCRIPT_ROOT}/pieces/${result.id}`;
+                return;
+            } else {
+                toast(autoResp ? autoResp.error : 'Failed to start auto pipeline', 'error');
+            }
+        } else {
+            toast(`Created "${result.title}"`, 'success');
+        }
+
         loadPieces();
     }
 }

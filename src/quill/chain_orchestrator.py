@@ -116,7 +116,10 @@ class ChainOrchestrator:
                 skipped_stages.append(current)
                 next_st = pipeline.next_stage(current)
                 if next_st:
-                    current = next_st
+                    # Advance the piece so DB/disk reflect the skip
+                    piece.advance_to(next_st)
+                    piece = load_piece(piece_dir)
+                    current = piece.current_stage
                     continue
                 else:
                     break

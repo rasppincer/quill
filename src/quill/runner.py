@@ -106,6 +106,27 @@ class StageRunner:
                 prompt context (used by orchestrator for sliding window).
             custom_prompt: Custom prompt to override Jinja rendering.
         """
+        # Delegate to Orchestrator if the piece has multiple chapters and this is not a child run.
+        from .orchestrator import Orchestrator
+        from .piece import DEFAULT_OUTPUT_DIR
+        base = output_dir or DEFAULT_OUTPUT_DIR
+        piece_dir = base / piece_id
+        
+        is_child_run = extra_context and extra_context.get("_orchestrator_active")
+        if not is_child_run and Orchestrator._has_chapters(piece_dir):
+            _CHAPTERED_STAGES = {"draft", "review", "revise", "humanize", "validate", "polish", "state"}
+            if stage in _CHAPTERED_STAGES:
+                logger.info("Delegating stage '%s' to Orchestrator for piece '%s'", stage, piece_id)
+                orch = Orchestrator(agent_set=self.agent_set)
+                orch_result = orch.run_stage(
+                    piece_id=piece_id,
+                    stage=stage,
+                    output_dir=output_dir,
+                    event_queue=event_queue,
+                )
+                if orch_result is not None:
+                    return orch_result
+
         # Research is a special stage
         if stage == "research":
             return self._run_research(piece_id, stage, output_dir, event_queue, force_advance=force_advance)

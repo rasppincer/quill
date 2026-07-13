@@ -864,3 +864,69 @@ class TestProgressEvents:
         assert "orchestrator_chapter_start" in event_types
         assert "orchestrator_chapter_complete" in event_types
         assert "orchestrator_complete" in event_types
+
+
+class TestOrchestratorDelegation:
+    """Test that StageRunner delegates to Orchestrator when appropriate."""
+
+    def test_delegates_to_orchestrator(self, tmp_path):
+        from quill.runner import StageRunner
+        from unittest.mock import patch, MagicMock
+
+        parent_dir = tmp_path / "delegation-parent"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: delegation-parent\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n"
+        )
+
+        runner = StageRunner(agent_set="default")
+        
+        # Patch Orchestrator.run_stage to see if it gets called
+        with patch("quill.orchestrator.Orchestrator.run_stage") as mock_orch_run:
+            mock_orch_run.return_value = MagicMock()
+            runner.run_stage("delegation-parent", "draft", output_dir=tmp_path)
+            mock_orch_run.assert_called_once_with(
+                piece_id="delegation-parent",
+                stage="draft",
+                output_dir=tmp_path,
+                event_queue=None,
+            )
+
+    def test_no_delegate_on_child_run(self, tmp_path):
+        from quill.runner import StageRunner
+        from unittest.mock import patch, MagicMock
+
+        parent_dir = tmp_path / "delegation-child"
+        parent_dir.mkdir()
+        (parent_dir / "meta.yaml").write_text(
+            "id: delegation-child\ntitle: T\ngenre: fiction\ntype: story\n"
+            "language: en\ncurrent_stage: draft\n"
+        )
+        (parent_dir / "02_structure.md").write_text(
+            "## Segment 1: A\n## Segment 2: B\n"
+        )
+
+        runner = StageRunner(agent_set="default")
+        
+        # Patch prepare_stage and llm.run_stage to bypass actual LLM calling
+        mock_sc = MagicMock()
+        mock_sc.piece.current_stage = "draft"
+        mock_sc.piece.get_loop_count.return_value = 0
+        mock_sc.agent_cfg.max_loops = 3
+        mock_decision = MagicMock()
+        mock_decision.decision = "advance"
+
+        with patch("quill.orchestrator.Orchestrator.run_stage") as mock_orch_run, \
+             patch.object(runner.assembler, "prepare_stage", return_value=mock_sc), \
+             patch.object(runner.llm, "run_stage", return_value=mock_decision):
+            
+            runner.run_stage(
+                "delegation-child", "draft", output_dir=tmp_path,
+                extra_context={"_orchestrator_active": True},
+            )
+            mock_orch_run.assert_not_called()
+

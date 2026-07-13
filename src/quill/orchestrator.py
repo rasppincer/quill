@@ -594,12 +594,15 @@ class Orchestrator:
         from .runner import StageRunner
         from .agent import AgentDecision
 
+        ctx = dict(context or {})
+        ctx["_orchestrator_active"] = True
+
         runner = StageRunner(agent_set=self.agent_set)
 
         try:
             result = runner.run_stage(
                 child_id, stage, output_dir=base,
-                extra_context=context,
+                extra_context=ctx,
             )
             return result
         except Exception as e:

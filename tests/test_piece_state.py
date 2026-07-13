@@ -210,7 +210,7 @@ class TestPieceTrigger:
             body="Chapter 1 content",
         )
         child.trigger = "manual"
-        child.save()
+        child.save(output_dir=sample_piece.parent)
 
         # Load child back and assert trigger is manual, NOT inherited/overridden by parent's auto
         reloaded_child = load_piece(sample_piece.parent / "test-piece-chapter-1")

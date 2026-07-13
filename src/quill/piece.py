@@ -851,9 +851,9 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
             if body is None:
                 body = ""
                 
-            # Children mapping — DB is authoritative; fall back to meta.yaml when DB list is empty
-            children = [c.id for c in node.children]
-            if not children and path.is_dir():
+            # Children mapping — prefer meta.yaml if it contains children (disk is primary for workspace structure), fall back/merge with DB
+            children = []
+            if path.is_dir():
                 meta_file = path / "meta.yaml"
                 if meta_file.exists():
                     try:
@@ -861,6 +861,12 @@ def load_piece(path: Path, node: DocumentNode | None = None) -> Piece:
                         children = meta.get("children", []) or []
                     except Exception:
                         pass
+            
+            db_children = [c.id for c in node.children]
+            if db_children:
+                for cid in db_children:
+                    if cid not in children:
+                        children.append(cid)
             
 
             piece = Piece(

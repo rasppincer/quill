@@ -1,6 +1,7 @@
 """Unit tests for database initialization and config."""
 
 import os
+import importlib
 import pytest
 from unittest.mock import patch
 from quill.db import db, engine, SessionLocal
@@ -40,25 +41,36 @@ def test_db_session_standalone():
 
 
 def test_flask_app_requires_postgres_url():
-    """Test that create_app raises if DATABASE_URL is a SQLite URL (without QUILL_TESTING)."""
-    import importlib
-    env = {"DATABASE_URL": "sqlite:///should-fail.db"}
-    # Unset QUILL_TESTING so the guard is active
-    env_without_testing = {k: v for k, v in os.environ.items() if k != "QUILL_TESTING"}
-    env_without_testing["DATABASE_URL"] = "sqlite:///should-fail.db"
-    with patch.dict(os.environ, env_without_testing, clear=True):
-        import quill.db as db_mod
-        import importlib
-        with pytest.raises(RuntimeError, match="Quill requires PostgreSQL"):
-            importlib.reload(db_mod)
+    """Test that db.py raises if DATABASE_URL is a SQLite URL (without QUILL_TESTING)."""
+    import subprocess
+    import sys
+    env = dict(os.environ)
+    env["DATABASE_URL"] = "sqlite:///should-fail.db"
+    if "QUILL_TESTING" in env:
+        del env["QUILL_TESTING"]
+    
+    res = subprocess.run(
+        [sys.executable, "-c", "import quill.db"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode != 0
+    assert "Quill requires PostgreSQL" in res.stderr or "Quill requires PostgreSQL" in res.stdout
 
 
 def test_flask_app_raises_on_missing_url():
     """Test that db.py raises if DATABASE_URL is completely absent."""
-    env_without_url = {k: v for k, v in os.environ.items() if k not in ("DATABASE_URL", "QUILL_TESTING")}
-    with patch.dict(os.environ, env_without_url, clear=True):
-        import quill.db as db_mod
-        import importlib
-        with pytest.raises(RuntimeError, match="DATABASE_URL environment variable is not set"):
-            importlib.reload(db_mod)
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k not in ("DATABASE_URL", "QUILL_TESTING")}
+    
+    res = subprocess.run(
+        [sys.executable, "-c", "import quill.db"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode != 0
+    assert "DATABASE_URL environment variable is not set" in res.stderr or "DATABASE_URL environment variable is not set" in res.stdout
 
